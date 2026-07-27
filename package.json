@@ -1,0 +1,40 @@
+{
+  "name": "grimoire-index",
+  "version": "0.1.0",
+  "description": "CLI + Astro integration for running your own grim package index",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "bin": {
+    "grimoire-index": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./integration": {
+      "types": "./dist/integration.d.ts",
+      "import": "./dist/integration.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}
