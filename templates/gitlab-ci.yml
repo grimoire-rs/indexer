@@ -1,0 +1,13 @@
+# Builds this index for GitLab Pages and gates merge requests.
+#
+# Deliberately a thin caller: the job logic lives in a file grimoire-index
+# owns, so upgrades arrive by bumping the pinned ref in the URL below
+# instead of re-scaffolding this repo over your edits.
+#
+# If your GitLab instance blocks remote includes, vendor the file locally
+# and switch to `- local: "ci/grimoire-index.yml"`.
+include:
+  - remote: "https://raw.githubusercontent.com/grimoire-rs/grimoire-index/{{ref}}/templates/reusable/gitlab-index-ci.yml"
+
+variables:
+  GRIMOIRE_INDEX_VERSION: "{{version}}"

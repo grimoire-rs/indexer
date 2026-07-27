@@ -1,0 +1,41 @@
+[
+  {
+    "schema": 1,
+    "name": "code-review",
+    "kind": "skill",
+    "ref": "ghcr.io/acme/code-review",
+    "description": "Review a diff against the team's checklist.",
+    "repository": "https://github.com/acme/code-review",
+    "namespace": "github.com/acme",
+    "owner": { "github": "acme", "id": 1 },
+    "title": "code-review",
+    "summary": "Review a diff",
+    "version": "1.2.3",
+    "license": "Apache-2.0",
+    "created": "2026-07-01T10:00:00+00:00",
+    "keywords": ["review", "diff"],
+    "tags": ["latest", "1", "1.2", "1.2.3", "1.1.0"],
+    "deprecated": null,
+    "hasReadme": true
+  },
+  {
+    "schema": 1,
+    "name": "old-helper",
+    "kind": "rule",
+    "ref": "ghcr.io/acme/old-helper",
+    "description": "Superseded rule kept for existing installs.",
+    "namespace": "github.com/acme",
+    "owner": { "github": "acme", "id": 1 },
+    "deprecated": "2026-06-01",
+    "replacedBy": "ghcr.io/acme/code-review"
+  },
+  {
+    "schema": 1,
+    "name": "bare",
+    "kind": "mcp",
+    "ref": "registry.example/team/bare",
+    "description": "No enrichment sidecar at all.",
+    "namespace": "registry.example/team",
+    "owner": { "id": 2 }
+  }
+]

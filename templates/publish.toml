@@ -1,0 +1,17 @@
+# `grim publish` manifest — this repo holds both its own skills (under
+# `skills/`) and the index that lists them, the combined layout
+# `grimoire-index init --with-skills` scaffolds.
+#
+# The default layout is a standalone index repo instead: an index is a
+# distribution database that N separate skill repos announce into. Use
+# this combined form when one team owns both sides.
+#
+# Publish with `grim publish`, then announce into this index. Schema:
+# `grim schema --kind publish`.
+registry = "{{registryHost}}"
+version = "0.1.0"
+
+# One table per package. `repository` is the path under the registry host.
+#
+# [skills.example]
+# repository = "{{registryAlias}}/skills/example"

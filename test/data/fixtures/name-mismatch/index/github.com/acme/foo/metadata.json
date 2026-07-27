@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "bar",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/skills/bar",
+  "description": "A test skill.",
+  "owner": { "github": "acme", "id": 1 }
+}

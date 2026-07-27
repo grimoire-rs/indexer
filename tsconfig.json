@@ -14,7 +14,11 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/renderer/astro/content.config.ts"]
 }

@@ -1,0 +1,36 @@
+# Contribution gate for pull requests against this index.
+#
+# Exit 0 = eligible for auto-merge, non-zero = manual review required.
+# Make `validate` a required status check in branch protection to enforce it.
+#
+# `pull_request_target` is deliberate and safe HERE, and only because of
+# what the called workflow does: it runs grimoire-index from npm against the
+# trusted base checkout, and reads the PR head as data in a separate
+# directory without ever executing, importing, or installing from it. The
+# gate needs a forge token to resolve numeric namespace-owner ids, which an
+# unprivileged `pull_request` job does not have.
+#
+# Do not switch this to run contributor code, and do not widen
+# `permissions:` here.
+#
+# Deliberately a thin caller: the job logic lives in a reusable workflow
+# grimoire-index owns, so upgrades arrive by bumping the pinned ref below
+# instead of re-scaffolding this repo over your edits.
+name: validate
+
+on:
+  pull_request_target:
+    paths:
+      - "index/**"
+      - "index-policy.json"
+
+permissions: {}
+
+jobs:
+  validate:
+    uses: grimoire-rs/grimoire-index/.github/workflows/index-validate.yml@{{ref}}
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      grimoire-index-version: "{{version}}"

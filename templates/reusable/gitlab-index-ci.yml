@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The Grimoire Authors
+#
+# GitLab counterpart of the two reusable GitHub workflows: scaffolded index
+# repos pull this in with `include: remote:` so a fix here reaches them
+# without a re-scaffold. Override any variable below in the including
+# `.gitlab-ci.yml`.
+#
+# A private GitLab instance may refuse to fetch a remote include. The
+# fallback is to vendor this file into the index repo and switch the
+# include to `local:`.
+variables:
+  GRIMOIRE_INDEX_VERSION: "latest"
+  GRIMOIRE_INDEX_NODE_IMAGE: "node:22-alpine"
+  GRIMOIRE_INDEX_OUT_DIR: "public"
+
+stages:
+  - test
+  - deploy
+
+# Contribution gate. Exit 0 = eligible for auto-merge, non-zero = manual
+# review required, so this job's status IS the gate.
+#
+# The gate must judge the change against the COMMITTED policy, not the
+# policy the merge request proposes — otherwise a contributor allowlists
+# their own registry host in the same MR. So the target branch is checked
+# out into a sibling worktree and passed as `--root`, with the MR head
+# passed as `--pr-tree` and read as data only.
+#
+# RESIDUAL, and it is not fixable from this file: on GitLab the merge
+# request supplies its own `.gitlab-ci.yml`, so a contributor can delete
+# this job outright. Enforce it instance-side — a compliance pipeline, a
+# required merge check, or protected-branch approval rules — or treat the
+# GitLab gate as advisory.
+grimoire-index:validate:
+  stage: test
+  image: $GRIMOIRE_INDEX_NODE_IMAGE
+  variables:
+    GIT_DEPTH: 0
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - |
+      set -eu
+      git fetch --quiet origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      git worktree add --detach ../base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      git diff --name-only --diff-filter=ACMR "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD -- index > changed.txt
+      xargs -a changed.txt npx --yes "grimoire-index@$GRIMOIRE_INDEX_VERSION" validate \
+        --forge gitlab --root ../base --pr-tree .
+
+# GitLab Pages serves whatever the `pages` job leaves in `public/`.
+pages:
+  stage: deploy
+  image: $GRIMOIRE_INDEX_NODE_IMAGE
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - npx --yes "grimoire-index@$GRIMOIRE_INDEX_VERSION" build --out-dir "$GRIMOIRE_INDEX_OUT_DIR"
+  artifacts:
+    paths:
+      - $GRIMOIRE_INDEX_OUT_DIR

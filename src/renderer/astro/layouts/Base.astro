@@ -1,0 +1,623 @@
+---
+// Shell for every page: head, header, footer, and the whole default style
+// sheet. Everything in the global block sits in `@layer grimoire`, so a
+// user CSS file (unlayered) wins over any of it regardless of specificity
+// or injection order — that layer is the entire theming contract.
+import { data } from "../lib/data";
+
+interface Props {
+  title: string;
+  description: string;
+  image?: string;
+}
+const { config, css } = data;
+const { title, description, image = config.favicon } = Astro.props;
+// The mark is styled separately, so it only applies when it really is the
+// leading run of the brand — otherwise the header renders the plain text.
+const brandRest =
+  config.brandMark && config.brand.startsWith(config.brandMark)
+    ? config.brand.slice(config.brandMark.length)
+    : null;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" href={config.favicon} type="image/svg+xml" />
+    <title>{title}</title>
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={image} />
+    <meta name="twitter:card" content="summary" />
+    <script is:inline>
+      // Before first paint: stored preference wins, else system scheme.
+      document.documentElement.dataset.theme =
+        localStorage.getItem("theme") ??
+        (matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light");
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="shell header-row">
+        <a class="brand" href="/">
+          {
+            brandRest === null ? (
+              config.brand
+            ) : (
+              <Fragment>
+                <span class="brand-mark">{config.brandMark}</span>
+                {brandRest}
+              </Fragment>
+            )
+          }
+        </a>
+        <nav>
+          {config.docsUrl && <a href={config.docsUrl}>docs</a>}
+          {
+            config.repoUrl && (
+              <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">
+                GitHub
+              </a>
+            )
+          }
+          <button id="theme-toggle" type="button" aria-label="Toggle theme">
+            <span class="when-light" aria-hidden="true">🌙</span>
+            <span class="when-dark" aria-hidden="true">☀️</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="shell">
+      <slot />
+    </main>
+
+    <footer>
+      <div class="shell">
+        <p>
+          Raw data: <a href="/all.json"><code>/all.json</code></a>{
+            config.footerNote ? ` · ${config.footerNote}` : ""
+          }
+        </p>
+      </div>
+    </footer>
+
+    <script is:inline>
+      document.getElementById("theme-toggle").addEventListener("click", () => {
+        const root = document.documentElement;
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        root.dataset.theme = next;
+        localStorage.setItem("theme", next);
+      });
+
+      for (const btn of document.querySelectorAll("[data-copy]")) {
+        // Read the label up front: re-reading it inside the handler snapshots
+        // "copied" when the button is clicked twice inside the 1500ms window.
+        const label = btn.querySelector("span");
+        const original = label?.textContent ?? "copy";
+        btn.addEventListener("click", () => {
+          navigator.clipboard.writeText(btn.dataset.copy ?? "").then(() => {
+            btn.classList.add("copied");
+            if (label) label.textContent = "copied";
+            setTimeout(() => {
+              btn.classList.remove("copied");
+              if (label) label.textContent = original;
+            }, 1500);
+          });
+        });
+      }
+    </script>
+
+    <style is:global>
+      /* THE THEMING CONTRACT — these custom properties are the whole
+         customization surface. There is no component-override API.
+
+         Everything the renderer ships is layered. Unlayered CSS — i.e. any
+         user override file — beats a layered declaration outright, so a
+         single `:root { --accent: … }` wins in light AND dark without
+         !important and without knowing where Astro injects its bundle.
+         Redeclare under `[data-theme="dark"]` to differ per scheme.
+
+           surface   --bg --fg --card --border --muted --chip-bg
+           accent    --accent --accent-soft --on-accent
+           kinds     --kind-skill --kind-rule --kind-agent --kind-mcp
+                     --kind-bundle
+           states    --deprecated --banner-bg --banner-fg --banner-border
+
+         Every one is declared in both schemes below; `color-scheme` rides
+         along so form controls and scrollbars follow. Adding a token is
+         additive, removing or renaming one is a breaking change. */
+      @layer grimoire {
+        :root {
+          --bg: #f7f6f3;
+          --fg: #1d1c1a;
+          --muted: #6d6a63;
+          --card: #ffffff;
+          --border: #dedbd3;
+          --accent: #6d4fc4;
+          --accent-soft: #efeafd;
+          --chip-bg: #edebe5;
+          --on-accent: #ffffff;
+          --kind-skill: #6d4fc4;
+          --kind-rule: #1a7f6b;
+          --kind-agent: #b0641a;
+          --kind-mcp: #2565c7;
+          --kind-bundle: #a63d68;
+          /* ~5.7:1 on --card (white) */
+          --deprecated: #9c5400;
+          --banner-bg: #fff3cd;
+          --banner-fg: #6b4c00;
+          --banner-border: #e0b84c;
+          color-scheme: light;
+        }
+        [data-theme="dark"] {
+          --bg: #16151a;
+          --fg: #e8e6e1;
+          --muted: #98948b;
+          --card: #201f26;
+          --border: #35333d;
+          --accent: #a58cf0;
+          --accent-soft: #2c2540;
+          --chip-bg: #2a2931;
+          --on-accent: #ffffff;
+          --kind-skill: #a58cf0;
+          --kind-rule: #4cc2a9;
+          --kind-agent: #e0a35c;
+          --kind-mcp: #6fa8f5;
+          --kind-bundle: #e07ba6;
+          /* ~7.6:1 on --card (#201f26) */
+          --deprecated: #e3a640;
+          --banner-bg: #4a3b0a;
+          --banner-fg: #f0d78c;
+          --banner-border: #8a6d1a;
+          color-scheme: dark;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          background: var(--bg);
+          color: var(--fg);
+          font-family:
+            system-ui,
+            -apple-system,
+            "Segoe UI",
+            sans-serif;
+          line-height: 1.55;
+        }
+        .shell {
+          width: min(72rem, 100% - 2.5rem);
+          margin-inline: auto;
+        }
+        main.shell {
+          flex: 1;
+          padding-block: 1.5rem 3rem;
+        }
+        a {
+          color: var(--accent);
+        }
+
+        header {
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
+        }
+        .header-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-block: 0.8rem;
+          gap: 1rem;
+        }
+        .brand {
+          color: var(--fg);
+          text-decoration: none;
+          font-weight: 600;
+          font-size: 1.05rem;
+        }
+        .brand-mark {
+          color: var(--accent);
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+        }
+        nav {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+        nav a {
+          color: var(--muted);
+          text-decoration: none;
+        }
+        nav a:hover {
+          color: var(--fg);
+        }
+        #theme-toggle {
+          border: 1px solid var(--border);
+          background: transparent;
+          border-radius: 999px;
+          padding: 0.25rem 0.5rem;
+          cursor: pointer;
+          font-size: 0.9rem;
+          line-height: 1;
+        }
+        [data-theme="dark"] .when-light,
+        [data-theme="light"] .when-dark {
+          display: none;
+        }
+
+        .hero {
+          display: grid;
+          /* fit-content: install column takes what its rows need, but can
+             shrink below content width (commands scroll) before squeezing
+             the text column out. h1 spans the full row; paragraph and
+             install strip share the second row, top-aligned. */
+          grid-template-columns: 1fr fit-content(44rem);
+          align-items: start;
+          gap: 0.75rem 2rem;
+          margin-block: 1rem 1.5rem;
+        }
+        .hero h1 {
+          grid-column: 1 / -1;
+          margin: 0;
+          font-size: 1.6rem;
+        }
+        .hero p {
+          margin: 0;
+          color: var(--muted);
+          max-width: 46rem;
+        }
+        @media (max-width: 64rem) {
+          .hero {
+            grid-template-columns: 1fr;
+          }
+        }
+        .hero code {
+          background: var(--chip-bg);
+          border-radius: 4px;
+          padding: 0.1rem 0.35rem;
+          font-size: 0.9em;
+        }
+
+        .install {
+          display: grid;
+          /* One track set for all rows so the commands start at the same x
+             regardless of OS-label width; rows pick it up via subgrid. */
+          grid-template-columns: auto 1fr auto;
+          gap: 0.5rem;
+          min-width: 0;
+        }
+        .install-row {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: subgrid;
+          align-items: center;
+          column-gap: 0.6rem;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 0.45rem 0.7rem;
+        }
+        .install-row .os {
+          color: var(--muted);
+          font-size: 0.78rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          white-space: nowrap;
+        }
+        .install-row code {
+          background: none;
+          padding: 0;
+          font-size: 0.85rem;
+          overflow-x: auto;
+          white-space: nowrap;
+          /* still scrollable, no visible bar */
+          scrollbar-width: none;
+        }
+        .install-row code::-webkit-scrollbar {
+          display: none;
+        }
+        /* The `[[registries]]` snippet is the one multi-line command: let it
+           wrap inside its cell instead of scrolling a three-line block. */
+        .install-row code.block {
+          white-space: pre;
+          line-height: 1.35;
+        }
+        @media (max-width: 40rem) {
+          .install {
+            grid-template-columns: 1fr auto;
+          }
+          .install-row .os {
+            grid-column: 1 / -1;
+          }
+        }
+
+        .controls {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.75rem;
+          margin-bottom: 1.25rem;
+        }
+        .controls input[type="search"] {
+          flex: 1 1 16rem;
+          padding: 0.55rem 0.8rem;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: var(--card);
+          color: var(--fg);
+          font-size: 0.95rem;
+        }
+        .controls input[type="search"]:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 1px;
+        }
+        .chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.4rem;
+        }
+        .chip {
+          border: 1px solid var(--border);
+          background: var(--chip-bg);
+          color: var(--fg);
+          border-radius: 999px;
+          padding: 0.25rem 0.7rem;
+          font-size: 0.85rem;
+          transition: border-color 150ms ease;
+          cursor: pointer;
+        }
+        .chip small {
+          color: var(--muted);
+        }
+        /* button-only: the "+N" overflow chip is a span and stays inert */
+        button.chip:hover {
+          border-color: var(--accent);
+        }
+        .chip.active {
+          border-color: var(--accent);
+          background: var(--accent-soft);
+        }
+
+        .grid {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+          gap: 1rem;
+        }
+        .card {
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 1rem 1.1rem;
+          /* Whole card navigates to the detail page via the stretched title
+             link below; real controls inside re-stack above the overlay. */
+          position: relative;
+          cursor: pointer;
+          transition: border-color 150ms ease;
+        }
+        /* Card highlight yields while an inner control is hovered, so its
+           own hover state reads as the click target instead. */
+        .card:hover:not(
+            :has(.keywords :hover, .copy-group :hover, .source:hover)
+          ) {
+          border-color: var(--accent);
+        }
+        .card h2 a::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+        }
+        .card .keywords,
+        .card .copy-group,
+        .card .source {
+          position: relative;
+        }
+        .card-head {
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+        }
+        .card h2 {
+          flex: 1;
+          min-width: 0;
+          margin: 0;
+          font-size: 1.05rem;
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+          word-break: break-word;
+        }
+        .card h2 a {
+          color: inherit;
+          text-decoration: none;
+        }
+        .card-logo {
+          flex-shrink: 0;
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+        }
+        img.card-logo {
+          object-fit: contain;
+          background: var(--chip-bg);
+        }
+        .card-logo-fallback {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--on-accent);
+          font-weight: 700;
+          font-size: 0.85rem;
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+        }
+        .badge {
+          flex-shrink: 0;
+          font-size: 0.72rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          border: 1px solid currentColor;
+          border-radius: 999px;
+          padding: 0.05rem 0.5rem;
+          color: var(--muted);
+        }
+        .kind-skill {
+          color: var(--kind-skill);
+        }
+        .kind-rule {
+          color: var(--kind-rule);
+        }
+        .kind-agent {
+          color: var(--kind-agent);
+        }
+        .kind-mcp {
+          color: var(--kind-mcp);
+        }
+        .kind-bundle {
+          color: var(--kind-bundle);
+        }
+        .badge.deprecated {
+          color: var(--deprecated);
+        }
+        .chip[class*="kind-"] {
+          color: var(--fg);
+        }
+        .namespace {
+          margin: 0;
+          color: var(--muted);
+          font-size: 0.82rem;
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+        }
+        .meta-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.4rem;
+        }
+        .pill {
+          font-size: 0.78rem;
+          color: var(--muted);
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          padding: 0.03rem 0.5rem;
+        }
+        .pill.version {
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+        }
+        .updated {
+          font-size: 0.78rem;
+          color: var(--muted);
+        }
+        .deprecated-strip {
+          margin: 0;
+          font-size: 0.82rem;
+          color: var(--deprecated);
+        }
+        /* Long descriptions would stretch their whole grid row; clamp to 3
+           lines so cards stay uniform. Full text lives on the detail page. */
+        .description {
+          margin: 0;
+          font-size: 0.92rem;
+          /* `auto` basis, not `0`: overflow:hidden drops the min-height:auto
+             floor, so a 0-basis item can collapse in an auto-height column. */
+          flex: 1 1 auto;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          line-clamp: 3;
+          overflow: hidden;
+        }
+        .keywords {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.3rem;
+        }
+        .chip.keyword {
+          font-size: 0.72rem;
+          padding: 0.1rem 0.5rem;
+          color: var(--muted);
+        }
+        .chip.keyword.overflow {
+          cursor: default;
+        }
+        .card-foot {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.6rem;
+          margin-top: 0.5rem;
+        }
+        .copy-group {
+          display: flex;
+          gap: 0.4rem;
+          flex-wrap: wrap;
+        }
+        .copy {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.32rem;
+          transition: border-color 150ms ease;
+          border: 1px solid var(--border);
+          background: var(--chip-bg);
+          color: var(--fg);
+          border-radius: 6px;
+          padding: 0.28rem 0.55rem;
+          font-size: 0.8rem;
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+          cursor: pointer;
+        }
+        .copy:hover {
+          border-color: var(--accent);
+        }
+        .copy.copied {
+          color: var(--kind-rule);
+          border-color: var(--kind-rule);
+        }
+        /* card actions: icon-only square buttons. Scoped to .copy-group so the
+           hero install buttons (also .copy, elsewhere) keep their text label. */
+        .copy-group .copy {
+          justify-content: center;
+          width: 2rem;
+          height: 2rem;
+          padding: 0;
+          gap: 0;
+          text-decoration: none;
+        }
+        .source {
+          font-size: 0.85rem;
+          white-space: nowrap;
+        }
+        .empty {
+          color: var(--muted);
+        }
+
+        footer {
+          border-top: 1px solid var(--border);
+          color: var(--muted);
+          font-size: 0.85rem;
+        }
+        footer p {
+          margin: 0.8rem 0;
+        }
+        footer a {
+          color: inherit;
+        }
+      }
+    </style>
+
+    {/* Unlayered, and last in the document: the user's file wins twice over. */}
+    {css && <style is:inline set:html={css} />}
+  </body>
+</html>

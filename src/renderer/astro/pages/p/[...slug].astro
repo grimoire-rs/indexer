@@ -1,0 +1,367 @@
+---
+// Frozen public URL: /p/<namespace>/<name>/. grim resolves against it, the
+// VS Code deep link points at it, and search engines index it — the route
+// shape is a contract, not an implementation detail.
+import Base from "../../layouts/Base.astro";
+import VersionMenu from "../../components/VersionMenu.astro";
+import CopyButton from "../../components/CopyButton.astro";
+import { compareVersions, versionCascade, vscodeUrl, type CatalogPackage } from "../../lib/catalog";
+import { data } from "../../lib/data";
+import { getEntry, render } from "astro:content";
+
+export function getStaticPaths() {
+  return data.packages.map((pkg) => ({
+    params: { slug: `${pkg.namespace}/${pkg.name}` },
+    props: { pkg },
+  }));
+}
+
+const { config } = data;
+const { pkg } = Astro.props as { pkg: CatalogPackage };
+const id = `${pkg.namespace}/${pkg.name}`;
+
+const readmeEntry = await getEntry("readmes", id);
+const changelogEntry = await getEntry("changelogs", id);
+const Readme = readmeEntry ? (await render(readmeEntry)).Content : null;
+const Changelog = changelogEntry ? (await render(changelogEntry)).Content : null;
+
+const tags = [...(pkg.tags ?? [])].sort(compareVersions);
+const cascade = versionCascade(pkg.version, tags);
+const older = tags.filter((t) => !cascade.includes(t));
+
+const title = pkg.title ?? pkg.name;
+const description = pkg.summary ?? pkg.description ?? `${pkg.kind} package: ${pkg.ref}`;
+const vscode = vscodeUrl(config.vscodeExtension, pkg.ref);
+const addCommand = `grim add ${pkg.ref}`;
+---
+
+<Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo}>
+  <div class="detail">
+    <header class="detail-head">
+      {
+        pkg.logo ? (
+          <img class="tile logo" src={pkg.logo} alt="" />
+        ) : (
+          <div class="tile letter" style={`background: var(--kind-${pkg.kind}, var(--muted))`}>
+            {pkg.name[0]?.toUpperCase()}
+          </div>
+        )
+      }
+      <div class="detail-head-text">
+        <h1>
+          {pkg.name} <span class={`badge kind-${pkg.kind}`}>{pkg.kind}</span>
+        </h1>
+        {description && <p class="summary">{description}</p>}
+      </div>
+    </header>
+
+    {
+      pkg.deprecated && (
+        <p class="deprecated-banner">
+          ⚠️ deprecated{pkg.replacedBy ? ` — replaced by ${pkg.replacedBy}` : ""}
+        </p>
+      )
+    }
+
+    <div class="install-row">
+      <code>{addCommand}</code>
+      <CopyButton value={addCommand} label="Copy the install command" />
+    </div>
+
+    <div class="detail-body">
+      <main class="detail-main">
+        {Readme ? <Readme /> : <p class="empty">No README available.</p>}
+        {
+          Changelog && (
+            <details class="changelog">
+              <summary>Changelog</summary>
+              <Changelog />
+            </details>
+          )
+        }
+      </main>
+
+      <aside class="detail-rail">
+        {tags.length > 0 && (
+          <section>
+            <h2>Versions</h2>
+            <div class="cascade">
+              {cascade.map((tag) => (
+                <VersionMenu pkgRef={pkg.ref} tag={tag} current={tag === pkg.version} />
+              ))}
+            </div>
+            {older.length > 0 && (
+              <details class="older">
+                <summary>{older.length} older</summary>
+                <div class="cascade">
+                  {older.map((tag) => (
+                    <VersionMenu pkgRef={pkg.ref} tag={tag} />
+                  ))}
+                </div>
+              </details>
+            )}
+          </section>
+        )}
+
+        <section>
+          <h2>Details</h2>
+          <dl>
+            {pkg.license && (
+              <>
+                <dt>License</dt>
+                <dd>{pkg.license}</dd>
+              </>
+            )}
+            {pkg.repository && (
+              <>
+                <dt>Repository</dt>
+                <dd>
+                  <a href={pkg.repository} target="_blank" rel="noopener noreferrer">
+                    source
+                  </a>
+                </dd>
+              </>
+            )}
+            {pkg.owner?.github && (
+              <>
+                <dt>Owner</dt>
+                <dd>
+                  <a
+                    href={`https://github.com/${pkg.owner.github}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {pkg.owner.github}
+                  </a>
+                </dd>
+              </>
+            )}
+          </dl>
+          {pkg.keywords && pkg.keywords.length > 0 && (
+            <ul class="keywords">
+              {pkg.keywords.map((k) => (
+                <li>{k}</li>
+              ))}
+            </ul>
+          )}
+          {vscode && (
+            <a class="vscode-link" href={vscode}>
+              Open in VS Code
+            </a>
+          )}
+        </section>
+      </aside>
+    </div>
+  </div>
+</Base>
+
+<script>
+  // Right-click a version: open its command menu at the pointer. The menu is
+  // a `manual` popover (see VersionMenu.astro), so dismissal is ours.
+  // Copying itself rides the shared [data-copy] listener in Base.astro.
+  let openMenu: HTMLElement | null = null;
+  const closeMenu = () => {
+    openMenu?.hidePopover();
+    openMenu = null;
+  };
+  // A right-click fires no `click`, so this never eats the gesture that just
+  // opened the menu — but it does close on a command item, which is wanted.
+  document.addEventListener("click", closeMenu);
+  document.addEventListener("scroll", closeMenu, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenu();
+  });
+
+  for (const seg of document.querySelectorAll<HTMLElement>("[data-menu]")) {
+    const menu = document.getElementById(seg.dataset.menu ?? "");
+    if (!menu) continue;
+    seg.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      closeMenu();
+      // The keyboard Menu key fires contextmenu at 0,0 — fall back to the
+      // segment itself so it doesn't land in the page corner.
+      const seat = seg.getBoundingClientRect();
+      menu.style.left = `${e.clientX || seat.left}px`;
+      menu.style.top = `${e.clientY || seat.bottom}px`;
+      menu.showPopover();
+      openMenu = menu;
+      // Nudge back inside once measured — the pointer can be within a menu's
+      // width of the right or bottom edge.
+      const box = menu.getBoundingClientRect();
+      if (box.right > innerWidth) menu.style.left = `${innerWidth - box.width - 8}px`;
+      if (box.bottom > innerHeight) menu.style.top = `${innerHeight - box.height - 8}px`;
+    });
+  }
+</script>
+
+<style>
+  .detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .detail-head {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+  }
+  .tile {
+    flex-shrink: 0;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 10px;
+    object-fit: cover;
+  }
+  .tile.letter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--on-accent);
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: ui-monospace, "SFMono-Regular", monospace;
+  }
+  .detail-head-text h1 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1.5rem;
+    font-family: ui-monospace, "SFMono-Regular", monospace;
+  }
+  .summary {
+    margin: 0.3rem 0 0;
+    color: var(--muted);
+  }
+  .deprecated-banner {
+    margin: 0;
+    background: var(--banner-bg);
+    color: var(--banner-fg);
+    border: 1px solid var(--banner-border);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font-weight: 600;
+  }
+  .install-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+  }
+  .install-row code {
+    font-size: 0.9rem;
+    overflow-x: auto;
+  }
+  .detail-body {
+    display: grid;
+    grid-template-columns: 1fr 18rem;
+    gap: 2rem;
+    align-items: start;
+  }
+  @media (max-width: 55rem) {
+    .detail-body {
+      grid-template-columns: 1fr;
+    }
+  }
+  .detail-main {
+    min-width: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+  }
+  .detail-main :global(img) {
+    max-width: 100%;
+  }
+  .detail-main :global(pre) {
+    overflow-x: auto;
+  }
+  .changelog {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+  }
+  .changelog summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .detail-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .detail-rail section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+  }
+  .detail-rail h2 {
+    margin: 0 0 0.6rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  /* Loose badges, both for the cascade and the older tags — VersionMenu owns
+     the pill itself, this only lays them out. */
+  .cascade {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+  .older {
+    margin-top: 0.5rem;
+  }
+  .older[open] > summary {
+    margin-bottom: 0.5rem;
+  }
+  .older > summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .older > summary:hover {
+    color: var(--fg);
+  }
+  dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.3rem 0.6rem;
+  }
+  dt {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  dd {
+    margin: 0;
+  }
+  .keywords {
+    list-style: none;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .keywords li {
+    background: var(--chip-bg);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    font-size: 0.78rem;
+  }
+  .vscode-link {
+    display: inline-block;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+</style>

@@ -1,0 +1,69 @@
+---
+import Base from "../layouts/Base.astro";
+import Catalog from "../components/Catalog.tsx";
+import CopyButton from "../components/CopyButton.astro";
+import { data } from "../lib/data";
+
+const { config, packages } = data;
+
+// The "add this index" ergonomic (`helm repo add`): the command a visitor
+// needs to point their own grim at *this* index, plus the equivalent
+// hand-edit. Absent `registry` config means the index has no public URL to
+// hand out, so the block is omitted rather than guessed.
+const registryRows = config.registry
+  ? [
+      {
+        os: "add index",
+        command: `grim config registry add ${config.registry.alias} --index ${config.registry.index}`,
+        block: false,
+        label: "Copy the registry add command",
+      },
+      {
+        os: "grimoire.toml",
+        command: `[[registries]]\nalias = "${config.registry.alias}"\nindex = "${config.registry.index}"`,
+        block: true,
+        label: "Copy the registries TOML entry",
+      },
+    ]
+  : [];
+---
+
+<Base title={config.brand} description={config.description}>
+  <div class="hero">
+    <h1>{config.brand}</h1>
+    <p>
+      {config.tagline}
+      {
+        config.installDocsUrl && (
+          <Fragment>
+            {" "}
+            Copy an <code>add</code> command below — or{" "}
+            <a href={config.installDocsUrl}>install grim</a> first.
+          </Fragment>
+        )
+      }
+    </p>
+    {
+      (config.install.length > 0 || registryRows.length > 0) && (
+        <div class="install">
+          {config.install.map((row) => (
+            <div class="install-row">
+              <span class="os">{row.os}</span>
+              <code>{row.command}</code>
+              <CopyButton value={row.command} label={`Copy the ${row.os} install command`} />
+            </div>
+          ))}
+          {registryRows.map((row) => (
+            <div class="install-row">
+              <span class="os">{row.os}</span>
+              <code class:list={[{ block: row.block }]}>{row.command}</code>
+              <CopyButton value={row.command} label={row.label} />
+            </div>
+          ))}
+        </div>
+      )
+    }
+  </div>
+
+  <Catalog client:load packages={packages} vscodeExtension={config.vscodeExtension} />
+</Base>

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "foo",
+  "kind": "widget",
+  "ref": "ghcr.io/acme/widgets/foo",
+  "description": "A test widget.",
+  "owner": { "github": "acme", "id": 1 }
+}

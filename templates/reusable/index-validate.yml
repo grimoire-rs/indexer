@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The Grimoire Authors
+#
+# Reusable workflow: the contribution gate for an index repo.
+#
+# Runs from the TRUSTED base checkout under `pull_request_target`, because
+# the gate needs a forge token to resolve numeric namespace-owner ids. The
+# PR head is checked out into a SEPARATE directory and consumed as DATA
+# ONLY — nothing in it is executed, imported, installed, or interpolated
+# into a command. `grimoire-index` itself comes from npm, never from the PR.
+#
+# Do not add a `run:` step that touches `pr-tree/`, and never add
+# `npm ci`/`npm install` — that would execute contributor code with a
+# write-capable token.
+#
+# The gate contract is the exit code of `grimoire-index validate`:
+#   0        -> eligible for auto-merge
+#   non-zero -> manual review required
+# so this job's success/failure IS the gate. Branch protection on the
+# calling repo turns that into a merge decision.
+#
+# Copy this file to `.github/workflows/index-validate.yml` in this repo — a
+# reusable workflow must live directly in `.github/workflows/`, GitHub does
+# not resolve subdirectories.
+name: grimoire-index validate
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version used to run grimoire-index.
+        type: string
+        required: false
+        default: "22"
+      grimoire-index-version:
+        description: npm version or range of grimoire-index to run.
+        type: string
+        required: false
+        default: latest
+
+permissions: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # Trusted: the committed state the PR proposes to change.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Untrusted: PR head, as data. `persist-credentials: false` keeps a
+      # token out of the tree the contributor controls.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-tree
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # Changed paths come from the API, not from a diff of the untrusted
+      # tree. `jq -r` output is written to a file and passed via `xargs -a`
+      # so a crafted filename can never reach the shell as syntax.
+      - name: Collect changed paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${REPO}/pulls/${PR}/files" \
+            --jq '.[] | select(.status != "removed") | .filename' \
+            | grep -E '^index/' > changed.txt || : > changed.txt
+
+      - name: Validate contribution
+        env:
+          VERSION: ${{ inputs.grimoire-index-version }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          xargs -a changed.txt npx --yes "grimoire-index@${VERSION}" validate \
+            --forge github --root . --pr-tree pr-tree

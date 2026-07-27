@@ -1,0 +1,8 @@
+/* User override file: unlayered, so it beats the layered defaults in both
+   schemes without !important. */
+:root {
+  --accent: rgb(1 2 3);
+}
+[data-theme="dark"] {
+  --accent: rgb(4 5 6);
+}

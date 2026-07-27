@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The Grimoire Authors
+#
+# Reusable workflow: build a grimoire index repo and publish it to GitHub
+# Pages. Scaffolded index repos call this by ref rather than inlining the
+# job logic, so a fix here reaches every downstream index without anyone
+# re-running `grimoire-index init` over their edits. Renovate's built-in
+# `github-actions` manager bumps the pinned ref in each caller.
+#
+# Copy this file to `.github/workflows/index-pages.yml` in this repo — a
+# reusable workflow must live directly in `.github/workflows/`, GitHub does
+# not resolve subdirectories.
+name: grimoire-index pages
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version used to run grimoire-index.
+        type: string
+        required: false
+        default: "22"
+      grimoire-index-version:
+        description: npm version or range of grimoire-index to run.
+        type: string
+        required: false
+        default: latest
+      out-dir:
+        description: Directory `grimoire-index build` writes the site into.
+        type: string
+        required: false
+        default: dist
+
+permissions: {}
+
+concurrency:
+  group: grimoire-index-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # Inputs reach the shell through env vars, never through `run:`
+      # interpolation — a caller-supplied value must not be able to close
+      # the quoting and append a command.
+      - name: Build index
+        env:
+          VERSION: ${{ inputs.grimoire-index-version }}
+          OUT_DIR: ${{ inputs.out-dir }}
+        run: npx --yes "grimoire-index@${VERSION}" build --out-dir "${OUT_DIR}"
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ inputs.out-dir }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
