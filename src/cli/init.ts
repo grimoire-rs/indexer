@@ -370,7 +370,7 @@ function siteConfig(answers: InitAnswers): string {
   return json({
     site: answers.baseUrl,
     brand: answers.title,
-    description: `${answers.title} — a Grimoire package index.`,
+    description: `${answers.title}, a Grimoire package index.`,
     ...(answers.logo ? { favicon: answers.logo } : {}),
     registry: { alias: answers.registryAlias, index: answers.baseUrl },
   });

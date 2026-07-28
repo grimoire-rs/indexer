@@ -55,6 +55,15 @@ export interface SiteConfig {
   repoUrl?: string | null;
   /** `<link rel="icon">` href. The file itself comes from `public/`. */
   favicon?: string;
+  /**
+   * Logo shown in the header beside `brand`, and the default `og:image`.
+   * Site-root-relative (`/logo.svg`, served from `public/`) or an absolute
+   * http(s) URL. `null` — the default — renders the brand as text alone.
+   *
+   * Separate from `favicon` on purpose: a favicon is drawn to read at 16px,
+   * which is not what belongs in a header or a link preview.
+   */
+  logo?: string | null;
   /** Hero installer one-liners. Empty array hides the strip. */
   install?: InstallCommand[];
   /**
@@ -64,8 +73,19 @@ export interface SiteConfig {
   vscodeExtension?: string | null;
   /** "Add this index" copy-paste block. `null` omits it. */
   registry?: RegistryHint | null;
-  /** Footer sentence after the `/all.json` link. `null` drops it. */
+  /**
+   * Footer sentence after the `/all.json` link — licensing, provenance,
+   * whatever this index wants to say. `null` drops it and leaves the raw-data
+   * link alone.
+   */
   footerNote?: string | null;
+  /**
+   * "Built with ♥ using Grimoire" in the footer, linking to grimoire.rs.
+   * `false` removes it — an index runner is not obliged to advertise the
+   * software, so this is opt-out rather than something to fork the
+   * renderer over.
+   */
+  attribution?: boolean;
   /**
    * Path to a CSS file, relative to the index repo root. Inlined after the
    * default token set; unlayered, so it wins over every default rule.
@@ -81,13 +101,14 @@ export const DEFAULT_CONFIG: ResolvedSiteConfig = {
   brand: "grim package index",
   brandMark: "grim",
   description:
-    "Browse and search AI-config packages — skills, rules, agents, MCP servers, and bundles — installable with the grim package manager.",
+    "Browse and search AI-config packages (skills, rules, agents, MCP servers, and bundles), installable with the grim package manager.",
   tagline:
     "Skills, rules, agents, MCP servers, and bundles for AI coding agents, hosted on OCI registries.",
   docsUrl: "https://grimoire.rs",
   installDocsUrl: "https://grimoire.rs/installation.html",
   repoUrl: "https://github.com/grimoire-rs/index",
   favicon: "/favicon.svg",
+  logo: null,
   install: [
     {
       os: "Linux / macOS",
@@ -97,8 +118,12 @@ export const DEFAULT_CONFIG: ResolvedSiteConfig = {
   ],
   vscodeExtension: "grimoire-rs.grimoire-vscode",
   registry: { alias: "hub", index: "https://index.grimoire.rs" },
-  footerNote:
-    "metadata is CC0 · pointers, not payloads — packages live on OCI registries",
+  // Two facts a visitor may actually need: what they may do with the data
+  // they just read, and where the packages themselves are. Dropped from the
+  // old default: "pointers, not payloads", which explains the architecture
+  // to someone who did not ask, and the em dash holding it on.
+  footerNote: "index metadata is CC0 · packages live on OCI registries",
+  attribution: true,
   customCss: null,
 };
 
@@ -143,6 +168,19 @@ function validate(raw: unknown): SiteConfig {
   }
   for (const key of ["site", "docsUrl", "installDocsUrl", "repoUrl"]) {
     optionalUrl(cfg, key);
+  }
+
+  if (cfg.attribution !== undefined && typeof cfg.attribution !== "boolean") {
+    fail("attribution must be a boolean");
+  }
+
+  // Lands in `src`. A site-root path is the normal case; an absolute URL is
+  // allowed for a logo already hosted elsewhere. Anything else — a bare
+  // relative path that would break on a subpath deployment, or a `javascript:`
+  // URL — is refused rather than rendered.
+  optionalString(cfg, "logo");
+  if (typeof cfg.logo === "string" && !/^(\/|https?:\/\/)/i.test(cfg.logo)) {
+    fail("logo must be a site-root path (/logo.svg) or an http(s) URL");
   }
 
   if (cfg.vscodeExtension !== undefined && cfg.vscodeExtension !== null) {
