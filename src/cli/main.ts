@@ -24,6 +24,7 @@ interface InitCliOptions {
   forge?: Forge;
   git?: boolean;
   withSkills?: boolean;
+  repoUrl?: string;
   force?: boolean;
 }
 
@@ -96,6 +97,7 @@ export async function run(argv: string[]): Promise<number> {
       "--with-skills",
       "scaffold the combined layout: this repo holds its skills and its index",
     )
+    .option("--repo-url <url>", "URL of the repo being scaffolded (`--announce` targets it)")
     .option("--force", "overwrite files that differ from the scaffold")
     .action(async (dir: string, opts: InitCliOptions, cmd: Command) => {
       code = await init(

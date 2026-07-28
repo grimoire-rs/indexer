@@ -11,6 +11,21 @@
 registry = "{{registryHost}}"
 version = "0.1.0"
 
+# Where `grim publish --announce` opens its PR/MR. This repo *is* the index,
+# so it announces into itself. Never drop these keys: with no `[announce]`
+# table grim falls back to the public first-party index
+# (`github.com/grimoire-rs/index`) and proposes your packages into a repo you
+# do not own.
+#
+# `repository` is this repo's https clone URL. `namespace` is the
+# `index/<host>/<namespace>/` your entries land under — the contribution gate
+# refuses a namespace whose forge owner is not you. A literal `REPLACE-ME`
+# means the scaffold had nothing to derive it from: `--announce` then stops
+# with "cannot derive the index host" rather than announcing anywhere.
+[announce]
+repository = "{{announceRepo}}"
+namespace = "{{announceNamespace}}"
+
 # One table per package. `repository` is the path under the registry host.
 #
 # [skills.example]

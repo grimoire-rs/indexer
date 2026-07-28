@@ -21,6 +21,20 @@ const PLACEHOLDER = /(?<!\$)\{\{\s*([A-Za-z_]\w*)\s*\}\}/g;
 
 const NAME_RE = /^[a-z0-9][a-z0-9._-]*$/;
 
+/**
+ * What `[announce]` gets when nothing knew this repo's URL. It is not a
+ * locator, so `grim publish --announce` fails on it before any network call —
+ * which is the point: the alternative is grim's own default, the public
+ * first-party index, and announcing into a stranger's repo by accident.
+ */
+const UNDERIVED = "REPLACE-ME";
+
+/** GitHub/GitLab Pages hosts — the URL of a Pages site names the repo serving it. */
+const PAGES_HOST = /^([\w-]+)\.(github|gitlab)\.io$/;
+
+/** scp-like `[user@]host:owner/repo` — the one git remote shape that is not a URL. */
+const SCP_REMOTE = /^(?:[^@/]+@)?([\w.-]+):(?!\/)(.+)$/;
+
 export type Forge = "github" | "gitlab" | "both";
 
 /** Everything `init` needs to render the scaffold. Flags and prompts both resolve into this. */
@@ -34,6 +48,8 @@ export interface InitAnswers {
   forge: Forge;
   git: boolean;
   withSkills: boolean;
+  /** This repo's own https URL — the announce target. `""` when nothing could derive it. */
+  repoUrl: string;
 }
 
 /** Raw `init` flags, straight off commander. */
@@ -48,6 +64,7 @@ export interface InitFlags {
   forge?: Forge;
   git?: boolean;
   withSkills?: boolean;
+  repoUrl?: string;
   force?: boolean;
 }
 
@@ -119,6 +136,71 @@ function badName(value: string): string | null {
 }
 
 /**
+ * The target dir's `origin` remote as an https URL — set when the repo was
+ * created on the forge and cloned before scaffolding into it. Any remote
+ * shape (https, ssh, scp-like) reduces to the https form `[announce]` wants.
+ */
+function gitRemoteUrl(dir: string): string | undefined {
+  let remote: string;
+  try {
+    remote = execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return undefined; // no git, no repo, or no `origin`
+  }
+
+  const bare = remote.replace(/\.git$/, "");
+  const scp = SCP_REMOTE.exec(bare);
+  if (scp) return `https://${scp[1]}/${scp[2]}`;
+  try {
+    const url = new URL(bare);
+    // `url.host` drops the userinfo, so a token in the remote never survives.
+    if (["https:", "http:", "ssh:", "git:"].includes(url.protocol)) {
+      return `https://${url.host}${url.pathname}`;
+    }
+  } catch {
+    /* a `file://` or otherwise unmappable remote — nothing to announce into */
+  }
+  return undefined;
+}
+
+/**
+ * The forge repo behind a Pages base URL: `https://acme.github.io/idx` is
+ * served from `github.com/acme/idx`, and a Pages root (`https://acme.github.io`)
+ * from the repo named after the host itself. Only the first path segment is
+ * read, so a nested GitLab group needs the URL corrected by hand.
+ */
+function repoUrlFromPages(baseUrl: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return undefined;
+  }
+  const pages = PAGES_HOST.exec(url.hostname);
+  if (!pages) return undefined;
+
+  const project = url.pathname.split("/").filter(Boolean)[0] ?? url.hostname;
+  return `https://${pages[2]}.com/${pages[1]}/${project}`;
+}
+
+/**
+ * The `index/<host>/<namespace>/` this repo's entries land under: its path
+ * minus the repo itself — one segment on GitHub, possibly nested on GitLab.
+ */
+function announceNamespace(repoUrl: string): string | undefined {
+  let segments: string[];
+  try {
+    segments = new URL(repoUrl).pathname.split("/").filter(Boolean);
+  } catch {
+    return undefined;
+  }
+  return segments.length > 1 ? segments.slice(0, -1).join("/") : undefined;
+}
+
+/**
  * Resolve flags into a complete answer set, prompting for whatever is
  * missing. `--quick` never prompts, so CI and tests get a deterministic
  * tree from flags alone.
@@ -132,6 +214,7 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     ["--name", flags.name, badName],
     ["--registry", flags.registry, badName],
     ["--base-url", flags.baseUrl, badUrl],
+    ["--repo-url", flags.repoUrl, badUrl],
   ] as const) {
     if (value !== undefined) {
       const reason = check(value);
@@ -141,16 +224,24 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
 
   if (flags.quick) {
     const name = flags.name ?? defaultName;
+    const baseUrl = flags.baseUrl ?? "http://localhost:4321";
+    const withSkills = flags.withSkills ?? false;
     return {
       name,
       title: flags.title ?? titleCase(name),
-      baseUrl: flags.baseUrl ?? "http://localhost:4321",
+      baseUrl,
       registryAlias: flags.registry ?? name,
       registryHost: flags.registryHost ?? "ghcr.io",
       logo: flags.logo ?? "",
       forge: flags.forge ?? "github",
       git: flags.git ?? true,
-      withSkills: flags.withSkills ?? false,
+      withSkills,
+      // Only the combined layout writes an announce target, so only it pays
+      // for the derivation. An empty answer stays empty — a guessed index
+      // repo is worse than a placeholder that refuses to publish.
+      repoUrl: withSkills
+        ? (flags.repoUrl ?? gitRemoteUrl(dir) ?? repoUrlFromPages(baseUrl) ?? "")
+        : "",
     };
   }
 
@@ -186,6 +277,23 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
         validate: (value) => badUrl(value ?? "") ?? undefined,
       }),
     ));
+
+  // Asked only for the combined layout — the standalone one writes no
+  // `publish.toml` and so announces nothing.
+  const derivedRepoUrl = gitRemoteUrl(dir) ?? repoUrlFromPages(baseUrl);
+  const repoUrl = !flags.withSkills
+    ? ""
+    : (flags.repoUrl ??
+      (await ask(
+        prompts.text({
+          message: "Repository URL this index lives in (`grim publish --announce` targets it)",
+          placeholder: derivedRepoUrl ?? "https://github.com/you/your-index",
+          defaultValue: derivedRepoUrl ?? "",
+          // Blank is allowed: it writes a placeholder that refuses to publish,
+          // which beats forcing a URL the user does not have yet.
+          validate: (value) => (value ? (badUrl(value) ?? undefined) : undefined),
+        }),
+      )));
 
   const registryAlias =
     flags.registry ??
@@ -235,6 +343,7 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     forge,
     git,
     withSkills: flags.withSkills ?? false,
+    repoUrl,
   };
 }
 
@@ -293,6 +402,8 @@ function plan(answers: InitAnswers, version: string): Array<{ path: string; cont
     registryAlias: answers.registryAlias,
     registryHost: answers.registryHost,
     logo: answers.logo,
+    announceRepo: answers.repoUrl || UNDERIVED,
+    announceNamespace: (answers.repoUrl && announceNamespace(answers.repoUrl)) || UNDERIVED,
     version,
     // The reusable workflows are pinned by tag; Renovate's `github-actions`
     // manager bumps this in every scaffolded repo.
@@ -382,17 +493,25 @@ function nextSteps(result: InitResult, answers: InitAnswers): string {
   // the absolute one it was derived from.
   const target = rel === "" ? "" : rel.startsWith("..") ? result.dir : rel;
   const cd = target === "" ? "" : `cd ${target}\n`;
-  const lines = [
+  const steps = [
+    "Add packages under index/<namespace>/<package>/metadata.json",
+    "Push to your forge — CI builds and publishes the site",
+  ];
+  if (answers.baseUrl === "http://localhost:4321") {
+    steps.push("Set baseUrl in index.config.json to the real site URL");
+  }
+  if (answers.withSkills && !answers.repoUrl) {
+    steps.push(
+      `Set [announce] repository + namespace in publish.toml — both are ${UNDERIVED}, ` +
+        "and `grim publish --announce` refuses to run until they name this repo",
+    );
+  }
+  return [
     `${cd}npx @grimoire-rs/indexer build`,
     "",
     "Then:",
-    "  1. Add packages under index/<namespace>/<package>/metadata.json",
-    "  2. Push to your forge — CI builds and publishes the site",
-  ];
-  if (answers.baseUrl === "http://localhost:4321") {
-    lines.push("  3. Set baseUrl in index.config.json to the real site URL");
-  }
-  return lines.join("\n");
+    ...steps.map((step, i) => `  ${i + 1}. ${step}`),
+  ].join("\n");
 }
 
 export async function init(dir: string, flags: InitFlags, version: string): Promise<ExitCode> {
