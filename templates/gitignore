@@ -1,9 +1,9 @@
-# Build output of `grimoire-index build`.
+# Build output of `grimoire-indexer build`.
 dist/
 public/
 
 # Renderer scratch dir — removed on a clean build, left behind by a killed one.
-.grimoire-index-*/
+.index-*/
 
 node_modules/
 .DS_Store

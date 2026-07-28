@@ -42,10 +42,10 @@ async function readOut(rel: string): Promise<string> {
 
 beforeAll(async () => {
   // The shipping shape, deliberately: a bare directory in os.tmpdir() with
-  // no `node_modules` anywhere on its parent chain. `npx grimoire-index
+  // no `node_modules` anywhere on its parent chain. `npx grimoire-indexer
   // build` runs in exactly that, with no local install — so if the renderer
   // ever roots Astro in the index repo again, every test below goes red.
-  root = await fs.mkdtemp(path.join(os.tmpdir(), "grimoire-index-test-"));
+  root = await fs.mkdtemp(path.join(os.tmpdir(), "index-test-"));
   outDir = path.join(root, "dist");
   await fs.cp(FIXTURE, root, { recursive: true });
   await fs.mkdir(outDir, { recursive: true });
@@ -177,7 +177,7 @@ describe("theming", () => {
 
 describe("input validation", () => {
   it("names the missing all.json instead of rendering an empty site", async () => {
-    const empty = await fs.mkdtemp(path.join(os.tmpdir(), "grimoire-index-test-"));
+    const empty = await fs.mkdtemp(path.join(os.tmpdir(), "index-test-"));
     try {
       await expect(buildSite({ root: empty, outDir: empty, config: {} })).rejects.toBeInstanceOf(
         RenderInputError,

@@ -6,7 +6,7 @@
 // `all.json`, `buildSite` renders over it.
 //
 // `os.tmpdir()` deliberately: nothing on its parent chain has `node_modules`,
-// which is the shipping shape (`npx grimoire-index build` in an index repo
+// which is the shipping shape (`npx grimoire-indexer build` in an index repo
 // with no local install).
 import fs from "node:fs";
 import os from "node:os";
@@ -35,13 +35,13 @@ function addPackage(namespace: string, name: string): void {
 }
 
 beforeEach(async () => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "grimoire-index-build-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "index-build-"));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   await run([
     "node",
-    "grimoire-index",
+    "grimoire-indexer",
     "init",
     dir,
     "--quick",
@@ -62,7 +62,7 @@ describe("build", () => {
   it("compiles a scaffolded repo into dist/", async () => {
     addPackage("acme", "hello");
 
-    expect(await run(["node", "grimoire-index", "build", dir])).toBe(0);
+    expect(await run(["node", "grimoire-indexer", "build", dir])).toBe(0);
 
     const all = JSON.parse(fs.readFileSync(path.join(dir, "dist", "all.json"), "utf8"));
     expect(all).toHaveLength(1);
@@ -73,7 +73,7 @@ describe("build", () => {
   // The state every user is in the moment `init` finishes. If this breaks,
   // the scaffold's own first build fails out of the box.
   it("builds a freshly scaffolded repo that has no packages yet", async () => {
-    expect(await run(["node", "grimoire-index", "build", dir])).toBe(0);
+    expect(await run(["node", "grimoire-indexer", "build", dir])).toBe(0);
 
     expect(JSON.parse(fs.readFileSync(path.join(dir, "dist", "all.json"), "utf8"))).toEqual([]);
     expect(fs.existsSync(path.join(dir, "dist", "index.html"))).toBe(true);
@@ -84,6 +84,6 @@ describe("build", () => {
     fs.mkdirSync(pkg, { recursive: true });
     fs.writeFileSync(path.join(pkg, "metadata.json"), JSON.stringify({ schema: 1, name: "broken" }));
 
-    expect(await run(["node", "grimoire-index", "build", dir])).toBe(65);
+    expect(await run(["node", "grimoire-indexer", "build", dir])).toBe(65);
   }, 120_000);
 });

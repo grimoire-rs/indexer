@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// `grimoire-index validate` — the contribution gate CI runs on a PR/MR.
+// `grimoire-indexer validate` — the contribution gate CI runs on a PR/MR.
 //
 // The contract callers depend on is the exit code, and only that:
 //   0        -> eligible for auto-merge

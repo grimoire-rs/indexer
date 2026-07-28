@@ -10,9 +10,9 @@
 # fallback is to vendor this file into the index repo and switch the
 # include to `local:`.
 variables:
-  GRIMOIRE_INDEX_VERSION: "latest"
-  GRIMOIRE_INDEX_NODE_IMAGE: "node:22-alpine"
-  GRIMOIRE_INDEX_OUT_DIR: "public"
+  GRIMOIRE_INDEXER_VERSION: "latest"
+  GRIMOIRE_INDEXER_NODE_IMAGE: "node:22-alpine"
+  GRIMOIRE_INDEXER_OUT_DIR: "public"
 
 stages:
   - test
@@ -32,9 +32,9 @@ stages:
 # this job outright. Enforce it instance-side — a compliance pipeline, a
 # required merge check, or protected-branch approval rules — or treat the
 # GitLab gate as advisory.
-grimoire-index:validate:
+grimoire-indexer:validate:
   stage: test
-  image: $GRIMOIRE_INDEX_NODE_IMAGE
+  image: $GRIMOIRE_INDEXER_NODE_IMAGE
   variables:
     GIT_DEPTH: 0
   rules:
@@ -45,17 +45,17 @@ grimoire-index:validate:
       git fetch --quiet origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
       git worktree add --detach ../base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
       git diff --name-only --diff-filter=ACMR "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD -- index > changed.txt
-      xargs -a changed.txt npx --yes "grimoire-index@$GRIMOIRE_INDEX_VERSION" validate \
+      xargs -a changed.txt npx --yes "@grimoire-rs/indexer@$GRIMOIRE_INDEXER_VERSION" validate \
         --forge gitlab --root ../base --pr-tree .
 
 # GitLab Pages serves whatever the `pages` job leaves in `public/`.
 pages:
   stage: deploy
-  image: $GRIMOIRE_INDEX_NODE_IMAGE
+  image: $GRIMOIRE_INDEXER_NODE_IMAGE
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
-    - npx --yes "grimoire-index@$GRIMOIRE_INDEX_VERSION" build --out-dir "$GRIMOIRE_INDEX_OUT_DIR"
+    - npx --yes "@grimoire-rs/indexer@$GRIMOIRE_INDEXER_VERSION" build --out-dir "$GRIMOIRE_INDEXER_OUT_DIR"
   artifacts:
     paths:
-      - $GRIMOIRE_INDEX_OUT_DIR
+      - $GRIMOIRE_INDEXER_OUT_DIR

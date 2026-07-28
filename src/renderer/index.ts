@@ -44,7 +44,7 @@ export class RenderInputError extends Error {
  * the one that actually renders the pages.
  */
 const bundlePreactRenderer = {
-  name: "grimoire-index:bundle-preact-renderer",
+  name: "grimoire-indexer:bundle-preact-renderer",
   configEnvironment(_name: string, options: { resolve?: { noExternal?: unknown } }) {
     // `true` already means "bundle everything" — adding to it would replace
     // the boolean with an array and externalize the rest.
@@ -89,7 +89,7 @@ async function exists(target: string): Promise<boolean> {
 
 /**
  * Read the user CSS override. Its path is contained to `root` because a
- * public index takes contribution PRs, and `grimoire-index validate` builds
+ * public index takes contribution PRs, and `grimoire-indexer validate` builds
  * them — an unconstrained path would let a PR inline any readable file into
  * the published site.
  */
@@ -111,7 +111,7 @@ async function readCustomCss(root: string, customCss: string | null): Promise<st
 
 /**
  * What Vite must be able to resolve from the Astro root. An index repo has
- * none of them — `npx grimoire-index build` runs with no local install — so
+ * none of them — `npx grimoire-indexer build` runs with no local install — so
  * the staged root gets a `node_modules/` of symlinks to wherever *this*
  * package's copies actually live.
  */
@@ -145,7 +145,7 @@ const LINK_TYPE = process.platform === "win32" ? "junction" : "dir";
  * builds, and `/all.json` is a frozen public URL that must survive.
  */
 async function stage(root: string, outDir: string): Promise<{ dir: string; src: string }> {
-  const dir = await fs.mkdtemp(path.join(root, ".grimoire-index-"));
+  const dir = await fs.mkdtemp(path.join(root, ".index-"));
   const src = path.join(dir, "src");
   await fs.cp(ASTRO_SRC_DIR, src, { recursive: true });
 

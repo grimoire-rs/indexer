@@ -16,7 +16,7 @@ import {
 const roots: string[] = [];
 
 async function rootWith(contents: string | null): Promise<string> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "grimoire-index-config-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "index-config-"));
   roots.push(root);
   if (contents !== null) await fs.writeFile(path.join(root, CONFIG_FILE), contents);
   return root;

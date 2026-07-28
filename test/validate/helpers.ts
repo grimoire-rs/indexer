@@ -54,7 +54,7 @@ export function stubFetch(
 export async function makeTree(
   files: Record<string, string | null>,
 ): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "grimoire-index-test-"));
+  const root = await mkdtemp(join(tmpdir(), "index-test-"));
   for (const [relative, content] of Object.entries(files)) {
     const target = join(root, relative);
     await mkdir(dirname(target), { recursive: true });

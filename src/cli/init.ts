@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// `grimoire-index init` — scaffold an index repo, following the UX of
+// `grimoire-indexer init` — scaffold an index repo, following the UX of
 // Microsoft's `yo code` (prompt, write, tell the user what to do next) but
 // none of its runtime: the wizard is @clack/prompts, there is no Yeoman.
 import { execFileSync } from "node:child_process";
@@ -154,7 +154,7 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     };
   }
 
-  prompts.intro("grimoire-index — new package index");
+  prompts.intro("grimoire-indexer — new package index");
 
   const name =
     flags.name ??
@@ -253,7 +253,7 @@ function json(value: unknown): string {
 }
 
 /**
- * `grimoire-index.config.json`, in the shape `loadConfig` validates. Every
+ * `index.config.json`, in the shape `loadConfig` validates. Every
  * key is optional there, so an unanswered prompt omits its key rather than
  * writing an empty string the validator would reject.
  */
@@ -306,7 +306,7 @@ function plan(answers: InitAnswers, version: string): Array<{ path: string; cont
 
   const files = [
     { path: "index/.gitkeep", content: "" },
-    { path: "grimoire-index.config.json", content: siteConfig(answers) },
+    { path: "index.config.json", content: siteConfig(answers) },
     { path: "index-policy.json", content: indexPolicy(answers) },
     from("gitignore", ".gitignore"),
     from("README.md", "README.md"),
@@ -383,14 +383,14 @@ function nextSteps(result: InitResult, answers: InitAnswers): string {
   const target = rel === "" ? "" : rel.startsWith("..") ? result.dir : rel;
   const cd = target === "" ? "" : `cd ${target}\n`;
   const lines = [
-    `${cd}npx grimoire-index build`,
+    `${cd}npx grimoire-indexer build`,
     "",
     "Then:",
     "  1. Add packages under index/<namespace>/<package>/metadata.json",
     "  2. Push to your forge — CI builds and publishes the site",
   ];
   if (answers.baseUrl === "http://localhost:4321") {
-    lines.push("  3. Set baseUrl in grimoire-index.config.json to the real site URL");
+    lines.push("  3. Set baseUrl in index.config.json to the real site URL");
   }
   return lines.join("\n");
 }

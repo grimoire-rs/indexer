@@ -9,7 +9,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /** File name `loadConfig` looks for at the index repo root. */
-export const CONFIG_FILE = "grimoire-index.config.json";
+export const CONFIG_FILE = "index.config.json";
 
 /** One copy-pasteable installer command shown in the landing-page hero. */
 export interface InstallCommand {
@@ -33,7 +33,7 @@ export interface RegistryHint {
 
 /**
  * Renderer configuration. Every field is optional — `resolveConfig` fills
- * gaps from `DEFAULT_CONFIG`, so a partial `grimoire-index.config.json`
+ * gaps from `DEFAULT_CONFIG`, so a partial `index.config.json`
  * (or a hand-built object) always renders.
  */
 export interface SiteConfig {
@@ -175,7 +175,7 @@ function validate(raw: unknown): SiteConfig {
 }
 
 /**
- * Read `grimoire-index.config.json` from `root`. A missing file is not an
+ * Read `index.config.json` from `root`. A missing file is not an
  * error — an index repo that wants the defaults ships no config at all.
  */
 export async function loadConfig(root: string): Promise<SiteConfig> {

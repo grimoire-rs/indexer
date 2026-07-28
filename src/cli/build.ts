@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// `grimoire-index build` — compile `index/**` into `dist/`, then render the
+// `grimoire-indexer build` — compile `index/**` into `dist/`, then render the
 // site over it. Order is load-bearing: `compileIndex` clears `outDir` and
 // writes `all.json`, which the renderer then reads.
 import path from "node:path";

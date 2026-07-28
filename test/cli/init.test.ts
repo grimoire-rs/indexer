@@ -14,7 +14,7 @@ let dir: string;
 
 /** `--quick --no-git` is the non-interactive path CI and these tests use. */
 function initArgs(target: string, ...extra: string[]): string[] {
-  return ["node", "grimoire-index", "init", target, "--quick", "--no-git", ...extra];
+  return ["node", "grimoire-indexer", "init", target, "--quick", "--no-git", ...extra];
 }
 
 function read(rel: string): string {
@@ -34,7 +34,7 @@ function dig(root: unknown, ...keys: string[]): unknown {
 }
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "grimoire-index-init-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "index-init-"));
   // Keep console noise out of the reporter; the assertions read the disk.
   // @clack/prompts writes its boxes straight to the stream, past console.
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -52,7 +52,7 @@ describe("init --quick", () => {
 
     for (const file of [
       "index/.gitkeep",
-      "grimoire-index.config.json",
+      "index.config.json",
       "index-policy.json",
       ".gitignore",
       "README.md",
@@ -71,7 +71,7 @@ describe("init --quick", () => {
   it("writes a config in the shape loadConfig validates", async () => {
     await run(initArgs(dir, "--name", "acme", "--base-url", "https://index.acme.test"));
 
-    const config = JSON.parse(read("grimoire-index.config.json"));
+    const config = JSON.parse(read("index.config.json"));
     expect(config.site).toBe("https://index.acme.test");
     expect(config.registry).toEqual({ alias: "acme", index: "https://index.acme.test" });
     // An unanswered logo prompt omits the key rather than writing "".
@@ -93,7 +93,7 @@ describe("init --quick", () => {
     const named = path.join(dir, "My Cool Index");
     await run(initArgs(named));
 
-    const config = JSON.parse(fs.readFileSync(path.join(named, "grimoire-index.config.json"), "utf8"));
+    const config = JSON.parse(fs.readFileSync(path.join(named, "index.config.json"), "utf8"));
     expect(config.registry.alias).toBe("my-cool-index");
     expect(config.brand).toBe("My Cool Index");
   });
@@ -136,7 +136,7 @@ describe("init --with-skills", () => {
     expect(read("publish.toml")).toContain('registry = "ghcr.io"');
     // Everything the standalone layout produces is still there.
     expect(exists("index/.gitkeep")).toBe(true);
-    expect(exists("grimoire-index.config.json")).toBe(true);
+    expect(exists("index.config.json")).toBe(true);
   });
 
   it("is not the default", async () => {
@@ -155,13 +155,13 @@ describe("generated CI", () => {
     const gitlab = yaml.load(read(".gitlab-ci.yml"));
 
     expect(dig(pages, "jobs", "pages", "uses")).toMatch(
-      /^grimoire-rs\/grimoire-index\/\.github\/workflows\/index-pages\.yml@v\d+\.\d+\.\d+$/,
+      /^grimoire-rs\/indexer\/\.github\/workflows\/index-pages\.yml@v\d+\.\d+\.\d+$/,
     );
     expect(dig(validate, "jobs", "validate", "uses")).toMatch(
-      /^grimoire-rs\/grimoire-index\/\.github\/workflows\/index-validate\.yml@v\d+\.\d+\.\d+$/,
+      /^grimoire-rs\/indexer\/\.github\/workflows\/index-validate\.yml@v\d+\.\d+\.\d+$/,
     );
     expect(dig(gitlab, "include", "0", "remote")).toMatch(
-      /^https:\/\/raw\.githubusercontent\.com\/grimoire-rs\/grimoire-index\/v\d+\.\d+\.\d+\//,
+      /^https:\/\/raw\.githubusercontent\.com\/grimoire-rs\/indexer\/v\d+\.\d+\.\d+\//,
     );
 
     // Thin callers: no inline job logic to drift out of date.
@@ -214,6 +214,6 @@ describe("shipped reusable workflows", () => {
     const gitlab = yaml.load(fs.readFileSync(path.join(templates, "gitlab-index-ci.yml"), "utf8"));
 
     expect(dig(gitlab, "stages")).toEqual(["test", "deploy"]);
-    expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["$GRIMOIRE_INDEX_OUT_DIR"]);
+    expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["$GRIMOIRE_INDEXER_OUT_DIR"]);
   });
 });

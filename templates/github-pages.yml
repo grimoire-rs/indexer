@@ -1,7 +1,7 @@
 # Builds this index and deploys it to GitHub Pages.
 #
 # Deliberately a thin caller: the job logic lives in a reusable workflow
-# grimoire-index owns, so upgrades arrive by bumping the pinned ref below
+# grimoire-indexer owns, so upgrades arrive by bumping the pinned ref below
 # instead of re-scaffolding this repo over your edits. Renovate's
 # `github-actions` manager bumps it for you.
 name: pages
@@ -15,10 +15,10 @@ permissions: {}
 
 jobs:
   pages:
-    uses: grimoire-rs/grimoire-index/.github/workflows/index-pages.yml@{{ref}}
+    uses: grimoire-rs/indexer/.github/workflows/index-pages.yml@{{ref}}
     permissions:
       contents: read
       pages: write
       id-token: write
     with:
-      grimoire-index-version: "{{version}}"
+      grimoire-indexer-version: "{{version}}"

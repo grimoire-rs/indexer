@@ -7,13 +7,13 @@
 # the gate needs a forge token to resolve numeric namespace-owner ids. The
 # PR head is checked out into a SEPARATE directory and consumed as DATA
 # ONLY — nothing in it is executed, imported, installed, or interpolated
-# into a command. `grimoire-index` itself comes from npm, never from the PR.
+# into a command. `@grimoire-rs/indexer` itself comes from npm, never from the PR.
 #
 # Do not add a `run:` step that touches `pr-tree/`, and never add
 # `npm ci`/`npm install` — that would execute contributor code with a
 # write-capable token.
 #
-# The gate contract is the exit code of `grimoire-index validate`:
+# The gate contract is the exit code of `grimoire-indexer validate`:
 #   0        -> eligible for auto-merge
 #   non-zero -> manual review required
 # so this job's success/failure IS the gate. Branch protection on the
@@ -22,18 +22,18 @@
 # Copy this file to `.github/workflows/index-validate.yml` in this repo — a
 # reusable workflow must live directly in `.github/workflows/`, GitHub does
 # not resolve subdirectories.
-name: grimoire-index validate
+name: grimoire-indexer validate
 
 on:
   workflow_call:
     inputs:
       node-version:
-        description: Node.js version used to run grimoire-index.
+        description: Node.js version used to run grimoire-indexer.
         type: string
         required: false
         default: "22"
-      grimoire-index-version:
-        description: npm version or range of grimoire-index to run.
+      grimoire-indexer-version:
+        description: npm version or range of grimoire-indexer to run.
         type: string
         required: false
         default: latest
@@ -80,9 +80,9 @@ jobs:
 
       - name: Validate contribution
         env:
-          VERSION: ${{ inputs.grimoire-index-version }}
+          VERSION: ${{ inputs.grimoire-indexer-version }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          xargs -a changed.txt npx --yes "grimoire-index@${VERSION}" validate \
+          xargs -a changed.txt npx --yes "@grimoire-rs/indexer@${VERSION}" validate \
             --forge github --root . --pr-tree pr-tree

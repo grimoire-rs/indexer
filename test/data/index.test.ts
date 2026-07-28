@@ -14,7 +14,7 @@ const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtur
 let outDir: string;
 
 beforeEach(() => {
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), "grimoire-index-test-"));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), "index-test-"));
 });
 
 afterEach(() => {
