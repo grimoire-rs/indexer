@@ -1,4 +1,5 @@
 import { useMemo, useState } from "preact/hooks";
+import { withBase } from "../lib/base.js";
 import { timeAgo, vscodeUrl, type CatalogPackage } from "../lib/catalog.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
@@ -156,7 +157,7 @@ export default function Catalog({
             <li key={`${p.namespace}/${p.name}`} class="card">
               <div class="card-head">
                 {p.logo ? (
-                  <img class="card-logo" src={p.logo} alt="" loading="lazy" />
+                  <img class="card-logo" src={withBase(p.logo)} alt="" loading="lazy" />
                 ) : (
                   <span
                     class="card-logo card-logo-fallback"
@@ -167,7 +168,7 @@ export default function Catalog({
                   </span>
                 )}
                 <h2>
-                  <a href={`/p/${p.namespace}/${p.name}/`}>{p.name}</a>
+                  <a href={withBase(`/p/${p.namespace}/${p.name}/`)}>{p.name}</a>
                 </h2>
                 {p.deprecated ? (
                   <span class="badge deprecated">deprecated</span>

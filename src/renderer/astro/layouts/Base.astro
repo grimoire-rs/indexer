@@ -3,6 +3,7 @@
 // sheet. Everything in the global block sits in `@layer grimoire`, so a
 // user CSS file (unlayered) wins over any of it regardless of specificity
 // or injection order — that layer is the entire theming contract.
+import { withBase } from "../lib/base";
 import { data } from "../lib/data";
 
 interface Props {
@@ -12,6 +13,9 @@ interface Props {
 }
 const { config, css } = data;
 const { title, description, image = config.favicon } = Astro.props;
+// Shown as well as linked: on a subpath deployment the bare path is not
+// where the file is, so the label has to carry the prefix too.
+const allJson = withBase("/all.json");
 // The mark is styled separately, so it only applies when it really is the
 // leading run of the brand — otherwise the header renders the plain text.
 const brandRest =
@@ -25,11 +29,11 @@ const brandRest =
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <link rel="icon" href={config.favicon} type="image/svg+xml" />
+    <link rel="icon" href={withBase(config.favicon)} type="image/svg+xml" />
     <title>{title}</title>
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content={image} />
+    <meta property="og:image" content={withBase(image)} />
     <meta name="twitter:card" content="summary" />
     <script is:inline>
       // Before first paint: stored preference wins, else system scheme.
@@ -43,7 +47,7 @@ const brandRest =
   <body>
     <header>
       <div class="shell header-row">
-        <a class="brand" href="/">
+        <a class="brand" href={withBase("/")}>
           {
             brandRest === null ? (
               config.brand
@@ -79,7 +83,7 @@ const brandRest =
     <footer>
       <div class="shell">
         <p>
-          Raw data: <a href="/all.json"><code>/all.json</code></a>{
+          Raw data: <a href={allJson}><code>{allJson}</code></a>{
             config.footerNote ? ` · ${config.footerNote}` : ""
           }
         </p>

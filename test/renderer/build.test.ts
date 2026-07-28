@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// One real Astro build against a fixture, then assertions over the emitted
+// Real Astro builds against a fixture, then assertions over the emitted
 // files. Astro builds cost seconds, so everything the renderer promises is
-// checked against a single run rather than one build per assertion.
+// checked against as few runs as possible. Two are unavoidable: the base
+// path is a build-time input, so domain-rooted and subpath hosting cannot
+// share one run.
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -30,23 +32,24 @@ const config: SiteConfig = {
   customCss: "theme.css",
 };
 
-let root: string;
-let outDir: string;
-let indexHtml: string;
-let detailHtml: string;
-let bundledCss: string;
-
-async function readOut(rel: string): Promise<string> {
-  return fs.readFile(path.join(outDir, rel), "utf8");
+/** Everything one build leaves behind, read back. */
+interface Built {
+  root: string;
+  outDir: string;
+  indexHtml: string;
+  detailHtml: string;
+  bundledCss: string;
+  read(rel: string): Promise<string>;
 }
 
-beforeAll(async () => {
+async function render(site: string): Promise<Built> {
   // The shipping shape, deliberately: a bare directory in os.tmpdir() with
   // no `node_modules` anywhere on its parent chain. `npx @grimoire-rs/indexer
   // build` runs in exactly that, with no local install — so if the renderer
   // ever roots Astro in the index repo again, every test below goes red.
-  root = await fs.mkdtemp(path.join(os.tmpdir(), "index-test-"));
-  outDir = path.join(root, "dist");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "index-test-"));
+  const outDir = path.join(root, "dist");
+  const read = (rel: string) => fs.readFile(path.join(outDir, rel), "utf8");
   await fs.cp(FIXTURE, root, { recursive: true });
   await fs.mkdir(outDir, { recursive: true });
   // Stand in for the data compile: all.json plus a path-addressable copy,
@@ -58,19 +61,68 @@ beforeAll(async () => {
     '{"name":"code-review"}\n',
   );
 
-  await buildSite({ root, outDir, config });
+  await buildSite({ root, outDir, config: { ...config, site } });
 
-  indexHtml = await readOut("index.html");
-  detailHtml = await readOut("p/github.com/acme/code-review/index.html");
   const cssDir = path.join(outDir, "_astro");
   const cssFiles = (await fs.readdir(cssDir)).filter((f) => f.endsWith(".css"));
-  bundledCss = (
-    await Promise.all(cssFiles.map((f) => fs.readFile(path.join(cssDir, f), "utf8")))
-  ).join("\n");
-}, 180_000);
+  return {
+    root,
+    outDir,
+    read,
+    indexHtml: await read("index.html"),
+    detailHtml: await read("p/github.com/acme/code-review/index.html"),
+    bundledCss: (
+      await Promise.all(cssFiles.map((f) => fs.readFile(path.join(cssDir, f), "utf8")))
+    ).join("\n"),
+  };
+}
+
+/** Where the frozen URLs and the data tree have to land, base or no base. */
+const EMITTED_FILES = [
+  "index.html",
+  "all.json",
+  "p/github.com/acme/code-review/index.html",
+  "p/github.com/acme/old-helper/index.html",
+  "p/registry.example/team/bare/index.html",
+  "index/github.com/acme/code-review/metadata.json",
+  "favicon.svg",
+];
+
+/**
+ * Every attribute value in a document that is site-root-relative — `href`
+ * and `src`, but also `content` (og:image) and the `component-url` /
+ * `renderer-url` pair Astro puts on a hydrated island. Anything that starts
+ * with `/` has to carry the base path; everything else already resolves.
+ */
+function rootRelativeUrls(html: string): string[] {
+  return [...html.matchAll(/[a-z-]+="(\/[^"]*)"/gi)].map((m) => m[1]!);
+}
+
+/** Subpath deployment: base path `/index-repo/`. */
+const SUB_SITE = "https://acme.github.io/index-repo";
+const SUB_BASE = "/index-repo";
+
+let site: Built;
+let sub: Built;
+// Bound to the domain-rooted build — what every assertion outside the base
+// path suite is written against, and what the first-party index deploys.
+let indexHtml: string;
+let detailHtml: string;
+let bundledCss: string;
+
+const readOut = (rel: string) => site.read(rel);
+
+beforeAll(async () => {
+  // Sequential, not concurrent: `buildSite` chdirs into its staged dir, and
+  // cwd is process-global.
+  site = await render("https://index.example.test");
+  sub = await render(SUB_SITE);
+  ({ indexHtml, detailHtml, bundledCss } = site);
+}, 300_000);
 
 afterAll(async () => {
-  await fs.rm(root, { recursive: true, force: true });
+  await fs.rm(site.root, { recursive: true, force: true });
+  await fs.rm(sub.root, { recursive: true, force: true });
 });
 
 describe("frozen URLs", () => {
@@ -94,6 +146,73 @@ describe("frozen URLs", () => {
     await expect(readOut("index/github.com/acme/code-review/metadata.json")).resolves.toContain(
       "code-review",
     );
+  });
+});
+
+describe("base path", () => {
+  it("prefixes every root-relative URL a subpath site emits", async () => {
+    const pages = [
+      sub.indexHtml,
+      sub.detailHtml,
+      await sub.read("p/registry.example/team/bare/index.html"),
+    ];
+    for (const html of pages) {
+      const found = rootRelativeUrls(html);
+      // A page with no URLs at all would pass the loop vacuously.
+      expect(found.length).toBeGreaterThan(0);
+      for (const url of found) expect(url.startsWith(`${SUB_BASE}/`)).toBe(true);
+    }
+  });
+
+  it("prefixes the package link, stylesheet, all.json and favicon", () => {
+    expect(sub.indexHtml).toContain(`href="${SUB_BASE}/p/github.com/acme/code-review/"`);
+    expect(sub.indexHtml).toMatch(
+      new RegExp(`<link rel="stylesheet" href="${SUB_BASE}/_astro/[^"]+\\.css"`),
+    );
+    expect(sub.indexHtml).toContain(`href="${SUB_BASE}/all.json"`);
+    expect(sub.indexHtml).toContain(`<code>${SUB_BASE}/all.json</code>`);
+    expect(sub.indexHtml).toContain(`href="${SUB_BASE}/favicon.svg"`);
+    // The brand link is the one URL that is nothing but the base.
+    expect(sub.indexHtml).toContain(`<a class="brand" href="${SUB_BASE}/"`);
+  });
+
+  it("hands the base to the hydrated island too", async () => {
+    // The card links are rebuilt in the browser, so the client bundle needs
+    // its own copy of the prefix — without it hydration silently reverts
+    // every link the server rendered.
+    const chunks = (await fs.readdir(path.join(sub.outDir, "_astro"))).filter((f) =>
+      f.endsWith(".js"),
+    );
+    const js = await Promise.all(
+      chunks.map((f) => fs.readFile(path.join(sub.outDir, "_astro", f), "utf8")),
+    );
+    // Substring, not a quoted literal: the minifier re-quotes with backticks.
+    expect(js.some((chunk) => chunk.includes(SUB_BASE))).toBe(true);
+    // A surviving placeholder means `define` missed the client build — a
+    // ReferenceError on hydration, and nothing here would have caught it.
+    expect(js.some((chunk) => chunk.includes("__GRIMOIRE_BASE__"))).toBe(false);
+  });
+
+  it("leaves a domain-rooted site exactly where it was", () => {
+    expect(indexHtml).toContain('href="/p/github.com/acme/code-review/"');
+    expect(indexHtml).toMatch(/<link rel="stylesheet" href="\/_astro\/[^"]+\.css"/);
+    expect(indexHtml).toContain('href="/all.json"');
+    expect(indexHtml).toContain('href="/favicon.svg"');
+    expect(indexHtml).toContain('<a class="brand" href="/"');
+    // No `//`, no `/./` — the two ways a base join goes wrong at `/`.
+    for (const url of [...rootRelativeUrls(indexHtml), ...rootRelativeUrls(detailHtml)]) {
+      expect(url).not.toMatch(/^\/\/|\/\.\//);
+    }
+  });
+
+  it("emits the same file tree either way", async () => {
+    for (const rel of EMITTED_FILES) {
+      await expect(site.read(rel)).resolves.toBeTypeOf("string");
+      await expect(sub.read(rel)).resolves.toBeTypeOf("string");
+    }
+    // The base is a serving prefix, never a directory: nothing may nest the
+    // whole site one level down.
+    await expect(fs.access(path.join(sub.outDir, SUB_BASE))).rejects.toThrow();
   });
 });
 
@@ -190,7 +309,11 @@ describe("input validation", () => {
   it("refuses a customCss path that escapes the index root", async () => {
     // `validate` builds contribution PRs, so this path is attacker-reachable.
     await expect(
-      buildSite({ root, outDir, config: { customCss: "../../etc/hostname" } }),
+      buildSite({
+        root: site.root,
+        outDir: site.outDir,
+        config: { customCss: "../../etc/hostname" },
+      }),
     ).rejects.toThrow(/customCss must stay inside/);
   });
 });

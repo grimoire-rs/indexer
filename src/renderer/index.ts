@@ -177,6 +177,13 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
   const packages = await readPackages(opts.outDir);
   const css = await readCustomCss(opts.root, config.customCss);
 
+  // A site on GitHub/GitLab *project* Pages lives under a path segment, and
+  // `site` is the only place that fact is recorded. Its path becomes Astro's
+  // `base` — which covers everything Astro emits itself — and the same value
+  // reaches the hand-written URLs through `astro/lib/base.ts`. Domain-rooted
+  // sites yield "/", Astro's own default, so nothing about them moves.
+  const base = new URL(config.site).pathname;
+
   const staged = await stage(opts.root, opts.outDir);
   // Astro routes its server build through `<cwd>/.astro/` whenever `outDir`
   // is not under `process.cwd()` (`getOutDirWithinCwd`). That fallback is
@@ -196,9 +203,13 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
       publicDir: path.join(staged.dir, "public"),
       outDir: opts.outDir,
       site: config.site,
+      base,
       integrations: [preact()],
       vite: {
-        define: { __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css }) },
+        define: {
+          __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css }),
+          __GRIMOIRE_BASE__: JSON.stringify(base),
+        },
         plugins: [bundlePreactRenderer],
       },
     });
