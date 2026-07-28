@@ -383,6 +383,33 @@ describe("shipped reusable workflows", () => {
     expect(script).toMatch(/\|\|\s*echo/);
   });
 
+  // The gate's exit code authorizes an auto-merge, so anything filtered out
+  // of the changed-path list before it is filtered out of that decision.
+  // Both jobs used to narrow the list — GitHub to `^index/` and non-removed,
+  // GitLab to `-- index` with `--diff-filter=ACMR`. Either lets a PR that
+  // adds a valid entry of its own and edits a workflow, or deletes someone
+  // else's entry, come back green.
+  it("hands the gate every changed path, unfiltered, on both forges", () => {
+    const gh = fs.readFileSync(path.join(repo, ".github/workflows/index-validate.yml"), "utf8");
+    const collect = gh.slice(gh.indexOf("Collect changed paths"), gh.indexOf("Validate contribution"));
+
+    expect(collect).toContain("changed.txt");
+    expect(collect, "no path filter").not.toMatch(/grep[^\n]*index/);
+    expect(collect, "no status filter").not.toContain("removed");
+
+    const gitlab = yaml.load(
+      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
+    ) as Record<string, { script?: string[] }>;
+    const diff = (gitlab["grim-indexer:validate"]?.script ?? [])
+      .join("\n")
+      .split("\n")
+      .find((line) => line.includes("git diff"));
+
+    expect(diff, "the gate diffs the MR").toBeDefined();
+    expect(diff, "no pathspec").not.toMatch(/--\s+index\b/);
+    expect(diff, "no diff filter").not.toContain("--diff-filter");
+  });
+
   it("gitlab include file parses as a single YAML document", () => {
     const gitlab = yaml.load(
       fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),

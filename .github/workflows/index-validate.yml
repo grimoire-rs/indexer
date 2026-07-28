@@ -69,6 +69,14 @@ jobs:
       # Changed paths come from the API, not from a diff of the untrusted
       # tree. `jq -r` output is written to a file and passed via `xargs -a`
       # so a crafted filename can never reach the shell as syntax.
+      #
+      # EVERY changed path is passed through — no path filter, no status
+      # filter. Rejecting an out-of-bounds path is the gate's first job, and
+      # it ownership-checks a deletion before allowing it, so anything
+      # dropped here is dropped from the decision this job's exit code
+      # authorizes. Filtering to `^index/` would let a PR that adds a valid
+      # entry and edits a workflow pass; filtering out `removed` would let
+      # one that adds its own entry and deletes a stranger's pass.
       - name: Collect changed paths
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,8 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           gh api --paginate "repos/${REPO}/pulls/${PR}/files" \
-            --jq '.[] | select(.status != "removed") | .filename' \
-            | grep -E '^index/' > changed.txt || : > changed.txt
+            --jq '.[].filename' > changed.txt
 
       - name: Validate contribution
         env:

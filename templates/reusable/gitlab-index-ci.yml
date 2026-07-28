@@ -73,7 +73,12 @@ grim-indexer:validate:
       set -eu
       git fetch --quiet origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
       git worktree add --detach ../base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-      git diff --name-only --diff-filter=ACMR "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD -- index > changed.txt
+      # Every changed path, with no pathspec and no diff filter: rejecting an
+      # out-of-bounds path is the gate's first job, and it ownership-checks a
+      # deletion before allowing it. Narrowing to `-- index` would let an MR
+      # that adds a valid entry and edits this very file pass; dropping `D`
+      # would let one that deletes a stranger's entry pass.
+      git diff --name-only "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD > changed.txt
       xargs -a changed.txt npx --yes "@grimoire-rs/indexer@$GRIM_INDEXER_VERSION" validate \
         --forge gitlab --root ../base --pr-tree .
 
