@@ -98,6 +98,44 @@ this early.
 > earlier, add an `[announce]` table naming your own repository before
 > announcing.
 
+## Developing the renderer
+
+Changing how the site *looks* needs a way to see it that does not cost an
+npm release. `npm run dev` serves the catalog with hot reload:
+
+```sh
+npm run dev                                 # the bundled test fixture
+npm run dev -- --port 4400
+npm run dev -- --root /path/to/an/index     # your own index, or a checkout
+                                            # of github.com/grimoire-rs/index
+npm run dev -- --config ./variant.json      # try an index.config.json without
+                                            # editing the index it renders
+npm run dev -- --help
+```
+
+Every part of the hero is config, so `--config` is how you review the site
+with a piece switched off — `{"install": []}` drops the installer buttons,
+`{"registry": null}` the add-this-index ones, `{"vscodeExtension": null}`
+every VS Code affordance on both pages.
+
+It renders through the same `inlineConfig` as `grim-indexer build`, so the
+preview is the release output, not an approximation. Edits under
+`src/renderer/astro/` (templates, components, the token block in
+`layouts/Base.astro`) reload in place; changing the renderer's own
+TypeScript needs a restart, because `npm run dev` builds `dist/` on start.
+
+The scratch index root lives in the gitignored `.dev/`, rebuilt on every
+run — the repo you point `--root` at is copied, never rendered in place.
+
+`npm run dev:smoke` boots the server, asserts the landing and detail pages
+render, and checks the staged directory is cleaned up on shutdown. That
+check lives here rather than in the vitest suite because Astro's dev server
+does not route correctly when nested inside vitest's own Vite; the build
+path is covered by `test/renderer/build.test.ts`.
+
+To rehearse the *published* package without publishing it, `npm pack` and
+install the resulting tarball into a scratch index repo.
+
 ## License
 
 Apache-2.0

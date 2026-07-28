@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+.dev/
 *.log
 .DS_Store
 .test-index-*/

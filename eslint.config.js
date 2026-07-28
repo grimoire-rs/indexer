@@ -5,7 +5,9 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "coverage/**", "node_modules/**"],
+    // `.dev/` is `npm run dev`'s scratch index root; Astro generates typed
+    // `.astro/` stubs inside it that are not ours to lint.
+    ignores: ["dist/**", "coverage/**", "node_modules/**", ".dev/**"],
   },
   ...tseslint.configs.recommended,
   {
