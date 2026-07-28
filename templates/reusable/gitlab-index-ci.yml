@@ -39,6 +39,29 @@ grim-indexer:validate:
     GIT_DEPTH: 0
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  # The job image is picked for `npx`, and `node:*-alpine` ships no git —
+  # but this job diffs the merge request against its target branch, so git
+  # is not optional. GitLab's runner clones with a separate helper image, so
+  # nothing else puts git in here. Install it for whichever package manager
+  # the (overridable) image has.
+  #
+  # The trailing check is the load-bearing part: the gate's contract is
+  # "exit 0 = eligible for auto-merge", so a missing or failed-to-install
+  # tool must fail the job, never silently skip validation.
+  before_script:
+    - |
+      set -eu
+      if ! command -v git >/dev/null 2>&1; then
+        if command -v apk >/dev/null 2>&1; then
+          apk add --no-cache git
+        elif command -v apt-get >/dev/null 2>&1; then
+          apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+        fi
+      fi
+      command -v git >/dev/null 2>&1 || {
+        echo "grim-indexer: the gate needs git, and ${GRIM_INDEXER_NODE_IMAGE} has none" >&2
+        exit 1
+      }
   script:
     - |
       set -eu

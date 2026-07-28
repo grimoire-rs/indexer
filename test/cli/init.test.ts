@@ -359,4 +359,23 @@ describe("shipped reusable workflows", () => {
     expect(dig(gitlab, "stages")).toEqual(["test", "deploy"]);
     expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["$GRIM_INDEXER_OUT_DIR"]);
   });
+
+  // The gate ran `git` on `node:22-alpine`, which ships none: every merge
+  // request died with `git: not found`, exit 127, before validating anything.
+  // Asserted structurally — every command the job shells out to has to be
+  // reachable in its image, and `git` is the one the image does not carry.
+  it("gitlab gate makes git available before it runs git", () => {
+    const gitlab = yaml.load(
+      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
+    ) as Record<string, { before_script?: string[]; script?: string[] }>;
+    const job = gitlab["grim-indexer:validate"];
+
+    expect(job?.script?.join("\n"), "the gate does diff the MR with git").toMatch(/\bgit\s+\w/);
+
+    const setup = job?.before_script?.join("\n") ?? "";
+    expect(setup, "…so something must install it first").toMatch(/\bgit\b/);
+    // And a failed install must not let the gate reach `validate` — an
+    // absent tool has to fail the job, never silently skip validation.
+    expect(setup).toMatch(/command -v git[\s\S]*exit 1/);
+  });
 });
