@@ -8,9 +8,18 @@ servers, and bundles available in one or more OCI registries.
 
 - `grim-indexer init` — scaffold a new index repo (`index/**` content
   tree, Astro site config, CI workflow).
+- `grim-indexer enrich` — refresh `enrich/**` from the registry: READMEs,
+  changelogs, logos, versions and tag lists. The only step that goes
+  online, and the only one that needs `grim` on `PATH`.
 - `grim-indexer build` — render `index/**` into a static site.
 - `grim-indexer validate` — CI gate for contribution PRs/MRs against an
   index repo.
+
+An index stores nothing but pointers — a ref and who owns it. Everything a
+reader looks at lives in the registry, so an index that never runs `enrich`
+renders a catalogue of names with *No README available* on every page. The
+scaffolded CI runs it before each build; set `enrich: false` (GitHub) or
+`GRIM_INDEXER_ENRICH: "false"` (GitLab) for a pointers-only site.
 
 ## Install
 
@@ -22,6 +31,7 @@ npm install --save-dev @grimoire-rs/indexer
 
 ```sh
 npx @grimoire-rs/indexer init
+npx @grimoire-rs/indexer enrich   # needs `grim` on PATH
 npx @grimoire-rs/indexer build
 npx @grimoire-rs/indexer validate
 ```

@@ -351,6 +351,38 @@ describe("shipped reusable workflows", () => {
     }
   });
 
+  // `build` compiles `enrich/` into `all.json`, so enriching after it would
+  // produce sidecars nothing ever reads — a site that silently stays on
+  // "No README available" with a green pipeline. Order is the contract.
+  it("enriches before it builds, on both forges", () => {
+    const pages = yaml.load(
+      fs.readFileSync(path.join(repo, ".github/workflows/index-pages.yml"), "utf8"),
+    ) as { jobs: { build: { steps: Array<{ run?: string }> } } };
+    const runs = pages.jobs.build.steps.map((step) => step.run ?? "");
+    const ghEnrich = runs.findIndex((r) => /indexer@\S+" enrich/.test(r));
+    const ghBuild = runs.findIndex((r) => /indexer@\S+" build/.test(r));
+
+    expect(ghEnrich, "the pages workflow enriches").toBeGreaterThanOrEqual(0);
+    expect(ghEnrich).toBeLessThan(ghBuild);
+    // grim is what reads the registry; enriching without it is the failure
+    // this whole step exists to avoid.
+    expect(runs.slice(0, ghEnrich).join("\n")).toMatch(/releases\/[\s\S]*grimoire-/);
+    // A registry outage degrades the site; it must never block the deploy.
+    expect(runs[ghEnrich]).toMatch(/\|\|/);
+
+    const gitlab = yaml.load(
+      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
+    ) as Record<string, { script?: string[] }>;
+    const script = gitlab.pages?.script?.join("\n") ?? "";
+    const glEnrich = script.search(/indexer@\S+" enrich/);
+    const glBuild = script.search(/indexer@\S+" build/);
+
+    expect(glEnrich, "the gitlab pages job enriches").toBeGreaterThanOrEqual(0);
+    expect(glEnrich).toBeLessThan(glBuild);
+    expect(script.slice(0, glEnrich)).toMatch(/releases\/[\s\S]*grimoire-/);
+    expect(script).toMatch(/\|\|\s*echo/);
+  });
+
   it("gitlab include file parses as a single YAML document", () => {
     const gitlab = yaml.load(
       fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
