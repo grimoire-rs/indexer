@@ -15,7 +15,11 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as {
   bin?: Record<string, string>;
   files?: string[];
+  repository?: { type?: string; url?: string };
 };
+
+/** The repo provenance attests to. A mismatch is rejected at publish time. */
+const REPO = "github.com/grimoire-rs/indexer";
 
 describe("published manifest", () => {
   it("declares a bin npm will not strip", () => {
@@ -37,5 +41,15 @@ describe("published manifest", () => {
     // `init` reads its scaffold from templates/ at runtime, so an unshipped
     // templates/ would break the command only once installed from the registry.
     expect(files).toContain("templates");
+  });
+
+  // Trusted publishing attaches a sigstore provenance bundle naming the repo
+  // that built the tarball. npm cross-checks it against `repository.url` and
+  // rejects the publish with a 422 if they disagree — which is only visible
+  // server-side, after the release workflow has already done all its work.
+  it("declares the repository provenance will attest to", () => {
+    const url = pkg.repository?.url ?? "";
+    expect(url, "repository.url is required for provenance").not.toBe("");
+    expect(url).toContain(REPO);
   });
 });
