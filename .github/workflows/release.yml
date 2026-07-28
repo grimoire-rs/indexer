@@ -23,6 +23,28 @@ jobs:
       # is older, so upgrade before publish. Provenance is automatic under
       # trusted publishing — do not pass --provenance.
       - run: npm install -g npm@^11.5.1
+      # A tag that disagrees with package.json would publish a version nobody
+      # asked for, and npm would accept it silently.
+      - name: Tag must match package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          declared="v$(node -p 'require("./package.json").version')"
+          if [ "$TAG" != "$declared" ]; then
+            echo "::error::tag ${TAG} != package.json ${declared}"
+            exit 1
+          fi
       - run: npm ci
       - run: npm run build
+      # npm "auto-corrects" an invalid manifest and publishes the corrected
+      # version with only a warning — that is how 0.1.0 shipped without its
+      # bin. Fail the release instead of shipping a silently altered package.
+      - name: Manifest must publish unaltered
+        run: |
+          set -euo pipefail
+          if npm publish --dry-run 2>&1 | tee /dev/stderr | grep -q "auto-corrected"; then
+            echo "::error::npm would rewrite package.json — run 'npm pkg fix'"
+            exit 1
+          fi
       - run: npm publish
