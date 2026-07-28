@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// `grimoire-indexer init` — scaffold an index repo, following the UX of
+// `grim-indexer init` — scaffold an index repo, following the UX of
 // Microsoft's `yo code` (prompt, write, tell the user what to do next) but
 // none of its runtime: the wizard is @clack/prompts, there is no Yeoman.
 import { execFileSync } from "node:child_process";
@@ -154,7 +154,7 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     };
   }
 
-  prompts.intro("grimoire-indexer — new package index");
+  prompts.intro("grim-indexer — new package index");
 
   const name =
     flags.name ??
@@ -383,7 +383,7 @@ function nextSteps(result: InitResult, answers: InitAnswers): string {
   const target = rel === "" ? "" : rel.startsWith("..") ? result.dir : rel;
   const cd = target === "" ? "" : `cd ${target}\n`;
   const lines = [
-    `${cd}npx grimoire-indexer build`,
+    `${cd}npx @grimoire-rs/indexer build`,
     "",
     "Then:",
     "  1. Add packages under index/<namespace>/<package>/metadata.json",

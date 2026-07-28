@@ -31,27 +31,27 @@ afterEach(() => {
 
 describe("usage errors exit 64", () => {
   it("unknown flag", async () => {
-    expect(await run(["node", "grimoire-indexer", "init", dir, "--quick", "--nope"])).toBe(64);
+    expect(await run(["node", "grim-indexer", "init", dir, "--quick", "--nope"])).toBe(64);
   });
 
   it("unknown subcommand", async () => {
-    expect(await run(["node", "grimoire-indexer", "frobnicate"])).toBe(64);
+    expect(await run(["node", "grim-indexer", "frobnicate"])).toBe(64);
   });
 
   it("flag value outside its choices", async () => {
     expect(
-      await run(["node", "grimoire-indexer", "init", dir, "--quick", "--forge", "bitbucket"]),
+      await run(["node", "grim-indexer", "init", dir, "--quick", "--forge", "bitbucket"]),
     ).toBe(64);
   });
 
   it("build --out-dir that would delete the index root", async () => {
-    expect(await run(["node", "grimoire-indexer", "build", dir, "--out-dir", "."])).toBe(64);
+    expect(await run(["node", "grim-indexer", "build", dir, "--out-dir", "."])).toBe(64);
   });
 
   it("validate with no forge to detect", async () => {
     vi.stubEnv("GITHUB_ACTIONS", "");
     vi.stubEnv("GITLAB_CI", "");
-    expect(await run(["node", "grimoire-indexer", "validate", "--root", dir])).toBe(64);
+    expect(await run(["node", "grim-indexer", "validate", "--root", dir])).toBe(64);
   });
 
   it("validate with no author to determine", async () => {
@@ -59,7 +59,7 @@ describe("usage errors exit 64", () => {
     vi.stubEnv("GITLAB_CI", "");
     vi.stubEnv("GITHUB_EVENT_PATH", "");
     expect(
-      await run(["node", "grimoire-indexer", "validate", "--root", dir, "--forge", "github"]),
+      await run(["node", "grim-indexer", "validate", "--root", dir, "--forge", "github"]),
     ).toBe(64);
   });
 });
@@ -67,14 +67,14 @@ describe("usage errors exit 64", () => {
 describe("bad input data exits 65", () => {
   it("init --base-url that is not a URL", async () => {
     expect(
-      await run(["node", "grimoire-indexer", "init", dir, "--quick", "--base-url", "not-a-url"]),
+      await run(["node", "grim-indexer", "init", dir, "--quick", "--base-url", "not-a-url"]),
     ).toBe(65);
     expect(fs.existsSync(path.join(dir, "index.config.json"))).toBe(false);
   });
 
   it("init --name that is not a valid identifier", async () => {
     expect(
-      await run(["node", "grimoire-indexer", "init", dir, "--quick", "--name", "Not A Name"]),
+      await run(["node", "grim-indexer", "init", dir, "--quick", "--name", "Not A Name"]),
     ).toBe(65);
   });
 
@@ -84,7 +84,7 @@ describe("bad input data exits 65", () => {
     expect(
       await run([
         "node",
-        "grimoire-indexer",
+        "grim-indexer",
         "validate",
         "--root",
         dir,
@@ -106,7 +106,7 @@ describe("bad input data exits 65", () => {
     expect(
       await run([
         "node",
-        "grimoire-indexer",
+        "grim-indexer",
         "validate",
         "--root",
         dir,
@@ -126,7 +126,7 @@ describe("bad input data exits 65", () => {
     expect(
       await run([
         "node",
-        "grimoire-indexer",
+        "grim-indexer",
         "validate",
         "--root",
         dir,
@@ -145,10 +145,10 @@ describe("bad input data exits 65", () => {
 
 describe("success exits 0", () => {
   it("--help", async () => {
-    expect(await run(["node", "grimoire-indexer", "--help"])).toBe(0);
+    expect(await run(["node", "grim-indexer", "--help"])).toBe(0);
   });
 
   it("--version", async () => {
-    expect(await run(["node", "grimoire-indexer", "--version"])).toBe(0);
+    expect(await run(["node", "grim-indexer", "--version"])).toBe(0);
   });
 });

@@ -8,7 +8,7 @@
     "node": ">=22.14.0"
   },
   "bin": {
-    "grimoire-indexer": "./dist/cli/index.js"
+    "grim-indexer": "./dist/cli/index.js"
   },
   "files": [
     "dist",

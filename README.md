@@ -1,4 +1,4 @@
-# grimoire-indexer
+# grim-indexer
 
 CLI + Astro integration for running your own [Grimoire](https://github.com/grimoire-rs/grimoire)
 package index — a static site that lists the skills, rules, agents, mcp
@@ -6,10 +6,10 @@ servers, and bundles available in one or more OCI registries.
 
 ## Subcommands
 
-- `grimoire-indexer init` — scaffold a new index repo (`index/**` content
+- `grim-indexer init` — scaffold a new index repo (`index/**` content
   tree, Astro site config, CI workflow).
-- `grimoire-indexer build` — render `index/**` into a static site.
-- `grimoire-indexer validate` — CI gate for contribution PRs/MRs against an
+- `grim-indexer build` — render `index/**` into a static site.
+- `grim-indexer validate` — CI gate for contribution PRs/MRs against an
   index repo.
 
 ## Install
@@ -21,9 +21,9 @@ npm install --save-dev @grimoire-rs/indexer
 ## Usage
 
 ```sh
-npx grimoire-indexer init
-npx grimoire-indexer build
-npx grimoire-indexer validate
+npx @grimoire-rs/indexer init
+npx @grimoire-rs/indexer build
+npx @grimoire-rs/indexer validate
 ```
 
 As an Astro integration:

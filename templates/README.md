@@ -16,7 +16,7 @@ available in `{{registryHost}}`, served at {{baseUrl}}.
 ## Contributing a package
 
 Add `index/<namespace>/<package>/metadata.json`, then open a pull request.
-CI runs `grimoire-indexer validate` on it: a clean run means the entry is
+CI runs `grim-indexer validate` on it: a clean run means the entry is
 eligible for auto-merge, a failing one means a maintainer takes a look.
 
 ```json
@@ -36,13 +36,13 @@ The directory name must equal `name`, and `kind` is one of `skill`,
 ## Local development
 
 ```sh
-npx grimoire-indexer build      # index/** -> dist/
-npx grimoire-indexer validate   # run the contribution gate locally
+npx @grimoire-rs/indexer build      # index/** -> dist/
+npx @grimoire-rs/indexer validate   # run the contribution gate locally
 ```
 
 ## Upgrading CI
 
 The workflows in this repo are thin callers of reusable workflows that
-[grimoire-indexer](https://github.com/grimoire-rs/indexer) owns. To
+[grim-indexer](https://github.com/grimoire-rs/indexer) owns. To
 pick up CI fixes, bump the pinned ref in the `uses:` line — nothing needs
 re-scaffolding, and your local edits are never overwritten.

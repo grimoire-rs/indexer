@@ -14,7 +14,7 @@ let dir: string;
 
 /** `--quick --no-git` is the non-interactive path CI and these tests use. */
 function initArgs(target: string, ...extra: string[]): string[] {
-  return ["node", "grimoire-indexer", "init", target, "--quick", "--no-git", ...extra];
+  return ["node", "grim-indexer", "init", target, "--quick", "--no-git", ...extra];
 }
 
 function read(rel: string): string {
@@ -214,6 +214,6 @@ describe("shipped reusable workflows", () => {
     const gitlab = yaml.load(fs.readFileSync(path.join(templates, "gitlab-index-ci.yml"), "utf8"));
 
     expect(dig(gitlab, "stages")).toEqual(["test", "deploy"]);
-    expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["$GRIMOIRE_INDEXER_OUT_DIR"]);
+    expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["$GRIM_INDEXER_OUT_DIR"]);
   });
 });

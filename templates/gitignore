@@ -1,4 +1,4 @@
-# Build output of `grimoire-indexer build`.
+# Build output of `grim-indexer build`.
 dist/
 public/
 

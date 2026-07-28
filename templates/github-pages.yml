@@ -1,7 +1,7 @@
 # Builds this index and deploys it to GitHub Pages.
 #
 # Deliberately a thin caller: the job logic lives in a reusable workflow
-# grimoire-indexer owns, so upgrades arrive by bumping the pinned ref below
+# grim-indexer owns, so upgrades arrive by bumping the pinned ref below
 # instead of re-scaffolding this repo over your edits. Renovate's
 # `github-actions` manager bumps it for you.
 name: pages
@@ -21,4 +21,4 @@ jobs:
       pages: write
       id-token: write
     with:
-      grimoire-indexer-version: "{{version}}"
+      grim-indexer-version: "{{version}}"

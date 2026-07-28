@@ -10,7 +10,7 @@
  * policy that was checked before the call.
  */
 
-export const USER_AGENT = "grimoire-indexer-bot";
+export const USER_AGENT = "grim-indexer-bot";
 export const TIMEOUT_MS = 30_000;
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 

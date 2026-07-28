@@ -51,7 +51,7 @@ function classify(err: unknown): ExitCode {
   }
   if (err instanceof Error && "code" in err && err.code === "ERR_MODULE_NOT_FOUND") {
     console.error(
-      `${err.message}\nthis build of grimoire-indexer is incomplete — run \`npm run build\``,
+      `${err.message}\nthis build of grim-indexer is incomplete — run \`npm run build\``,
     );
     return EXIT.unavailable;
   }
@@ -74,7 +74,7 @@ export async function run(argv: string[]): Promise<number> {
   let code: ExitCode = EXIT.ok;
 
   const program = new Command()
-    .name("grimoire-indexer")
+    .name("grim-indexer")
     .description("Run your own grim package index")
     .version(version)
     .exitOverride();

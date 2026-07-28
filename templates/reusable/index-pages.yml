@@ -4,29 +4,29 @@
 # Reusable workflow: build a grimoire index repo and publish it to GitHub
 # Pages. Scaffolded index repos call this by ref rather than inlining the
 # job logic, so a fix here reaches every downstream index without anyone
-# re-running `grimoire-indexer init` over their edits. Renovate's built-in
+# re-running `grim-indexer init` over their edits. Renovate's built-in
 # `github-actions` manager bumps the pinned ref in each caller.
 #
 # Copy this file to `.github/workflows/index-pages.yml` in this repo — a
 # reusable workflow must live directly in `.github/workflows/`, GitHub does
 # not resolve subdirectories.
-name: grimoire-indexer pages
+name: grim-indexer pages
 
 on:
   workflow_call:
     inputs:
       node-version:
-        description: Node.js version used to run grimoire-indexer.
+        description: Node.js version used to run grim-indexer.
         type: string
         required: false
         default: "22"
-      grimoire-indexer-version:
-        description: npm version or range of grimoire-indexer to run.
+      grim-indexer-version:
+        description: npm version or range of grim-indexer to run.
         type: string
         required: false
         default: latest
       out-dir:
-        description: Directory `grimoire-indexer build` writes the site into.
+        description: Directory `grim-indexer build` writes the site into.
         type: string
         required: false
         default: dist
@@ -34,7 +34,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: grimoire-indexer-pages
+  group: grim-indexer-pages
   cancel-in-progress: false
 
 jobs:
@@ -56,7 +56,7 @@ jobs:
       # the quoting and append a command.
       - name: Build index
         env:
-          VERSION: ${{ inputs.grimoire-indexer-version }}
+          VERSION: ${{ inputs.grim-indexer-version }}
           OUT_DIR: ${{ inputs.out-dir }}
         run: npx --yes "@grimoire-rs/indexer@${VERSION}" build --out-dir "${OUT_DIR}"
 

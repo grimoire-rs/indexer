@@ -1,6 +1,6 @@
 # `grim publish` manifest — this repo holds both its own skills (under
 # `skills/`) and the index that lists them, the combined layout
-# `grimoire-indexer init --with-skills` scaffolds.
+# `grim-indexer init --with-skills` scaffolds.
 #
 # The default layout is a standalone index repo instead: an index is a
 # distribution database that N separate skill repos announce into. Use
