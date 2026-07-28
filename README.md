@@ -40,8 +40,22 @@ export default defineConfig({
 
 ## Status
 
-Skeleton — subcommands and the Astro integration are under active
-development.
+Pre-1.0. All three subcommands work and are covered by tests, but the
+end-to-end loop — announce, gate, auto-merge, publish — has not yet been
+proven against a live index, so treat it as early.
+
+Two things are frozen and safe to build on: the published URL layout
+(`/p/<namespace>/<name>/` and `/all.json`) and the per-record `schema`
+field. Everything else may still move.
+
+Theming is CSS custom properties, defined for both light and dark. There
+is deliberately no component-override API yet — publishing one would
+freeze a prop contract per slot, and that is not a promise worth making
+this early.
+
+> **Do not use `0.1.0`.** npm silently stripped its `bin` entry at publish
+> time, so that version installs without an executable. Use `0.1.1` or
+> later.
 
 ## License
 
