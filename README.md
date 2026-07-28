@@ -53,9 +53,13 @@ is deliberately no component-override API yet — publishing one would
 freeze a prop contract per slot, and that is not a promise worth making
 this early.
 
-> **Do not use `0.1.0`.** npm silently stripped its `bin` entry at publish
-> time, so that version installs without an executable. Use `0.1.1` or
-> later.
+> **Use `0.1.3` or later.** `0.1.0` installs without an executable — npm
+> silently stripped its `bin` entry at publish time. `0.1.1` and `0.1.2`
+> scaffold CI that points at reusable workflows those tags do not contain,
+> so the first push to a scaffolded index fails before any job runs. An
+> index already scaffolded against `0.1.1`/`0.1.2` is fixed by bumping the
+> `@v0.1.x` refs in `.github/workflows/{pages,validate}.yml` — no
+> re-scaffold needed.
 
 ## License
 

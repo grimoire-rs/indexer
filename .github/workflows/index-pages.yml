@@ -7,9 +7,11 @@
 # re-running `grim-indexer init` over their edits. Renovate's built-in
 # `github-actions` manager bumps the pinned ref in each caller.
 #
-# Copy this file to `.github/workflows/index-pages.yml` in this repo — a
-# reusable workflow must live directly in `.github/workflows/`, GitHub does
-# not resolve subdirectories.
+# This path is a published contract: scaffolded callers say
+# `uses: grimoire-rs/indexer/.github/workflows/index-pages.yml@<tag>`, and
+# GitHub only resolves a reusable workflow that sits directly in
+# `.github/workflows/`. Moving or renaming this file breaks every index
+# already scaffolded against a tag that contained it.
 name: grim-indexer pages
 
 on:

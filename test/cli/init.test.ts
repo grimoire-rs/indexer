@@ -191,18 +191,68 @@ describe("generated CI", () => {
   });
 });
 
-describe("shipped reusable workflows", () => {
-  const templates = path.join(import.meta.dirname, "..", "..", "templates", "reusable");
+const repo = path.join(import.meta.dirname, "..", "..");
 
+/**
+ * Every place a scaffolded repo points back at this one, as
+ * (repo-relative path, git ref) — from `uses:` in the GitHub callers and
+ * from the `include: remote:` URL in the GitLab one.
+ */
+function backRefs(text: string): Array<{ file: string; ref: string }> {
+  return [
+    ...[...text.matchAll(/^\s*-?\s*uses: grimoire-rs\/indexer\/(\S+?)@(\S+)/gm)],
+    ...[...text.matchAll(/raw\.githubusercontent\.com\/grimoire-rs\/indexer\/([^/]+)\/(\S+?)"/g)]
+      // The URL orders them ref-then-path; normalise to path-then-ref.
+      .map((m) => [m[0], m[2], m[1]] as RegExpMatchArray),
+  ].map((m) => ({ file: m[1] as string, ref: m[2] as string }));
+}
+
+// v0.1.2 shipped scaffolds whose callers said
+// `uses: grimoire-rs/indexer/.github/workflows/index-pages.yml@v0.1.2` while
+// those workflows only existed under `templates/reusable/`. GitHub cannot
+// resolve a reusable workflow outside `.github/workflows/`, so the very
+// first push to a scaffolded index failed before any job started — with no
+// job to show a log for. Nothing checked that the emitted ref pointed at a
+// file that exists, so nothing caught it.
+describe("scaffolded callers resolve back to this repo", () => {
+  it("names a file that exists here, at this package's tag", async () => {
+    expect(await run(initArgs(dir, "--forge", "both"))).toBe(0);
+    const version = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8")).version;
+
+    const refs = [".github/workflows/pages.yml", ".github/workflows/validate.yml", ".gitlab-ci.yml"]
+      .flatMap((caller) => backRefs(read(caller)));
+
+    expect(refs.length).toBe(3);
+    for (const { file, ref } of refs) {
+      expect(fs.existsSync(path.join(repo, file)), `${file} is referenced but not in this repo`)
+        .toBe(true);
+      expect(ref, `${file} must be pinned to this package's tag`).toBe(`v${version}`);
+    }
+  });
+
+  it("only reaches GitHub-resolvable paths for `uses:`", async () => {
+    await run(initArgs(dir, "--forge", "github"));
+
+    for (const caller of [".github/workflows/pages.yml", ".github/workflows/validate.yml"]) {
+      for (const { file } of backRefs(read(caller))) {
+        // GitHub does not resolve a reusable workflow in a subdirectory.
+        expect(file, caller).toMatch(/^\.github\/workflows\/[^/]+\.ya?ml$/);
+      }
+    }
+  });
+});
+
+describe("shipped reusable workflows", () => {
   it("parse as YAML and SHA-pin every action", () => {
-    for (const file of ["index-pages.yml", "index-validate.yml"]) {
-      const text = fs.readFileSync(path.join(templates, file), "utf8");
+    for (const file of [".github/workflows/index-pages.yml", ".github/workflows/index-validate.yml"]) {
+      const text = fs.readFileSync(path.join(repo, file), "utf8");
       const workflow = yaml.load(text);
 
       expect(dig(workflow, "permissions"), file).toEqual({});
       expect(dig(workflow, "on", "workflow_call"), file).toBeTruthy();
 
-      const uses = [...text.matchAll(/uses: (\S+)/g)].map((m) => m[1] as string);
+      // Line-anchored: these files discuss `uses:` in their header comments.
+      const uses = [...text.matchAll(/^\s*-?\s*uses: (\S+)/gm)].map((m) => m[1] as string);
       expect(uses.length, file).toBeGreaterThan(0);
       for (const ref of uses) {
         expect(ref, `${file}: ${ref}`).toMatch(/@[0-9a-f]{40}$/);
@@ -211,7 +261,9 @@ describe("shipped reusable workflows", () => {
   });
 
   it("gitlab include file parses as a single YAML document", () => {
-    const gitlab = yaml.load(fs.readFileSync(path.join(templates, "gitlab-index-ci.yml"), "utf8"));
+    const gitlab = yaml.load(
+      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
+    );
 
     expect(dig(gitlab, "stages")).toEqual(["test", "deploy"]);
     expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["$GRIM_INDEXER_OUT_DIR"]);

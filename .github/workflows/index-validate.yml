@@ -19,9 +19,11 @@
 # so this job's success/failure IS the gate. Branch protection on the
 # calling repo turns that into a merge decision.
 #
-# Copy this file to `.github/workflows/index-validate.yml` in this repo — a
-# reusable workflow must live directly in `.github/workflows/`, GitHub does
-# not resolve subdirectories.
+# This path is a published contract: scaffolded callers say
+# `uses: grimoire-rs/indexer/.github/workflows/index-validate.yml@<tag>`,
+# and GitHub only resolves a reusable workflow that sits directly in
+# `.github/workflows/`. Moving or renaming this file breaks the gate on
+# every index already scaffolded against a tag that contained it.
 name: grim-indexer validate
 
 on:
