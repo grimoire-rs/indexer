@@ -303,6 +303,24 @@ describe("scaffolded callers resolve back to this repo", () => {
     }
   });
 
+  // The scaffold told users to require the status check `validate`. A thin
+  // caller reports `<caller job> / <called job>`, so that context never
+  // reported and a passing gate still sat at BLOCKED — indistinguishable
+  // from the gate rejecting the contribution. Renaming either job key
+  // silently moves the context, which is what this asserts against.
+  it("names the status check the caller actually reports", async () => {
+    await run(initArgs(dir, "--forge", "github"));
+    const caller = read(".github/workflows/validate.yml");
+    const jobKey = (text: string) => Object.keys(dig(yaml.load(text), "jobs") as object)[0];
+
+    const context = `${jobKey(caller)} / ${jobKey(
+      fs.readFileSync(path.join(repo, ".github/workflows/index-validate.yml"), "utf8"),
+    )}`;
+    expect(caller, `branch protection must be told to require \`${context}\``).toContain(
+      `\`${context}\``,
+    );
+  });
+
   it("only reaches GitHub-resolvable paths for `uses:`", async () => {
     await run(initArgs(dir, "--forge", "github"));
 

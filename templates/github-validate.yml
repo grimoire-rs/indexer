@@ -1,7 +1,12 @@
 # Contribution gate for pull requests against this index.
 #
-# Exit 0 = eligible for auto-merge, non-zero = manual review required.
-# Make `validate` a required status check in branch protection to enforce it.
+# Exit 0 = eligible for auto-merge, non-zero = manual review required. To
+# enforce it, require the status check named `validate / validate` in branch
+# protection — NOT `validate`. A thin caller reports its check run as
+# `<job key here> / <job key in the called workflow>`, and both happen to be
+# `validate`; rename `jobs.validate` below and the required context moves
+# with it. Requiring a context that never reports blocks every PR forever,
+# and looks exactly like the gate rejecting the contribution.
 #
 # `pull_request_target` is deliberate and safe HERE, and only because of
 # what the called workflow does: it runs grim-indexer from npm against the
