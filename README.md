@@ -40,9 +40,29 @@ export default defineConfig({
 
 ## Status
 
-Pre-1.0. All three subcommands work and are covered by tests, but the
-end-to-end loop — announce, gate, auto-merge, publish — has not yet been
-proven against a live index, so treat it as early.
+Pre-1.0. The end-to-end loop was proven against live GitHub repositories
+on 2026-07-28: `init` → push → Pages → `grim publish --announce` → PR →
+gate → auto-merge → Pages → `grim config registry add` → `grim search` →
+`grim add`. The gate accepted a genuine pointer and refused all five
+hostile variants (author not the namespace owner, path outside the
+pointer layout, registry host outside the committed allowlist,
+unreachable OCI ref, unowned namespace).
+
+Two things that trial settled, both worth knowing before you scaffold:
+
+- **Requiring the gate needs the check named `validate / validate`**, not
+  `validate`. Requiring a context that never reports blocks every PR
+  forever and looks exactly like the gate rejecting your contribution.
+- **In the combined (`--with-skills`) layout the gate does not cover your
+  own CI's announce.** GitHub runs no workflows on a PR opened with
+  `secrets.GITHUB_TOKEN`, so that PR arrives ungated — review it by hand.
+  It also needs "Allow GitHub Actions to create and approve pull
+  requests" enabled, which is off by default and which also lets
+  workflows approve PRs.
+
+Not yet proven live: the GitLab leg (hermetic tests only; the
+`include: remote:` URL is verified to resolve), and the cross-repository
+announce, which needs a credential beyond the CI token.
 
 Two things are frozen and safe to build on: the published URL layout
 (`/p/<namespace>/<name>/` and `/all.json`) and the per-record `schema`
@@ -53,13 +73,20 @@ is deliberately no component-override API yet — publishing one would
 freeze a prop contract per slot, and that is not a promise worth making
 this early.
 
-> **Use `0.1.3` or later.** `0.1.0` installs without an executable — npm
+> **Use `0.1.4` or later.** `0.1.0` installs without an executable — npm
 > silently stripped its `bin` entry at publish time. `0.1.1` and `0.1.2`
 > scaffold CI that points at reusable workflows those tags do not contain,
 > so the first push to a scaffolded index fails before any job runs. An
 > index already scaffolded against `0.1.1`/`0.1.2` is fixed by bumping the
 > `@v0.1.x` refs in `.github/workflows/{pages,validate}.yml` — no
 > re-scaffold needed.
+>
+> Through `0.1.3`, `init --with-skills` wrote a `publish.toml` with no
+> `[announce]` table, so `grim publish --announce` in a combined-layout
+> repo proposed its packages into the **public** first-party index rather
+> than the one beside them. If you scaffolded that layout on `0.1.3` or
+> earlier, add an `[announce]` table naming your own repository before
+> announcing.
 
 ## License
 
