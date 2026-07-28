@@ -111,6 +111,58 @@ function clearCompanions(dir: string): void {
   }
 }
 
+/**
+ * Kinds whose payload is the artifact's own entry-point markdown — a skill's
+ * `SKILL.md`, a rule or an agent's single file. A bundle's member list and an
+ * MCP descriptor are JSON, and everything else is left alone rather than
+ * guessed at.
+ */
+const MARKDOWN_KINDS = new Set(["skill", "rule", "agent"]);
+const JSON_KINDS = new Set(["bundle", "mcp"]);
+
+/** Both spellings, so a kind that changes shape upstream cannot leave the old one behind. */
+function clearContents(dir: string): void {
+  for (const name of ["contents.md", "contents.json"]) {
+    fs.rmSync(path.join(dir, name), { force: true });
+  }
+}
+
+/**
+ * The artifact payload itself, written as the sidecar the "contents" tab
+ * reads. One extra `fetch` per package, skipped whenever `describe` reports
+ * the digest the last run already stored — which is every run that changed
+ * nothing.
+ */
+async function writeContents(
+  run: GrimRunner,
+  out: string,
+  ref: string,
+  kind: string,
+): Promise<boolean> {
+  const markdown = MARKDOWN_KINDS.has(kind);
+  if (!markdown && !JSON_KINDS.has(kind)) return false;
+
+  const fetched = (await run(["fetch", ref])) as { content?: string };
+  const content = fetched.content;
+  if (typeof content !== "string" || content.trim() === "") return false;
+
+  fs.mkdirSync(out, { recursive: true });
+  clearContents(out);
+  if (markdown) {
+    fs.writeFileSync(path.join(out, "contents.md"), content);
+    return true;
+  }
+  // Reject anything that is not the JSON it claims to be rather than writing
+  // a file the site build would then fail to parse.
+  try {
+    JSON.parse(content);
+  } catch {
+    return false;
+  }
+  fs.writeFileSync(path.join(out, "contents.json"), content);
+  return true;
+}
+
 /** Writes the companion members we render, ignoring anything else in the tree. */
 function writeCompanions(
   dir: string,
@@ -181,6 +233,21 @@ async function enrichOne(
     clearCompanions(out);
     data.hasReadme = false;
     data.hasChangelog = false;
+  }
+
+  // `describe` already reports the artifact digest, so the contents fetch
+  // needs no probe of its own — an unchanged digest means the sidecar on
+  // disk is still the answer.
+  const digest = typeof desc.digest === "string" ? desc.digest : null;
+  if (digest && digest === existing.contentDigest) {
+    data.contentDigest = digest;
+    data.hasContents = existing.hasContents ?? false;
+  } else {
+    const kind = typeof desc.kind === "string" ? desc.kind : "";
+    const written = await writeContents(run, out, ref, kind);
+    if (!written) clearContents(out);
+    if (digest) data.contentDigest = digest;
+    data.hasContents = written;
   }
 
   fs.mkdirSync(out, { recursive: true });

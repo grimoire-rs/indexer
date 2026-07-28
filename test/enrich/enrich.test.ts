@@ -32,6 +32,10 @@ function addPackage(namespace: string, name: string, ref: string): void {
 }
 
 const DESCRIBE = {
+  kind: "skill",
+  // The artifact's own digest, which `describe` already reports — what the
+  // contents fetch is skipped on.
+  digest: "sha256:art",
   title: "Foo",
   summary: "A foo.",
   version: "1.2.3",
@@ -54,6 +58,8 @@ interface FakeOptions {
   describe?: Record<string, unknown>;
   digest?: string;
   files?: Array<{ path: string; content: string; encoding?: string }>;
+  /** The artifact payload `grim fetch <ref>` prints — the contents sidecar. */
+  content?: string;
 }
 
 /** Records every `grim` invocation so "did it re-download?" is assertable. */
@@ -64,6 +70,10 @@ function fakeGrim(opts: FakeOptions = {}): { run: GrimRunner; calls: string[][] 
     if (args[0] === "describe") return Promise.resolve({ ...DESCRIBE, ...opts.describe });
     if (args.includes("--digest-only")) {
       return Promise.resolve({ digest: opts.digest ?? "sha256:aaa" });
+    }
+    // `fetch <ref>` with nothing else is the artifact itself.
+    if (!args.includes("--description")) {
+      return Promise.resolve({ content: opts.content ?? "# Entry\n" });
     }
     return Promise.resolve({ files: opts.files ?? COMPANION });
   };
@@ -109,12 +119,15 @@ describe("enrichIndex", () => {
       hasReadme: true,
       hasChangelog: true,
       logo: "/logos/github.com/acme/foo.svg",
+      contentDigest: "sha256:art",
+      hasContents: true,
     });
 
     const out = path.join(dir, "enrich/github.com/acme/foo");
     expect(fs.readFileSync(path.join(out, "readme.md"), "utf8")).toBe("# Foo\n");
     expect(fs.readFileSync(path.join(out, "changelog.md"), "utf8")).toBe("## 1.2.3\n");
     expect(fs.readFileSync(path.join(out, "logo.svg"), "utf8")).toBe("<svg/>");
+    expect(fs.readFileSync(path.join(out, "contents.md"), "utf8")).toBe("# Entry\n");
   });
 
   it("carries an optional field through only when the registry has one", async () => {
@@ -135,7 +148,7 @@ describe("enrichIndex", () => {
     addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
     const first = fakeGrim();
     await enrichIndex({ root: dir, run: first.run });
-    expect(first.calls.map((c) => c[0])).toEqual(["describe", "fetch", "fetch"]);
+    expect(first.calls.map((c) => c[0])).toEqual(["describe", "fetch", "fetch", "fetch"]);
 
     const second = fakeGrim();
     await enrichIndex({ root: dir, run: second.run });
@@ -148,6 +161,8 @@ describe("enrichIndex", () => {
       hasReadme: true,
       hasChangelog: true,
       logo: "/logos/github.com/acme/foo.svg",
+      contentDigest: "sha256:art",
+      hasContents: true,
     });
   });
 
@@ -179,7 +194,9 @@ describe("enrichIndex", () => {
     await enrichIndex({ root: dir, run });
 
     const out = path.join(dir, "enrich/github.com/acme/foo");
-    expect(fs.readdirSync(out)).toEqual(["data.json"]);
+    // The contents sidecar is the artifact itself, not part of the
+    // description companion — withdrawing one does not withdraw the other.
+    expect(fs.readdirSync(out).sort()).toEqual(["contents.md", "data.json"]);
     expect(calls).toHaveLength(1); // nothing to probe
     expect(sidecar("github.com/acme", "foo")).toMatchObject({
       hasReadme: false,
@@ -201,7 +218,7 @@ describe("enrichIndex", () => {
     await enrichIndex({ root: dir, run });
 
     const out = path.join(dir, "enrich/github.com/acme/foo");
-    expect(fs.readdirSync(out).sort()).toEqual(["data.json", "logo.svg"]);
+    expect(fs.readdirSync(out).sort()).toEqual(["contents.md", "data.json", "logo.svg"]);
     expect(fs.existsSync(path.join(dir, "enrich/github.com/acme/evil"))).toBe(false);
     expect(sidecar("github.com/acme", "foo").logo).toBe("/logos/github.com/acme/foo.svg");
   });
