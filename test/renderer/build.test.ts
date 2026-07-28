@@ -252,6 +252,28 @@ describe("config reaches the rendered HTML", () => {
     expect(indexHtml).not.toContain("grimoire-rs.grimoire-vscode");
   });
 
+  // End-to-end for the extension's `/add-registry` handler: what the page
+  // emits has to survive its `parseAddRegistryLink`, which takes an https
+  // locator with no embedded credentials and an alias in a fixed charset.
+  // Asserted by re-parsing the rendered href rather than by string match, so
+  // a change to how the query is built cannot quietly emit a dead button.
+  it("offers the index as an add-registry deep link the extension accepts", () => {
+    const href = /<a class="vscode-add" href="([^"]+)"/.exec(indexHtml)?.[1];
+    expect(href, "the add-this-index block offers a VS Code link").toBeDefined();
+
+    const url = new URL(href!.replaceAll("&amp;", "&"));
+    expect(url.protocol).toBe("vscode:");
+    expect(`${url.hostname}${url.pathname}`).toBe("acme.acme-vscode/add-registry");
+
+    const query = new URLSearchParams(url.search);
+    expect(query.get("alias")).toBe("acme");
+    expect(query.get("alias")).toMatch(/^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/);
+    const index = new URL(query.get("index")!);
+    expect(index.protocol).toBe("https:");
+    expect(index.username).toBe("");
+    expect(index.origin).toBe("https://index.example.test");
+  });
+
   it("titles the detail page with the brand and shows the enrich README", () => {
     expect(detailHtml).toContain("<title>code-review — acme package index</title>");
     expect(detailHtml).toContain("Fixture README");
