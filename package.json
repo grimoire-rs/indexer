@@ -1,6 +1,6 @@
 {
   "name": "@grimoire-rs/indexer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI + Astro integration for running your own grim package index",
   "type": "module",
   "license": "Apache-2.0",
