@@ -1,4 +1,9 @@
-import { useMemo, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+// Lucide (ISC) draws the UI; brand marks come from `@mdi/js`, which Lucide
+// deliberately does not carry. No SVG on this site is hand-written.
+import { Check, FolderRoot, Globe, Image, ImageOff } from "lucide-preact";
+import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
+import { BrandMark } from "./BrandMark.js";
 import { withBase } from "../lib/base.js";
 import { timeAgo, vscodeUrl, type CatalogPackage } from "../lib/catalog.js";
 
@@ -23,28 +28,136 @@ function compare(a: CatalogPackage, b: CatalogPackage, sort: Sort): number {
   return new Date(b.created).getTime() - new Date(a.created).getTime();
 }
 
-// The two install scopes wear the same glyphs as the VS Code extension, so
-// "project" and "global" read identically in both: codicons `root-folder`
-// and `globe` (@vscode/codicons 0.0.45, CC-BY-4.0), copied as paths rather
-// than pulling in the icon font for two icons.
-const SCOPE_PROJECT =
-  "M4.5 7C2.019 7 0 9.019 0 11.5C0 13.981 2.019 16 4.5 16C6.981 16 9 13.981 9 11.5C9 9.019 6.981 7 4.5 7ZM4.5 15C2.57 15 1 13.43 1 11.5C1 9.57 2.57 8 4.5 8C6.43 8 8 9.57 8 11.5C8 13.43 6.43 15 4.5 15ZM7 11.5C7 12.881 5.881 14 4.5 14C3.119 14 2 12.881 2 11.5C2 10.119 3.119 9 4.5 9C5.881 9 7 10.119 7 11.5ZM15 6.5V11.5C15 12.881 13.881 14 12.5 14H10V13H12.5C13.328 13 14 12.328 14 11.5V6.5C14 5.672 13.328 5 12.5 5H8.207L7.207 6H5.586C5.719 6 5.846 5.947 5.94 5.854L7.294 4.5L5.94 3.146C5.846 3.052 5.719 3 5.586 3H3.5C2.672 3 2 3.672 2 4.5V6H1V4.5C1 3.119 2.119 2 3.5 2H5.586C5.984 2 6.365 2.158 6.647 2.439L8.208 4H12.501C13.882 4 15.001 5.119 15.001 6.5H15Z";
-const SCOPE_GLOBAL =
-  "M8 1C4.141 1 1 4.141 1 8C1 11.859 4.141 15 8 15C11.859 15 15 11.859 15 8C15 4.141 11.859 1 8 1ZM8 14C7.422 14 6.686 12.906 6.288 11H9.713C9.315 12.906 8.579 14 8.001 14H8ZM6.121 10C6.044 9.392 6 8.723 6 8C6 7.277 6.044 6.608 6.121 6H9.878C9.955 6.608 9.999 7.277 9.999 8C9.999 8.723 9.955 9.392 9.878 10H6.121ZM2 8C2 7.299 2.121 6.626 2.343 6H5.121C5.041 6.656 5 7.332 5 8C5 8.668 5.041 9.344 5.121 10H2.343C2.121 9.374 2 8.701 2 8ZM8 2C8.578 2 9.314 3.094 9.712 5H6.287C6.685 3.094 7.422 2 8 2ZM10.879 6H13.657C13.879 6.626 14 7.299 14 8C14 8.701 13.879 9.374 13.657 10H10.879C10.959 9.344 11 8.668 11 8C11 7.332 10.959 6.656 10.879 6ZM13.195 5H10.722C10.516 3.938 10.199 2.98 9.775 2.268C11.228 2.719 12.446 3.707 13.195 5ZM6.226 2.268C5.802 2.98 5.484 3.938 5.279 5H2.806C3.556 3.707 4.774 2.718 6.226 2.268ZM2.805 11H5.278C5.484 12.062 5.801 13.02 6.225 13.732C4.772 13.281 3.554 12.293 2.805 11ZM9.774 13.732C10.198 13.02 10.516 12.062 10.721 11H13.194C12.444 12.293 11.226 13.282 9.774 13.732Z";
-const CHECK =
-  "M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 1 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z";
+// The two install scopes previously wore the VS Code extension's own
+// codicons so "project" and "global" read identically in both. That parity
+// is gone on purpose: every icon now comes from one set. `FolderRoot` and
+// `Globe` are the nearest Lucide equivalents and carry the same meaning.
+
+/** Typing inside one of these means a bare keystroke is text, not a shortcut. */
+function isTyping(el: EventTarget | null): boolean {
+  const node = el as HTMLElement | null;
+  if (!node) return false;
+  return node.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName);
+}
+
+/**
+ * How many cards the grid actually laid out per row.
+ *
+ * Measured, not read from CSS: the track list is `auto-fill` with a minimum
+ * width, so the count is a layout outcome that depends on the viewport. The
+ * first card whose top edge drops below the first row's starts row two.
+ */
+function columnCount(cards: HTMLElement[]): number {
+  if (cards.length < 2) return 1;
+  const top = cards[0]!.offsetTop;
+  const wrapped = cards.findIndex((card) => card.offsetTop > top);
+  return wrapped === -1 ? cards.length : wrapped;
+}
+
+/**
+ * The card's 28px logo slot, in its three states.
+ *
+ * The third one is the reason this is a component rather than inline JSX: a
+ * package can declare a `logo` whose file is not actually served — the
+ * enrich step failed, the asset was pruned, the path is stale — and the
+ * browser's own broken-image glyph is both ugly and says nothing. So a
+ * declared-but-unreachable logo degrades to a marked placeholder, which is
+ * deliberately *not* the same as the initial-letter tile a package with no
+ * logo at all gets: one is a fault worth seeing, the other is normal.
+ *
+ * The static detail page needs the same treatment but cannot use `onError`,
+ * so it opts into the global handler in `Base.astro` instead — keep the two
+ * placeholders looking alike.
+ */
+function CardLogo({ pkg }: { pkg: CatalogPackage }) {
+  const [state, setState] = useState<"loading" | "ready" | "broken">("loading");
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // The image is server-rendered, so the browser begins fetching it while
+  // parsing the HTML — long before this island hydrates. Two consequences,
+  // and the slot markup below answers both: `onError` can fire before any
+  // listener exists (the placeholder used to appear only sometimes), and a
+  // failed image paints the browser's broken glyph on the way (the flash on
+  // reload). Starting the image hidden means nothing is ever shown until it
+  // is known to be good.
+  //
+  // `complete` says the browser finished, not how it went. `decode()` is
+  // what separates the two: it rejects for a failure and resolves for a good
+  // image — including an SVG with no intrinsic size, where the usual
+  // `naturalWidth === 0` test reports a false failure. Gating on `complete`
+  // means it never starts a fetch, so `loading="lazy"` still holds off
+  // -screen cards.
+  useEffect(() => {
+    setState("loading");
+    const img = imgRef.current;
+    if (!img?.complete) return;
+    let live = true;
+    img.decode().then(
+      () => live && setState("ready"),
+      () => live && setState("broken"),
+    );
+    return () => {
+      live = false;
+    };
+  }, [pkg.logo]);
+
+  if (!pkg.logo) {
+    return (
+      <span
+        class="card-logo card-logo-fallback"
+        aria-hidden="true"
+        style={{ background: `var(--kind-${pkg.kind}, var(--muted))` }}
+      >
+        {pkg.name[0]?.toUpperCase()}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      class="card-logo logo-slot"
+      data-state={state}
+      role={state === "broken" ? "img" : undefined}
+      aria-label={state === "broken" ? "Logo image unavailable" : undefined}
+      title={state === "broken" ? "Logo image unavailable" : undefined}
+    >
+      {state === "broken" ? (
+        <ImageOff class="logo-mark" aria-hidden="true" />
+      ) : (
+        <Image class="logo-mark" aria-hidden="true" />
+      )}
+      <img
+        ref={imgRef}
+        src={withBase(pkg.logo)}
+        alt=""
+        loading="lazy"
+        onLoad={() => setState("ready")}
+        onError={() => setState("broken")}
+      />
+    </span>
+  );
+}
 
 function CopyButton({
   command,
   variant = "default",
+  name,
 }: {
   command: string;
   variant?: "default" | "global";
+  /** What the copy toast calls this, e.g. `"global install command"`. */
+  name?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard.writeText(command).then(() => {
       setCopied(true);
+      // The toast lives in Base.astro's inline script, outside this island —
+      // an event is how a hydrated component reaches it without either side
+      // importing the other.
+      document.dispatchEvent(
+        new CustomEvent("grimoire:copied", { detail: { name, value: command } }),
+      );
       setTimeout(() => setCopied(false), 1500);
     });
   };
@@ -54,11 +167,12 @@ function CopyButton({
       class={copied ? "copy copied" : "copy"}
       title={command}
       aria-label={`Copy: ${command}`}
+      // Out of the Tab sequence: the card is the stop, and the same command
+      // is copyable from the detail page Enter opens.
+      tabIndex={-1}
       onClick={copy}
     >
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
-        <path d={copied ? CHECK : variant === "global" ? SCOPE_GLOBAL : SCOPE_PROJECT} />
-      </svg>
+      {copied ? <Check size={14} /> : variant === "global" ? <Globe size={14} /> : <FolderRoot size={14} />}
     </button>
   );
 }
@@ -73,49 +187,282 @@ export default function Catalog({
   packages: CatalogPackage[];
   vscodeExtension: string | null;
 }) {
-  const [query, setQuery] = useState("");
+  // Seeded from `?q=…` on the very first render, not from an effect: a
+  // keyword chip on a package page links here, and filtering one render late
+  // means painting the full catalog and then collapsing it. The server has
+  // no `location`, so it renders the unfiltered list — which is what a
+  // crawler and a `?q=`-less visitor should both get.
+  const [query, setQuery] = useState(() =>
+    typeof location === "undefined" ? "" : (new URLSearchParams(location.search).get("q") ?? ""),
+  );
   const [kind, setKind] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("name");
+  // Deprecated packages are hidden until asked for: a retired package is
+  // noise for someone browsing what to install, and the publisher already
+  // said as much by deprecating it.
+  const [showDeprecated, setShowDeprecated] = useState(false);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLUListElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+
+  const cardsOf = () => [...(gridRef.current?.querySelectorAll<HTMLElement>("li.card") ?? [])];
+  const chipsOf = () => [
+    ...(controlsRef.current?.querySelectorAll<HTMLElement>("button.chip") ?? []),
+  ];
+
+  /** Move focus `delta` cards along, clamping at both ends rather than wrapping. */
+  const focusCard = (from: number, delta: number) => {
+    const cards = cardsOf();
+    if (cards.length === 0) return;
+    const next = Math.min(cards.length - 1, Math.max(0, from + delta));
+    cards[next]?.focus();
+  };
+
+  /**
+   * Focus the search box and bring it to the top of the viewport, so the
+   * results — not whatever was on screen before — are what you are looking
+   * at while typing. `scroll-margin-top` on the field supplies the gap.
+   *
+   * Used by every path that moves focus there deliberately (`/`, arrowing up
+   * out of the chips, Escape). A plain mouse click is left alone: scrolling
+   * the page under a reader who just clicked a visible field is a jolt, not
+   * a help.
+   */
+  const focusSearch = () => {
+    const input = searchRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+    input.scrollIntoView({
+      block: "start",
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  };
+
+  // Base.astro hides the catalog before first paint when the URL carries a
+  // query. Reveal it once this render — the filtered one — has hit the DOM.
+  // A layout effect, so the reveal lands in the same frame as the content.
+  useLayoutEffect(() => {
+    // Hydration attaches handlers but does not diff props against the server
+    // markup, so the box the server rendered empty stays empty even though
+    // this render filtered on `query`. Written straight to the DOM, which is
+    // what the vnode already claims.
+    const input = searchRef.current;
+    if (input && input.value !== query) input.value = query;
+    delete document.documentElement.dataset.query;
+  }, []);
+
+  // `/` jumps to the search box, the convention every package registry
+  // shares. Bound on the document so it works wherever the reader is.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTyping(event.target)) return;
+      event.preventDefault();
+      focusSearch();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  /**
+   * Escape drops the selection, from wherever the reader is — the search
+   * box, a chip, a card. "Selection" is both halves of it: the active
+   * filters, and the card currently holding focus, which wears the accent
+   * border and reads as picked. Clearing one and leaving the other visibly
+   * selected is the wrong half.
+   *
+   * The card is blurred rather than handed back to the search box: Escape
+   * means "never mind", not "go here instead", and `/` reaches search from
+   * anywhere. It matches what a second Escape in the search box already does.
+   *
+   * Document-level for the same reason `/` is: this is one piece of state,
+   * so the key that clears it should not depend on what happens to hold
+   * focus. Bailing on `defaultPrevented` leaves the menus that close
+   * themselves on Escape — the platform picker, the version popovers — to do
+   * that first without also wiping the catalog.
+   */
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const active = document.activeElement;
+      // Also true for a control *inside* a card, which is still the card
+      // being selected as far as the reader is concerned.
+      const card = active instanceof HTMLElement ? active.closest("li.card") : null;
+      if (!query && kind === null && !card) return; // nothing selected: not our key
+      event.preventDefault();
+      setQuery("");
+      setKind(null);
+      if (card) (active as HTMLElement).blur();
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [query, kind]);
+
+  /**
+   * The filter and sort chips are not Tab stops — Tab is reserved for
+   * crossing the catalog, so it runs search → card → card. The chips sit in
+   * the row above the grid, so they are reached the way that row is:
+   * ArrowUp out of the top card row, ArrowDown back into it.
+   *
+   * The one case that would strand them is an empty result set, where there
+   * is no card to arrow up from — so with nothing shown they rejoin the Tab
+   * order (see `chipTabIndex` below), which is also exactly when a reader
+   * needs them most.
+   */
+  const onChipKeyDown = (event: KeyboardEvent) => {
+    const chips = chipsOf();
+    const index = chips.indexOf(event.currentTarget as HTMLElement);
+    if (index === -1) return;
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        return chips[Math.min(chips.length - 1, index + 1)]?.focus();
+      case "ArrowLeft":
+        event.preventDefault();
+        return chips[Math.max(0, index - 1)]?.focus();
+      case "ArrowDown":
+        event.preventDefault();
+        return cardsOf()[0]?.focus();
+      case "ArrowUp":
+        // Not Escape any more — that clears the filters now, from here as
+        // much as anywhere else. ArrowUp is still the way back to search.
+        event.preventDefault();
+        return focusSearch();
+      default:
+        return;
+    }
+  };
+
+  const onSearchKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      cardsOf()[0]?.focus();
+    } else if (event.key === "Escape" && !query && kind === null) {
+      // Clearing is the document handler's job; this is only the second
+      // press, once there is nothing left to clear — so Escape leaves the
+      // field rather than being a dead key.
+      searchRef.current?.blur();
+    }
+  };
+
+  const onCardKeyDown = (event: KeyboardEvent) => {
+    const card = event.currentTarget as HTMLElement;
+    const index = cardsOf().indexOf(card);
+    if (index === -1) return;
+
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        return focusCard(index, 1);
+      case "ArrowLeft":
+        event.preventDefault();
+        return focusCard(index, -1);
+      case "ArrowDown":
+        event.preventDefault();
+        return focusCard(index, columnCount(cardsOf()));
+      case "ArrowUp": {
+        event.preventDefault();
+        const columns = columnCount(cardsOf());
+        // Up out of the first row lands on the control row that sits above
+        // the grid — the chips, which have no other keyboard path. Search is
+        // one more ArrowUp away, and `/` reaches it from anywhere.
+        if (index < columns) {
+          const chip = chipsOf()[0];
+          if (chip) return chip.focus();
+          return focusSearch();
+        }
+        return focusCard(index, -columns);
+      }
+      case "Home":
+        event.preventDefault();
+        return focusCard(index, -index);
+      case "End":
+        event.preventDefault();
+        return focusCard(index, cardsOf().length);
+      case "Enter":
+      case " ":
+        // Only when the card itself holds focus: an inner control reached by
+        // mouse must keep its own Space/Enter behaviour.
+        if (event.target !== card) return;
+        event.preventDefault();
+        card.querySelector<HTMLAnchorElement>("h2 a")?.click();
+        return;
+      default:
+        return;
+    }
+  };
+
+  // The catalog as the kind chips and the search placeholder count it —
+  // deprecated entries drop out of those totals too while they are hidden,
+  // so no count ever promises more than the grid shows.
+  const counted = useMemo(
+    () => (showDeprecated ? packages : packages.filter((p) => !p.deprecated)),
+    [packages, showDeprecated],
+  );
 
   const kinds = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const p of packages) counts.set(p.kind, (counts.get(p.kind) ?? 0) + 1);
+    for (const p of counted) counts.set(p.kind, (counts.get(p.kind) ?? 0) + 1);
     return [...counts.entries()].sort(
       (a, b) => kindOrder(a[0]) - kindOrder(b[0]) || a[0].localeCompare(b[0]),
     );
-  }, [packages]);
+  }, [counted]);
 
   const q = query.trim().toLowerCase();
-  const shown = packages
-    .filter((p) => {
-      if (kind && p.kind !== kind) return false;
-      if (!q) return true;
-      return [
-        p.name,
-        p.description ?? "",
-        p.namespace,
-        p.kind,
-        p.ref,
-        p.summary ?? "",
-        (p.keywords ?? []).join(" "),
-      ].some((field) => field.toLowerCase().includes(q));
-    })
-    .sort((a, b) => compare(a, b, sort));
+  // Query and kind first, deprecation last — so the toggle can report how
+  // many entries *it alone* is holding back, rather than a catalog-wide
+  // number that has nothing to do with what is on screen.
+  const matching = packages.filter((p) => {
+    if (kind && p.kind !== kind) return false;
+    if (!q) return true;
+    return [
+      p.name,
+      p.description ?? "",
+      p.namespace,
+      p.kind,
+      p.ref,
+      p.summary ?? "",
+      (p.keywords ?? []).join(" "),
+    ].some((field) => field.toLowerCase().includes(q));
+  });
+  const shown = (showDeprecated ? matching : matching.filter((p) => !p.deprecated)).sort((a, b) =>
+    compare(a, b, sort),
+  );
+
+  // A catalog with nothing deprecated gets no toggle — a control that can
+  // only ever be a no-op is worse than its absence.
+  const hasDeprecated = packages.some((p) => p.deprecated);
+
+  // Chips leave the Tab order only while there is a grid to arrow up from.
+  const chipTabIndex = shown.length === 0 ? 0 : -1;
 
   return (
-    <section>
-      <div class="controls">
-        <input
-          type="search"
-          placeholder={`Search ${packages.length} packages…`}
-          value={query}
-          onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-          aria-label="Search packages"
-        />
+    <section class="catalog">
+      <div class="controls" ref={controlsRef}>
+        <div class="search-field">
+          <input
+            ref={searchRef}
+            type="search"
+            placeholder={`Search ${counted.length} packages…`}
+            value={query}
+            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+            onKeyDown={onSearchKeyDown}
+            aria-label="Search packages"
+            aria-keyshortcuts="/"
+          />
+          {/* Decorative: the shortcut is announced by aria-keyshortcuts, so
+              repeating it here would be read twice. CSS hides it as soon as
+              the field is focused or holds a query. */}
+          <kbd class="search-hint" aria-hidden="true">/</kbd>
+        </div>
         <div class="chips" role="group" aria-label="Sort by">
           <button
             type="button"
             class={sort === "name" ? "chip active" : "chip"}
+            tabIndex={chipTabIndex}
+            onKeyDown={onChipKeyDown}
             onClick={() => setSort("name")}
           >
             name
@@ -123,52 +470,85 @@ export default function Catalog({
           <button
             type="button"
             class={sort === "updated" ? "chip active" : "chip"}
+            tabIndex={chipTabIndex}
+            onKeyDown={onChipKeyDown}
             onClick={() => setSort("updated")}
           >
             updated
           </button>
         </div>
+        {/* Divides sort from filter — two different questions sharing a row.
+            Decorative only: each group already carries its own aria-label,
+            so this is hidden rather than announced. */}
+        <span class="chip-sep" aria-hidden="true"></span>
         <div class="chips" role="group" aria-label="Filter by kind">
           <button
             type="button"
             class={kind === null ? "chip active" : "chip"}
+            tabIndex={chipTabIndex}
+            onKeyDown={onChipKeyDown}
             onClick={() => setKind(null)}
           >
-            all <small>{packages.length}</small>
+            all <small>{counted.length}</small>
           </button>
           {kinds.map(([k, count]) => (
             <button
               key={k}
               type="button"
               class={kind === k ? `chip active kind-${k}` : `chip kind-${k}`}
+              tabIndex={chipTabIndex}
+              onKeyDown={onChipKeyDown}
               onClick={() => setKind(kind === k ? null : k)}
             >
               {k} <small>{count}</small>
             </button>
           ))}
         </div>
+        {hasDeprecated && (
+          // A toggle, not a filter: `aria-pressed` rather than the `active`
+          // class alone, so it is announced as on/off instead of selected.
+          //
+          // No count, unlike the kind chips. Theirs is a fixed property of
+          // the catalog; this one would be the number currently hidden, which
+          // is zero once the toggle is on — so it vanished exactly when
+          // pressed and the chip changed width under the pointer.
+          <button
+            type="button"
+            class={showDeprecated ? "chip deprecated-toggle active" : "chip deprecated-toggle"}
+            aria-pressed={showDeprecated}
+            title={showDeprecated ? "Hide deprecated packages" : "Show deprecated packages"}
+            tabIndex={chipTabIndex}
+            onKeyDown={onChipKeyDown}
+            onClick={() => setShowDeprecated((on) => !on)}
+          >
+            deprecated
+          </button>
+        )}
       </div>
 
       {shown.length === 0 ? (
         <p class="empty">No packages match.</p>
       ) : (
-        <ul class="grid">
+        <ul class="grid" ref={gridRef}>
           {shown.map((p) => (
-            <li key={`${p.namespace}/${p.name}`} class="card">
+            // One Tab stop per card, in DOM order — which the grid lays out
+            // left to right, top to bottom. Every control inside is taken
+            // out of the sequence (`tabindex={-1}`) so tabbing crosses the
+            // catalog instead of wading through it; arrow keys move by row
+            // and column, and Enter opens the detail page, which carries the
+            // same install commands the card's buttons do.
+            <li
+              key={`${p.namespace}/${p.name}`}
+              class="card"
+              tabIndex={0}
+              onKeyDown={onCardKeyDown}
+            >
               <div class="card-head">
-                {p.logo ? (
-                  <img class="card-logo" src={withBase(p.logo)} alt="" loading="lazy" />
-                ) : (
-                  <span
-                    class="card-logo card-logo-fallback"
-                    aria-hidden="true"
-                    style={{ background: `var(--kind-${p.kind}, var(--muted))` }}
-                  >
-                    {p.name[0]?.toUpperCase()}
-                  </span>
-                )}
+                <CardLogo pkg={p} />
                 <h2>
-                  <a href={withBase(`/p/${p.namespace}/${p.name}/`)}>{p.name}</a>
+                  <a href={withBase(`/p/${p.namespace}/${p.name}/`)} tabIndex={-1}>
+                    {p.name}
+                  </a>
                 </h2>
                 {p.deprecated ? (
                   <span class="badge deprecated">deprecated</span>
@@ -202,6 +582,7 @@ export default function Catalog({
                       key={kw}
                       type="button"
                       class="chip keyword"
+                      tabIndex={-1}
                       onClick={() => setQuery(kw)}
                     >
                       {kw}
@@ -216,24 +597,24 @@ export default function Catalog({
               )}
               <div class="card-foot">
                 <div class="copy-group">
-                  <CopyButton command={`grim add ${p.ref}`} />
+                  {/* Global first, matching the hero's scope picker — the two
+                      are the same choice in two places, so they lead with the
+                      same one. */}
                   <CopyButton
                     command={`grim add --global ${p.ref}`}
                     variant="global"
+                    name={`global add for ${p.name}`}
                   />
+                  <CopyButton command={`grim add ${p.ref}`} name={`project add for ${p.name}`} />
                   {vscodeUrl(vscodeExtension, p.ref) && (
                     <a
                       class="copy vscode"
                       href={vscodeUrl(vscodeExtension, p.ref)!}
                       title="Open in VS Code"
                       aria-label={`Open ${p.name} in VS Code`}
+                      tabIndex={-1}
                     >
-                      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                        <path
-                          fill="currentColor"
-                          d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12l-3.573 3.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"
-                        />
-                      </svg>
+                      <BrandMark path={mdiMicrosoftVisualStudioCode} />
                     </a>
                   )}
                 </div>
@@ -243,6 +624,7 @@ export default function Catalog({
                     href={p.repository}
                     target="_blank"
                     rel="noopener noreferrer"
+                    tabIndex={-1}
                   >
                     source
                   </a>

@@ -1,0 +1,19 @@
+{
+  "members": [
+    {
+      "kind": "skill",
+      "name": "code-review",
+      "id": "./code-review:1"
+    },
+    {
+      "kind": "rule",
+      "name": "rust-style",
+      "id": "./rust-style:0"
+    },
+    {
+      "kind": "agent",
+      "name": "elsewhere",
+      "id": "ghcr.io/other/elsewhere:2"
+    }
+  ]
+}

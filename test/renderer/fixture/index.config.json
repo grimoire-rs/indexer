@@ -1,0 +1,27 @@
+{
+  "site": "https://index.example.test",
+  "brand": "acme package index",
+  "brandMark": "acme",
+  "logo": "/logo.svg",
+  "description": "Fixture index description.",
+  "tagline": "Fixture tagline sentence.",
+  "docsUrl": "https://docs.example.test",
+  "installDocsUrl": "https://docs.example.test/install.html",
+  "repoUrl": "https://github.com/acme/index",
+  "install": [
+    {
+      "os": "Linux / macOS",
+      "command": "curl -LsSf https://setup.example.test/sh | sh"
+    },
+    {
+      "os": "Windows",
+      "command": "irm https://setup.example.test/ps1 | iex"
+    }
+  ],
+  "vscodeExtension": "acme.acme-vscode",
+  "registry": {
+    "alias": "acme",
+    "index": "https://index.example.test"
+  },
+  "footerNote": "fixture footer note"
+}

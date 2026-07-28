@@ -102,3 +102,30 @@ export function addRegistryUrl(
   const query = new URLSearchParams({ index: url.href, alias: registry.alias });
   return `vscode://${extension}/add-registry?${query.toString()}`;
 }
+
+/**
+ * A bundle member's `id` resolved to the reference the index stores.
+ *
+ * grim writes members relative to the bundle itself — `../skills/grim-usage:0`
+ * — so a member published alongside its bundle stays correct wherever the
+ * whole namespace is mirrored. The catalog keys on absolute, untagged refs,
+ * which is what this returns; an id that is already absolute passes through
+ * with only its tag or digest removed.
+ */
+export function resolveMemberRef(bundleRef: string, id: string): string {
+  const pinned = id.split("@")[0] ?? id;
+  // A tag is a colon *after* the last slash — `localhost:5000/x` is a host,
+  // not a tag.
+  const slash = pinned.lastIndexOf("/");
+  const colon = pinned.lastIndexOf(":");
+  const ref = colon > slash ? pinned.slice(0, colon) : pinned;
+  if (!ref.startsWith(".")) return ref;
+
+  // Relative: resolve against the directory the bundle itself lives in.
+  const segments = bundleRef.split("/").slice(0, -1);
+  for (const segment of ref.split("/")) {
+    if (segment === "..") segments.pop();
+    else if (segment !== "." && segment !== "") segments.push(segment);
+  }
+  return segments.join("/");
+}

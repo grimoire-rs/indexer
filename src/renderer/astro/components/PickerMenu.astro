@@ -1,0 +1,68 @@
+---
+// The leading segment of a command bar: a `<details>` menu that swaps which
+// command the field beside it shows. Used twice — platform for the installer,
+// scope for the registry add — because the two bars differ only in what the
+// choices mean and which icon set draws them.
+//
+// The trigger carries every glyph and shows one; `hidden` picks it, and
+// `Base.astro`'s `[data-os-switch]` handler moves it. That handler is generic
+// over bars, so this component ships no script of its own.
+//
+// Icons arrive one of two ways and both render to static SVG at build time:
+// `path` for a `@mdi/js` brand mark, `Icon` for a Lucide component. Lucide
+// carries no brand marks and MDI is not the set the rest of the site draws
+// with, so neither alone covers both bars.
+import { ChevronDown } from "lucide-preact";
+import { BrandMark } from "./BrandMark.tsx";
+
+export interface Choice {
+  /** Shown in the menu, and matched against `data-os-glyph` when picking. */
+  name: string;
+  /** What the field shows and copies once this choice is picked. */
+  command: string;
+  /** `@mdi/js` path string. */
+  path?: string;
+  /** Lucide component, taking a `size` prop. */
+  Icon?: (props: { size?: number }) => unknown;
+}
+
+interface Props {
+  choices: Choice[];
+  /** Accessible name for the trigger, e.g. "Choose your platform". */
+  label: string;
+  /** Short trigger tooltip, e.g. "Platform". */
+  title: string;
+}
+const { choices, label, title } = Astro.props;
+---
+
+<details class="os-menu">
+  <summary title={title} aria-label={label}>
+    {
+      choices.map((choice, i) => (
+        <span class="os-glyph" data-os-glyph={choice.name} hidden={i > 0}>
+          {choice.path ? <BrandMark path={choice.path} /> : choice.Icon && <choice.Icon size={16} />}
+        </span>
+      ))
+    }
+    <ChevronDown size={12} aria-hidden="true" />
+  </summary>
+  <ul role="menu">
+    {
+      choices.map((choice, i) => (
+        <li>
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={i === 0 ? "true" : "false"}
+            data-os-pick={choice.command}
+            data-os-name={choice.name}
+          >
+            {choice.path ? <BrandMark path={choice.path} /> : choice.Icon && <choice.Icon size={16} />}
+            <span>{choice.name}</span>
+          </button>
+        </li>
+      ))
+    }
+  </ul>
+</details>

@@ -7,7 +7,11 @@
 // than one that silently does nothing when clicked.
 import { describe, expect, it } from "vitest";
 
-import { addRegistryUrl, vscodeUrl } from "../../src/renderer/astro/lib/catalog.js";
+import {
+  addRegistryUrl,
+  resolveMemberRef,
+  vscodeUrl,
+} from "../../src/renderer/astro/lib/catalog.js";
 
 const EXT = "grimoire-rs.grimoire-vscode";
 
@@ -57,5 +61,33 @@ describe("vscodeUrl", () => {
 
   it("is null when no extension is configured", () => {
     expect(vscodeUrl(null, "ghcr.io/acme/skills/foo")).toBeNull();
+  });
+});
+
+describe("resolveMemberRef", () => {
+  const BUNDLE = "ghcr.io/acme/bundles/starter-pack";
+
+  it("resolves the relative ids grim writes into a bundle", () => {
+    // Relative so a mirrored namespace keeps working; the catalog keys on the
+    // absolute, untagged ref.
+    expect(resolveMemberRef(BUNDLE, "../skills/code-review:0")).toBe(
+      "ghcr.io/acme/skills/code-review",
+    );
+    expect(resolveMemberRef(BUNDLE, "./sibling:1.2.3")).toBe("ghcr.io/acme/bundles/sibling");
+    expect(resolveMemberRef(BUNDLE, "../../other/thing")).toBe("ghcr.io/other/thing");
+  });
+
+  it("passes an absolute id through, tag and digest stripped", () => {
+    expect(resolveMemberRef(BUNDLE, "ghcr.io/other/elsewhere:2")).toBe("ghcr.io/other/elsewhere");
+    expect(resolveMemberRef(BUNDLE, "ghcr.io/other/elsewhere@sha256:abc")).toBe(
+      "ghcr.io/other/elsewhere",
+    );
+  });
+
+  it("does not mistake a registry port for a tag", () => {
+    expect(resolveMemberRef("localhost:5000/acme/bundles/x", "../skills/y:0")).toBe(
+      "localhost:5000/acme/skills/y",
+    );
+    expect(resolveMemberRef(BUNDLE, "localhost:5000/acme/y")).toBe("localhost:5000/acme/y");
   });
 });

@@ -2,13 +2,31 @@
 // Frozen public URL: /p/<namespace>/<name>/. grim resolves against it, the
 // VS Code deep link points at it, and search engines index it — the route
 // shape is a contract, not an implementation detail.
+import { ChevronRight, FolderRoot, Globe, Image, ImageOff, Scale, User } from "lucide-preact";
 import Base from "../../layouts/Base.astro";
 import VersionMenu from "../../components/VersionMenu.astro";
-import CopyButton from "../../components/CopyButton.astro";
+import CommandField from "../../components/CommandField.astro";
+import PickerMenu from "../../components/PickerMenu.astro";
+import { BrandMark } from "../../components/BrandMark.tsx";
+import {
+  mdiBitbucket,
+  mdiGit,
+  mdiGithub,
+  mdiGitlab,
+  mdiMicrosoftVisualStudioCode,
+} from "@mdi/js";
 import { withBase } from "../../lib/base";
-import { compareVersions, versionCascade, vscodeUrl, type CatalogPackage } from "../../lib/catalog";
+import { SHIKI_THEMES } from "../../lib/code";
+import {
+  compareVersions,
+  resolveMemberRef,
+  versionCascade,
+  vscodeUrl,
+  type CatalogPackage,
+} from "../../lib/catalog";
 import { data } from "../../lib/data";
 import { getEntry, render } from "astro:content";
+import { Code } from "astro:components";
 
 export function getStaticPaths() {
   return data.packages.map((pkg) => ({
@@ -17,7 +35,7 @@ export function getStaticPaths() {
   }));
 }
 
-const { config } = data;
+const { config, packages } = data;
 const { pkg } = Astro.props as { pkg: CatalogPackage };
 const id = `${pkg.namespace}/${pkg.name}`;
 
@@ -26,14 +44,72 @@ const changelogEntry = await getEntry("changelogs", id);
 const Readme = readmeEntry ? (await render(readmeEntry)).Content : null;
 const Changelog = changelogEntry ? (await render(changelogEntry)).Content : null;
 
+// What the artifact actually is, as opposed to what its README says about
+// itself. Three shapes, one per kind family: a skill, rule or agent carries
+// its entry-point markdown; a bundle carries the list it installs; an MCP
+// server carries its descriptor. `enrich` writes whichever applies.
+const contentsEntry = await getEntry("contents", id);
+const Contents = contentsEntry ? (await render(contentsEntry)).Content : null;
+const contentsData = (await getEntry("contentData", id))?.data as
+  | { members?: { kind?: string; name?: string; id?: string }[] }
+  | undefined;
+
+// Members resolved against this index: a member published elsewhere has no
+// page here, so it is named without a link rather than linked into a 404.
+const memberList = contentsData?.members ?? [];
+const members = memberList.map((member) => {
+  const ref = member.id ? resolveMemberRef(pkg.ref, member.id) : null;
+  const target = ref ? packages.find((p) => p.ref === ref) : undefined;
+  return {
+    kind: member.kind ?? "",
+    name: member.name ?? ref ?? "",
+    ref,
+    href: target ? withBase(`/p/${target.namespace}/${target.name}/`) : null,
+  };
+});
+
 const tags = [...(pkg.tags ?? [])].sort(compareVersions);
 const cascade = versionCascade(pkg.version, tags);
 const older = tags.filter((t) => !cascade.includes(t));
+// Highlight what an untagged `grim add` actually installs. That is `latest`
+// wherever it was published — the exact release is one of the things latest
+// currently points at, not the default.
+const defaultTag = cascade.includes("latest") ? "latest" : (pkg.version ?? cascade[0]);
+
+// The forge the repository link points at, drawn as its own mark. `mdiGit`
+// is the honest fallback for a host with no brand in the set — it still says
+// "source repository", where a generic branch glyph said nothing.
+const FORGES = [
+  { match: /(^|\.)github\.com$/i, path: mdiGithub },
+  { match: /(^|\.)gitlab\.[a-z.]+$/i, path: mdiGitlab },
+  { match: /(^|\.)bitbucket\.org$/i, path: mdiBitbucket },
+];
+const repoHost = URL.canParse(pkg.repository ?? "") ? new URL(pkg.repository!).hostname : "";
+const repoMark = FORGES.find((f) => f.match.test(repoHost))?.path ?? mdiGit;
+
+// Which tabs have anything behind them. An empty one is offered but not
+// selectable — greyed in the ribbon rather than clickable through to a
+// sentence apologising for itself. The first tab that does have content is
+// the one that opens, so a package with no README does not land on a blank.
+const filled = {
+  readme: Readme !== null,
+  contents: Contents !== null || members.length > 0 || contentsData !== undefined,
+  changelog: Changelog !== null,
+};
+const openTab = (["readme", "contents", "changelog"] as const).find((tab) => filled[tab]) ?? null;
 
 const title = pkg.title ?? pkg.name;
 const description = pkg.summary ?? pkg.description ?? `${pkg.kind} package: ${pkg.ref}`;
 const vscode = vscodeUrl(config.vscodeExtension, pkg.ref);
 const addCommand = `grim add ${pkg.ref}`;
+
+// The same two-way scope choice the package cards offer and the hero's
+// registry bar draws, with the same two glyphs and the same order — global
+// first, because it needs no project open.
+const scopeChoices = [
+  { name: "Global", command: `grim add --global ${pkg.ref}`, Icon: Globe },
+  { name: "Project", command: addCommand, Icon: FolderRoot },
+];
 ---
 
 <Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo}>
@@ -41,7 +117,18 @@ const addCommand = `grim add ${pkg.ref}`;
     <header class="detail-head">
       {
         pkg.logo ? (
-          <img class="tile logo" src={withBase(pkg.logo)} alt="" />
+          // The placeholder ships in the markup and the image fades in over
+          // it, so a slow or failing load never flashes a broken glyph. The
+          // slot starts `loading`; the handler in `Base.astro` moves it to
+          // `ready` or `broken`. Icon mirrors `LogoMark` in `Catalog.tsx`.
+          <span class="tile logo-slot" data-static data-state="loading">
+            {/* Both marks ship; CSS shows one per state. The card grid picks
+                between them in Preact instead, but this page has to settle
+                its placeholder before any script runs. */}
+            <Image class="logo-mark mark-loading" aria-hidden="true" />
+            <ImageOff class="logo-mark mark-broken" aria-hidden="true" />
+            <img src={withBase(pkg.logo)} alt="" />
+          </span>
         ) : (
           <div class="tile letter" style={`background: var(--kind-${pkg.kind}, var(--muted))`}>
             {pkg.name[0]?.toUpperCase()}
@@ -64,22 +151,120 @@ const addCommand = `grim add ${pkg.ref}`;
       )
     }
 
-    <div class="install-row">
-      <code>{addCommand}</code>
-      <CopyButton value={addCommand} label="Copy the install command" />
+    <div class="cmd-bar" data-os-switch data-os-noun={`add command for ${pkg.name}`}>
+      <PickerMenu choices={scopeChoices} title="Scope" label="Choose the scope" />
+      <CommandField
+        value={scopeChoices[0].command}
+        name={`${scopeChoices[0].name} add command for ${pkg.name}`}
+        label="Copy the add command"
+      />
+      {
+        vscode && (
+          <a
+            class="seg brand-link"
+            href={vscode}
+            title="Open in VS Code"
+            aria-label={`Open ${pkg.name} in VS Code`}
+          >
+            <BrandMark path={mdiMicrosoftVisualStudioCode} />
+          </a>
+        )
+      }
     </div>
 
     <div class="detail-body">
       <main class="detail-main">
-        {Readme ? <Readme /> : <p class="empty">No README available.</p>}
+        {/* Radio tabs, not a scripted tablist: the ribbon works on a page
+            whose JS never ran, and a radio group already has the keyboard
+            behaviour tabs want (arrows move, only one selected). The inputs
+            are visually hidden rather than `hidden`, which would take them
+            out of the focus order along with the pixels. */}
+        {/* All three tabs are always offered — a ribbon that grows a tab per
+            package makes the panel a different shape on every page. An empty
+            one is disabled instead: greyed, not clickable through to a
+            sentence apologising for itself. */}
+        <input
+          type="radio"
+          name="panel"
+          id="panel-readme"
+          class="sr-only"
+          checked={openTab === "readme"}
+          disabled={!filled.readme}
+        />
+        <input
+          type="radio"
+          name="panel"
+          id="panel-contents"
+          class="sr-only"
+          checked={openTab === "contents"}
+          disabled={!filled.contents}
+        />
+        <input
+          type="radio"
+          name="panel"
+          id="panel-changelog"
+          class="sr-only"
+          checked={openTab === "changelog"}
+          disabled={!filled.changelog}
+        />
+        {/* The greyed tab says it is not for clicking; the tooltip says why,
+            so the answer is one hover away instead of a panel of its own. */}
+        <div class="ribbon">
+          <label for="panel-readme" title={filled.readme ? undefined : "no readme available"}>
+            Readme
+          </label>
+          <label for="panel-contents" title={filled.contents ? undefined : "no contents available"}>
+            Contents
+          </label>
+          <label
+            for="panel-changelog"
+            title={filled.changelog ? undefined : "no changelog available"}
+          >
+            Changelog
+          </label>
+        </div>
+        {filled.readme && (
+          <div class="prose tab-panel" id="tab-readme">
+            <Readme />
+          </div>
+        )}
         {
-          Changelog && (
-            <details class="changelog">
-              <summary>Changelog</summary>
-              <Changelog />
-            </details>
+          filled.contents && (
+            <div class="prose tab-panel" id="tab-contents">
+              {Contents ? (
+                <Contents />
+              ) : members.length > 0 ? (
+                <ul class="members">
+                  {members.map((member) => (
+                    <li>
+                      {member.href ? (
+                        <a href={member.href}>{member.name}</a>
+                      ) : (
+                        <span>{member.name}</span>
+                      )}
+                      <span class={`badge kind-${member.kind}`}>{member.kind}</span>
+                      <code>{member.ref}</code>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Code
+                  code={JSON.stringify(contentsData, null, 2)}
+                  lang="json"
+                  themes={SHIKI_THEMES}
+                />
+              )}
+            </div>
           )
         }
+        {filled.changelog && (
+          <div class="prose tab-panel" id="tab-changelog">
+            <Changelog />
+          </div>
+        )}
+        {/* Nothing anywhere: one statement in the middle of the panel, rather
+            than three tabs each denying it separately. */}
+        {openTab === null && <p class="panel-empty">No content available.</p>}
       </main>
 
       <aside class="detail-rail">
@@ -88,12 +273,15 @@ const addCommand = `grim add ${pkg.ref}`;
             <h2>Versions</h2>
             <div class="cascade">
               {cascade.map((tag) => (
-                <VersionMenu pkgRef={pkg.ref} tag={tag} current={tag === pkg.version} />
+                <VersionMenu pkgRef={pkg.ref} tag={tag} current={tag === defaultTag} />
               ))}
             </div>
             {older.length > 0 && (
               <details class="older">
-                <summary>{older.length} older</summary>
+                <summary>
+                  <ChevronRight size={14} aria-hidden="true" />
+                  older versions
+                </summary>
                 <div class="cascade">
                   {older.map((tag) => (
                     <VersionMenu pkgRef={pkg.ref} tag={tag} />
@@ -109,13 +297,19 @@ const addCommand = `grim add ${pkg.ref}`;
           <dl>
             {pkg.license && (
               <>
-                <dt>License</dt>
+                <dt>
+                  <Scale size={15} aria-hidden="true" />
+                  License
+                </dt>
                 <dd>{pkg.license}</dd>
               </>
             )}
             {pkg.repository && (
               <>
-                <dt>Repository</dt>
+                <dt>
+                  <BrandMark path={repoMark} size={15} />
+                  Repository
+                </dt>
                 <dd>
                   <a href={pkg.repository} target="_blank" rel="noopener noreferrer">
                     source
@@ -125,7 +319,10 @@ const addCommand = `grim add ${pkg.ref}`;
             )}
             {pkg.owner?.github && (
               <>
-                <dt>Owner</dt>
+                <dt>
+                  <User size={15} aria-hidden="true" />
+                  Owner
+                </dt>
                 <dd>
                   <a
                     href={`https://github.com/${pkg.owner.github}`}
@@ -141,14 +338,18 @@ const addCommand = `grim add ${pkg.ref}`;
           {pkg.keywords && pkg.keywords.length > 0 && (
             <ul class="keywords">
               {pkg.keywords.map((k) => (
-                <li>{k}</li>
+                <li>
+                  {/* Back to the catalog with the term already in the search
+                      box — a keyword is only useful if it leads somewhere. */}
+                  <a
+                    href={withBase(`/?q=${encodeURIComponent(k)}`)}
+                    title={`Find packages tagged ${k}`}
+                  >
+                    {k}
+                  </a>
+                </li>
               ))}
             </ul>
-          )}
-          {vscode && (
-            <a class="vscode-link" href={vscode}>
-              Open in VS Code
-            </a>
           )}
         </section>
       </aside>
@@ -247,20 +448,6 @@ const addCommand = `grim add ${pkg.ref}`;
     padding: 0.6rem 0.9rem;
     font-weight: 600;
   }
-  .install-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.6rem 0.9rem;
-  }
-  .install-row code {
-    font-size: 0.9rem;
-    overflow-x: auto;
-  }
   .detail-body {
     display: grid;
     grid-template-columns: 1fr 18rem;
@@ -279,20 +466,122 @@ const addCommand = `grim add ${pkg.ref}`;
     border-radius: 10px;
     padding: 1.25rem 1.5rem;
   }
+  /* Markdown opens with its own heading, whose margin lands on top of the
+     panel padding and reads as a hole. Every panel sets its own top edge. */
+  .prose > :global(:first-child) {
+    margin-block-start: 0;
+  }
   .detail-main :global(img) {
     max-width: 100%;
   }
   .detail-main :global(pre) {
     overflow-x: auto;
   }
-  .changelog {
-    margin-top: 1.5rem;
-    border-top: 1px solid var(--border);
-    padding-top: 1rem;
+  /* Full-bleed inside the panel's padding, so the rule under it reads as the
+     panel's own top edge rather than a line floating in the content. */
+  .ribbon {
+    display: flex;
+    gap: 1.25rem;
+    margin: -1.25rem -1.5rem 1.25rem;
+    padding: 0 1.5rem;
+    border-bottom: 1px solid var(--border);
   }
-  .changelog summary {
+  .ribbon label {
+    padding: 0.7rem 0;
+    margin-bottom: -1px; /* the active underline sits on the panel rule */
+    border-bottom: 2px solid transparent;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
     cursor: pointer;
-    font-weight: 600;
+  }
+  .ribbon label:hover {
+    color: var(--fg);
+  }
+  /* Nothing behind it. Still shown, so the ribbon is the same shape on every
+     package page, but visibly not a thing to click. */
+  #panel-readme:disabled ~ .ribbon label[for="panel-readme"],
+  #panel-contents:disabled ~ .ribbon label[for="panel-contents"],
+  #panel-changelog:disabled ~ .ribbon label[for="panel-changelog"] {
+    opacity: 0.4;
+    cursor: default;
+  }
+  #panel-readme:disabled ~ .ribbon label[for="panel-readme"]:hover,
+  #panel-contents:disabled ~ .ribbon label[for="panel-contents"]:hover,
+  #panel-changelog:disabled ~ .ribbon label[for="panel-changelog"]:hover {
+    color: var(--muted);
+  }
+  /* Every tab empty: say it once, in the middle. */
+  .panel-empty {
+    display: grid;
+    place-items: center;
+    min-height: 11rem;
+    margin: 0;
+    color: var(--muted);
+  }
+  .tab-panel {
+    display: none;
+  }
+  #panel-readme:checked ~ #tab-readme,
+  #panel-contents:checked ~ #tab-contents,
+  #panel-changelog:checked ~ #tab-changelog {
+    display: block;
+  }
+  #panel-readme:checked ~ .ribbon label[for="panel-readme"],
+  #panel-contents:checked ~ .ribbon label[for="panel-contents"],
+  #panel-changelog:checked ~ .ribbon label[for="panel-changelog"] {
+    color: var(--fg);
+    border-bottom-color: var(--accent);
+  }
+  /* The input carries the focus, the label shows it. */
+  #panel-readme:focus-visible ~ .ribbon label[for="panel-readme"],
+  #panel-contents:focus-visible ~ .ribbon label[for="panel-contents"],
+  #panel-changelog:focus-visible ~ .ribbon label[for="panel-changelog"] {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* A bundle's member list: what it installs, one row each. A grid, not a
+     row of flex items — names and badges of different widths have to line up
+     down the column, which is the whole reason to list them. `subgrid` puts
+     each <li>'s three cells on the parent's tracks. */
+  .members {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 0.45rem 0.75rem;
+    align-items: center;
+  }
+  .members li {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-items: center;
+  }
+  /* A grid item stretches by default, so a short badge grew to the width of
+     the longest one in the column and its pill outran its own text. */
+  .members .badge {
+    justify-self: start;
+  }
+  .members code {
+    color: var(--muted);
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+  }
+  /* Narrow: three columns of a long ref do not fit, so each member becomes
+     its own block instead of a squeezed row. */
+  @media (max-width: 34rem) {
+    .members,
+    .members li {
+      grid-template-columns: auto 1fr;
+    }
+    .members li > code {
+      grid-column: 1 / -1;
+    }
   }
   .detail-rail {
     display: flex;
@@ -305,6 +594,8 @@ const addCommand = `grim add ${pkg.ref}`;
     border-radius: 10px;
     padding: 1rem;
   }
+  /* Panel label. The main panel's ribbon labels match this by hand — they
+     are <label>s, not headings, so they cannot join the selector. */
   .detail-rail h2 {
     margin: 0 0 0.6rem;
     font-size: 0.85rem;
@@ -320,31 +611,69 @@ const addCommand = `grim add ${pkg.ref}`;
     gap: 0.3rem;
   }
   .older {
-    margin-top: 0.5rem;
+    margin-top: 0.7rem;
   }
-  .older[open] > summary {
-    margin-bottom: 0.5rem;
-  }
+  /* The UA marker is a glyph that flips between two characters with no
+     in-between; a real chevron can turn. `list-style` kills it everywhere
+     but WebKit, which needs its own pseudo-element. Closed points right at
+     the row it would open, open points down at it — a quarter turn, the way
+     a file tree behaves. */
   .older > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    list-style: none;
+    padding-block: 0.15rem;
     cursor: pointer;
     font-size: 0.8rem;
     color: var(--muted);
   }
+  .older > summary::-webkit-details-marker {
+    display: none;
+  }
   .older > summary:hover {
     color: var(--fg);
+  }
+  .older > summary :global(svg) {
+    flex-shrink: 0;
+    transition: transform 160ms ease;
+  }
+  .older[open] > summary :global(svg) {
+    transform: rotate(90deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .older > summary :global(svg) {
+      transition: none;
+    }
+  }
+  .older[open] > summary {
+    margin-bottom: 0.5rem;
   }
   dl {
     margin: 0;
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 0.3rem 0.6rem;
+    /* A row pairs a small muted label with a larger value. Grid's default
+       `stretch` sits each at the top of its own box, so the size difference
+       reads as two lines that never quite line up. */
+    align-items: center;
+    gap: 0.45rem 0.7rem;
   }
   dt {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
     color: var(--muted);
     font-size: 0.85rem;
   }
+  /* Every icon is the same box, so the label text lands on one x without an
+     icon column of its own. */
+  dt :global(svg) {
+    flex-shrink: 0;
+  }
   dd {
     margin: 0;
+    font-size: 0.9rem;
   }
   .keywords {
     list-style: none;
@@ -354,15 +683,34 @@ const addCommand = `grim add ${pkg.ref}`;
     flex-wrap: wrap;
     gap: 0.35rem;
   }
-  .keywords li {
-    background: var(--chip-bg);
+  /* The chip is the link, not a box around it — otherwise the padding is
+     dead space the pointer falls through. Bordered and hovering to accent
+     like the version pills beside it and the kind chips on the catalog:
+     every other pill on the site answers a pointer the same way, and one
+     that answers differently reads as a different kind of thing. */
+  .keywords a {
+    display: inline-block;
+    border: 1px solid var(--border);
     border-radius: 999px;
+    background: var(--chip-bg);
     padding: 0.15rem 0.6rem;
     font-size: 0.78rem;
+    color: var(--muted);
+    text-decoration: none;
+    transition:
+      color 120ms ease,
+      border-color 120ms ease,
+      background-color 120ms ease;
   }
-  .vscode-link {
-    display: inline-block;
-    margin-top: 1rem;
-    font-size: 0.9rem;
+  .keywords a:hover,
+  .keywords a:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .keywords a {
+      transition: none;
+    }
   }
 </style>

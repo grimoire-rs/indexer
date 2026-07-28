@@ -1,9 +1,19 @@
 ---
 import Base from "../layouts/Base.astro";
 import Catalog from "../components/Catalog.tsx";
-import CopyButton from "../components/CopyButton.astro";
+import CommandField from "../components/CommandField.astro";
+import PickerMenu from "../components/PickerMenu.astro";
+import { BrandMark } from "../components/BrandMark.tsx";
+import { FolderRoot, Globe } from "lucide-preact";
 import { addRegistryUrl } from "../lib/catalog";
 import { data } from "../lib/data";
+import {
+  mdiApple,
+  mdiConsole,
+  mdiMicrosoftVisualStudioCode,
+  mdiMicrosoftWindows,
+  mdiPenguin,
+} from "@mdi/js";
 
 const { config, packages } = data;
 
@@ -12,24 +22,54 @@ const { config, packages } = data;
 // confirmation. Null whenever the link would not work — see `addRegistryUrl`.
 const addRegistry = addRegistryUrl(config.vscodeExtension, config.registry);
 
-// The "add this index" ergonomic (`helm repo add`): the command a visitor
-// needs to point their own grim at *this* index, plus the equivalent
-// hand-edit. Absent `registry` config means the index has no public URL to
-// hand out, so the block is omitted rather than guessed.
-const registryRows = config.registry
+// The extension's own marketplace page — the one thing on this page that
+// helps a visitor who does not have it installed yet.
+const marketplace = config.vscodeExtension
+  ? `https://marketplace.visualstudio.com/items?itemName=${config.vscodeExtension}`
+  : null;
+
+// The "add this index" ergonomic (`helm repo add`): the one command a
+// visitor needs to point their own grim at *this* index. Absent `registry`
+// config means the index has no public URL to hand out, so the block is
+// omitted rather than guessed.
+const addCommand = config.registry
+  ? `grim config registry add ${config.registry.alias} --index ${config.registry.index}`
+  : null;
+
+// One installer row usually covers several platforms ("Linux / macOS"), and
+// the toggle reads better as the platforms themselves than as the config's
+// row labels — so a row expands into one button per platform it names, all
+// pointing at the same command. A row naming none (a custom label) keeps a
+// single generic button, so an unrecognized platform is never dropped.
+//
+// `mdiPenguin`, not `mdiLinux`: Tux's own silhouette is a solid mass that
+// reads as an indistinct blob at 16px, where the plainer penguin keeps its
+// outline. Still a brand mark from the same set, so it sits beside Apple
+// and Windows without a weight change.
+const PLATFORMS = [
+  { match: /linux/i, name: "Linux", path: mdiPenguin },
+  { match: /mac|darwin|osx|apple/i, name: "macOS", path: mdiApple },
+  { match: /win/i, name: "Windows", path: mdiMicrosoftWindows },
+];
+const installChoices = config.install.flatMap((row) => {
+  const hits = PLATFORMS.filter((p) => p.match.test(row.os));
+  return hits.length > 0
+    ? hits.map((p) => ({ name: p.name, path: p.path, command: row.command }))
+    : [{ name: row.os, path: mdiConsole, command: row.command }];
+});
+
+// Registry scope, the same two-way choice the package cards offer and drawn
+// with the same two Lucide glyphs. Global leads: someone arriving from an
+// index website wants this index available everywhere, not wired into
+// whichever directory happens to be open — and it is also the scope that
+// works with no project at all.
+// `--global` leads rather than trails: it is a top-level flag, and appended
+// after a long `--index <url>` it fell off the end of the line, so switching
+// scope looked like it changed nothing at all.
+const scopeChoices = addCommand
   ? [
-      {
-        os: "add index",
-        command: `grim config registry add ${config.registry.alias} --index ${config.registry.index}`,
-        block: false,
-        label: "Copy the registry add command",
-      },
-      {
-        os: "grimoire.toml",
-        command: `[[registries]]\nalias = "${config.registry.alias}"\nindex = "${config.registry.index}"`,
-        block: true,
-        label: "Copy the registries TOML entry",
-      },
+      { name: "Global", command: `grim --global ${addCommand.slice("grim ".length)}`, Icon: Globe },
+      { name: "Project", command: addCommand, Icon: FolderRoot },
     ]
   : [];
 ---
@@ -43,41 +83,95 @@ const registryRows = config.registry
         config.installDocsUrl && (
           <Fragment>
             {" "}
-            Copy an <code>add</code> command below — or{" "}
-            <a href={config.installDocsUrl}>install grim</a> first.
+            <a href={config.installDocsUrl}>Install grim</a>, add this index,
+            then <code>grim add</code> anything below.
           </Fragment>
         )
       }
     </p>
+    {/* Beside the description, not under it: getting set up is a sidebar to
+        reading what this index is. Two labelled rows of one shape — the
+        command, then the ways to act on it, inside a single border. */}
     {
-      (config.install.length > 0 || registryRows.length > 0) && (
-        <div class="install">
-          {config.install.map((row) => (
-            <div class="install-row">
-              <span class="os">{row.os}</span>
-              <code>{row.command}</code>
-              <CopyButton value={row.command} label={`Copy the ${row.os} install command`} />
-            </div>
-          ))}
-          {registryRows.map((row) => (
-            <div class="install-row">
-              <span class="os">{row.os}</span>
-              <code class:list={[{ block: row.block }]}>{row.command}</code>
-              <CopyButton value={row.command} label={row.label} />
-            </div>
-          ))}
-          {addRegistry && (
-            <div class="install-row">
-              <span class="os">VS Code</span>
-              <a class="vscode-add" href={addRegistry}>
-                Add this index to VS Code
-              </a>
-            </div>
+      (installChoices.length > 0 || addCommand || addRegistry) && (
+        <div class="hero-side">
+          {installChoices.length > 0 && (
+            <Fragment>
+              <span class="side-label">install grim</span>
+              <div class="cmd-bar" data-os-switch data-os-detect data-os-noun="install command">
+                {installChoices.length > 1 && (
+                  <PickerMenu
+                    choices={installChoices}
+                    title="Platform"
+                    label="Choose your platform"
+                  />
+                )}
+                <CommandField
+                  value={installChoices[0].command}
+                  name={`${installChoices[0].name} install command`}
+                  label="Copy the install command"
+                />
+                {marketplace && (
+                  <a
+                    class="seg brand-link"
+                    href={marketplace}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Get the VS Code extension"
+                    aria-label="Get the VS Code extension from the marketplace"
+                  >
+                    <BrandMark path={mdiMicrosoftVisualStudioCode} />
+                  </a>
+                )}
+              </div>
+            </Fragment>
+          )}
+          {(addCommand || addRegistry) && (
+            <Fragment>
+              <span class="side-label">add registry</span>
+              <div class="cmd-bar" data-os-switch data-os-noun="registry add command">
+                {scopeChoices.length > 0 && (
+                  <PickerMenu choices={scopeChoices} title="Scope" label="Choose the scope" />
+                )}
+                {scopeChoices.length > 0 && (
+                  <CommandField
+                    value={scopeChoices[0].command}
+                    name={`${scopeChoices[0].name} registry add command`}
+                    label="Copy the registry add command"
+                  />
+                )}
+                {addRegistry && (
+                  <a
+                    class="seg brand-link"
+                    href={addRegistry}
+                    title="Add this index via VS Code"
+                    aria-label="Add this index via VS Code"
+                  >
+                    <BrandMark path={mdiMicrosoftVisualStudioCode} />
+                  </a>
+                )}
+              </div>
+            </Fragment>
           )}
         </div>
       )
     }
   </div>
+
+  {/* Right after the bar, on purpose: the layout's picker script sits at the
+      end of the document, past the whole catalog, and the browser can paint
+      before it runs — long enough to show a Linux command to someone on
+      Windows. Here it lands in the same parse as the hero. A platform the
+      bar does not offer leaves the configured first choice alone. */}
+  <script is:inline>
+    for (const bar of document.querySelectorAll("[data-os-detect]")) {
+      const host = window.__grimHostOs();
+      const match = [...bar.querySelectorAll("[data-os-pick]")].find(
+        (p) => p.dataset.osName === host,
+      );
+      if (match) window.__grimPick(bar, match);
+    }
+  </script>
 
   <Catalog client:load packages={packages} vscodeExtension={config.vscodeExtension} />
 </Base>

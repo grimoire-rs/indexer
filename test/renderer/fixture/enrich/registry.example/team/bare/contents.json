@@ -1,0 +1,10 @@
+{
+  "description": "The fixture MCP server.",
+  "server": {
+    "transport": "stdio",
+    "command": "grim",
+    "args": [
+      "mcp"
+    ]
+  }
+}

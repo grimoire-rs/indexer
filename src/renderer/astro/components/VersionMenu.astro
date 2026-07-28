@@ -11,7 +11,10 @@ interface Props {
   current?: boolean;
 }
 const { pkgRef, tag, current = false } = Astro.props;
-const pinned = `${pkgRef}:${tag}`;
+// `:latest` is what every grim command already resolves to with no tag, so
+// spelling it out is noise the visitor has to delete — the bare ref is the
+// same request. Every other tag pins and has to survive the copy.
+const pinned = tag === "latest" ? pkgRef : `${pkgRef}:${tag}`;
 const menuId = `vm-${tag.replace(/[^a-z0-9]+/gi, "-")}`;
 const commands: [string, string][] = [
   ["copy reference", pinned],
@@ -26,6 +29,7 @@ const commands: [string, string][] = [
   type="button"
   class:list={["version", { current }]}
   data-copy={pinned}
+  data-copy-name={tag === "latest" ? "reference" : `pinned ${tag}`}
   data-menu={menuId}
   aria-current={current ? "true" : undefined}
   title={`Copy ${pinned} — right-click for commands`}>{tag}</button
@@ -34,7 +38,7 @@ const commands: [string, string][] = [
 <div popover="manual" id={menuId} class="version-menu">
   {
     commands.map(([label, cmd]) => (
-      <button type="button" class="cmd" data-copy={cmd} title={cmd}>
+      <button type="button" class="cmd" data-copy={cmd} data-copy-name={`grim ${label}`} title={cmd}>
         <span>{label}</span>
       </button>
     ))

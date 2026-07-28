@@ -26,6 +26,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && mkdir -p dist/renderer/astro dist/renderer/public && cp -r src/renderer/astro/. dist/renderer/astro/ && cp -r src/renderer/public/. dist/renderer/public/",
+    "dev": "npm run build && node scripts/dev.mjs",
+    "dev:smoke": "npm run build && node scripts/dev.mjs --smoke",
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
@@ -43,8 +45,10 @@
   "dependencies": {
     "@astrojs/preact": "^6.0.1",
     "@clack/prompts": "^1.7.0",
+    "@mdi/js": "^7.4.47",
     "astro": "^7.1.4",
     "commander": "^15.0.0",
+    "lucide-preact": "^1.27.0",
     "preact": "^10.29.7"
   },
   "repository": {

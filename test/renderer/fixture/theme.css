@@ -1,5 +1,10 @@
-/* User override file: unlayered, so it beats the layered defaults in both
-   schemes without !important. */
+/* Test probe, not a theme. `build.test.ts` passes `customCss: "theme.css"`
+   in its own config and asserts these exact values, so they are chosen to be
+   unmistakable rather than pleasant — an accent of rgb(1 2 3) is near-black.
+
+   Deliberately NOT referenced from `index.config.json`: that file is what
+   `npm run dev` renders, and wiring this in there paints every accent on the
+   review site — brand mark, card links, active tab, version ring — black. */
 :root {
   --accent: rgb(1 2 3);
 }

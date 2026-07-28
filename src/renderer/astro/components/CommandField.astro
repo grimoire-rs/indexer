@@ -1,0 +1,43 @@
+---
+// A command you copy by clicking it. The whole field is the button — there
+// is no separate copy control, just an icon at the right edge that swaps to
+// a green check on success. The click handler is the shared `[data-copy]`
+// listener in Base.astro.
+//
+// The icons are Preact components with no client directive, so Astro renders
+// them to static SVG at build time — no JavaScript ships for them.
+import { Check, Copy } from "lucide-preact";
+
+interface Props {
+  /** The command: shown, and copied verbatim. */
+  value: string;
+  /** Accessible name for the button — the visible text is the command. */
+  label: string;
+  /**
+   * What the copy toast calls this, e.g. `"Linux install command"`. A bar
+   * with a picker rewrites it on every pick, alongside `data-copy`.
+   */
+  name?: string;
+}
+const { value, label, name } = Astro.props;
+---
+
+<button
+  type="button"
+  class="cmd-field"
+  data-copy={value}
+  data-copy-name={name}
+  aria-label={label}
+>
+  <code>{value}</code>
+  {/* Both icons occupy one grid cell and cross-fade, so nothing reflows and
+      the check lands exactly where the copy glyph was. */}
+  <span class="cmd-icons" aria-hidden="true">
+    <Copy class="icon-idle" size={14} />
+    <Check class="icon-done" size={14} />
+  </span>
+  {/* The cross-fade is the only confirmation a sighted user gets;
+      `role="status"` makes it an implicit live region so the click is
+      announced too. */}
+  <span class="sr-only" role="status"></span>
+</button>

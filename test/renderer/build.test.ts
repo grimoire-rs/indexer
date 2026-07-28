@@ -20,12 +20,18 @@ const config: SiteConfig = {
   site: "https://index.example.test",
   brand: "acme package index",
   brandMark: "acme",
+  logo: "/logo.svg",
   description: "Fixture index description.",
   tagline: "Fixture tagline sentence.",
   docsUrl: "https://docs.example.test",
   installDocsUrl: "https://docs.example.test/install.html",
   repoUrl: "https://github.com/acme/index",
-  install: [{ os: "Linux", command: "curl -LsSf https://setup.example.test/sh | sh" }],
+  // Two rows, and the first names two platforms — the shape the picker
+  // actually ships with, so the platform toggle is exercised at all.
+  install: [
+    { os: "Linux / macOS", command: "curl -LsSf https://setup.example.test/sh | sh" },
+    { os: "Windows", command: "irm https://setup.example.test/ps1 | iex" },
+  ],
   vscodeExtension: "acme.acme-vscode",
   registry: { alias: "acme", index: "https://index.example.test" },
   footerNote: "fixture footer note",
@@ -42,7 +48,23 @@ interface Built {
   read(rel: string): Promise<string>;
 }
 
-async function render(site: string): Promise<Built> {
+/** The `n`th picker's `<summary>` — the trigger carrying every glyph. */
+function pickerSummary(n: number): string {
+  const found = [...indexHtml.matchAll(/<summary[^>]*>([\s\S]*?)<\/summary>/g)].map((m) => m[1]!);
+  const summary = found[n];
+  if (summary === undefined) throw new Error(`no picker ${n} (found ${found.length})`);
+  return summary;
+}
+
+/** The `n`th picker's choices, in the order it offers them. */
+function pickerNames(n: number): string[] {
+  const menus = [...indexHtml.matchAll(/<ul role="menu">([\s\S]*?)<\/ul>/g)].map((m) => m[1]!);
+  const menu = menus[n];
+  if (menu === undefined) throw new Error(`no picker ${n} (found ${menus.length})`);
+  return [...menu.matchAll(/data-os-name="([^"]+)"/g)].map((m) => m[1]!);
+}
+
+async function render(site: string, overrides: SiteConfig = {}): Promise<Built> {
   // The shipping shape, deliberately: a bare directory in os.tmpdir() with
   // no `node_modules` anywhere on its parent chain. `npx @grimoire-rs/indexer
   // build` runs in exactly that, with no local install — so if the renderer
@@ -61,7 +83,7 @@ async function render(site: string): Promise<Built> {
     '{"name":"code-review"}\n',
   );
 
-  await buildSite({ root, outDir, config: { ...config, site } });
+  await buildSite({ root, outDir, config: { ...config, site, ...overrides } });
 
   const cssDir = path.join(outDir, "_astro");
   const cssFiles = (await fs.readdir(cssDir)).filter((f) => f.endsWith(".css"));
@@ -82,10 +104,13 @@ const EMITTED_FILES = [
   "index.html",
   "all.json",
   "p/github.com/acme/code-review/index.html",
+  "p/github.com/acme/starter-pack/index.html",
   "p/github.com/acme/old-helper/index.html",
   "p/registry.example/team/bare/index.html",
   "index/github.com/acme/code-review/metadata.json",
   "favicon.svg",
+  // The index repo's own `public/` layer, on top of the packaged one.
+  "logo.svg",
 ];
 
 /**
@@ -93,9 +118,17 @@ const EMITTED_FILES = [
  * and `src`, but also `content` (og:image) and the `component-url` /
  * `renderer-url` pair Astro puts on a hydrated island. Anything that starts
  * with `/` has to carry the base path; everything else already resolves.
+ *
+ * Deliberately still a catch-all rather than a list of URL attributes, so a
+ * newly emitted one cannot slip past unprefixed. `aria-*` is the one
+ * exclusion: those values are keys, ids and tokens, never paths — the search
+ * box's `aria-keyshortcuts="/"` is the literal slash key, and prefixing it
+ * would be nonsense.
  */
 function rootRelativeUrls(html: string): string[] {
-  return [...html.matchAll(/[a-z-]+="(\/[^"]*)"/gi)].map((m) => m[1]!);
+  return [...html.matchAll(/([a-z-]+)="(\/[^"]*)"/gi)]
+    .filter((m) => !m[1]!.startsWith("aria-"))
+    .map((m) => m[2]!);
 }
 
 /** Subpath deployment: base path `/index-repo/`. */
@@ -127,12 +160,9 @@ afterAll(async () => {
 
 describe("frozen URLs", () => {
   it("emits /p/<namespace>/<name>/ for every package", async () => {
-    for (const slug of [
-      "p/github.com/acme/code-review/index.html",
-      "p/github.com/acme/old-helper/index.html",
-      "p/registry.example/team/bare/index.html",
-    ]) {
-      await expect(readOut(slug)).resolves.toContain("<html");
+    const all = JSON.parse(await readOut("all.json")) as { namespace: string; name: string }[];
+    for (const p of all) {
+      await expect(readOut(`p/${p.namespace}/${p.name}/index.html`)).resolves.toContain("<html");
     }
   });
 
@@ -142,7 +172,14 @@ describe("frozen URLs", () => {
 
   it("keeps /all.json and the data tree Astro would otherwise empty", async () => {
     const all = JSON.parse(await readOut("all.json")) as { name: string }[];
-    expect(all.map((p) => p.name)).toEqual(["code-review", "old-helper", "bare"]);
+    expect(all.map((p) => p.name)).toEqual([
+      "code-review",
+      "starter-pack",
+      "rust-style",
+      "test-writer",
+      "old-helper",
+      "bare",
+    ]);
     await expect(readOut("index/github.com/acme/code-review/metadata.json")).resolves.toContain(
       "code-review",
     );
@@ -224,6 +261,24 @@ describe("config reaches the rendered HTML", () => {
     expect(indexHtml).toContain('content="Fixture index description."');
   });
 
+  // The header wordmark and the link preview want a real logo; a favicon is
+  // drawn to read at 16px and is neither.
+  it("shows the configured logo in the header, and prefers it for og:image", async () => {
+    expect(indexHtml).toMatch(/<a class="brand"[^>]*>\s*<img class="brand-logo" src="\/logo\.svg"/);
+    // Decorative — the brand text is right beside it.
+    expect(indexHtml).toMatch(/<img class="brand-logo"[^>]*alt=""/);
+    expect(indexHtml).toContain('<meta property="og:image" content="/logo.svg">');
+
+    // Unset, the header is text alone and og:image falls back to the favicon.
+    const plain = await render("https://index.example.test", { logo: null });
+    try {
+      expect(plain.indexHtml).not.toContain("brand-logo");
+      expect(plain.indexHtml).toContain('<meta property="og:image" content="/favicon.svg">');
+    } finally {
+      await fs.rm(plain.root, { recursive: true, force: true });
+    }
+  }, 300_000);
+
   it("renders the configured nav and footer links", () => {
     expect(indexHtml).toContain('href="https://docs.example.test"');
     expect(indexHtml).toContain('href="https://github.com/acme/index"');
@@ -238,12 +293,278 @@ describe("config reaches the rendered HTML", () => {
     expect(indexHtml).not.toContain("setup.grimoire.rs");
   });
 
-  it("renders the add-this-index block and its TOML", () => {
+  // A row naming two platforms expands into one entry each, so "Linux / macOS"
+  // plus "Windows" is a three-way picker over two commands. The scope picker
+  // is the second bar, and leads with Global — someone arriving from an index
+  // website wants it everywhere, and that is the scope needing no project.
+  it("gives each bar its own choices, in the order it offers them", () => {
+    expect(pickerNames(0)).toEqual(["Linux", "macOS", "Windows"]);
+    expect(pickerNames(1)).toEqual(["Global", "Project"]);
+    expect(indexHtml).toContain('data-os-pick="irm https://setup.example.test/ps1 | iex"');
+    expect(indexHtml).toContain(
+      // Leading, not trailing: after a long `--index <url>` the flag fell off
+      // the end and switching scope read as changing nothing.
+      'data-os-pick="grim --global config registry add acme --index https://index.example.test"',
+    );
+  });
+
+  // The trigger carries every glyph and shows one. `hidden` is what picks it,
+  // and an author `display` beats the UA sheet's `[hidden] { display: none }`
+  // regardless of specificity — which is exactly how all three ended up
+  // visible at once. Both halves are asserted because either alone passes
+  // while the bar shows every icon.
+  it("marks all but the selected glyph hidden, in every picker, and hides them", () => {
+    for (const bar of [0, 1]) {
+      const glyphs = [...pickerSummary(bar).matchAll(/<span class="os-glyph"[^>]*>/g)].map(
+        (m) => m[0],
+      );
+      expect(glyphs.length, `bar ${bar}`).toBe(pickerNames(bar).length);
+      expect(glyphs.filter((g) => !g.includes("hidden")), `bar ${bar}`).toHaveLength(1);
+      expect(glyphs[0], `bar ${bar}`).not.toContain("hidden"); // the first choice is the default
+    }
+    expect(bundledCss).toMatch(/\.os-glyph\[hidden\]\s*\{\s*display:\s*none/);
+  });
+
+  // A copy anywhere on the page raises a toast naming what it copied — the
+  // per-button check cannot say which of three adjacent buttons fired.
+  it("names what each copy target puts on the clipboard", () => {
+    expect(indexHtml).toContain('data-copy-name="Linux install command"');
+    expect(indexHtml).toContain('data-copy-name="Global registry add command"');
+    // Each bar carries the noun its picker prepends a choice to.
+    expect(indexHtml).toContain('data-os-noun="install command"');
+    expect(indexHtml).toContain('data-os-noun="registry add command"');
+    expect(indexHtml).toContain('id="copy-toast"');
+    expect(detailHtml).toContain('data-copy-name="Global add command for code-review"');
+    expect(detailHtml).toContain('data-os-noun="add command for code-review"');
+  });
+
+  // Same bar as the hero's: scope picker, command, VS Code, one border. The
+  // detail page had a bare field and a loose text link under the rail.
+  it("builds the detail add bar the way the hero builds its own", () => {
+    const bar = detailHtml.match(/<div class="cmd-bar"[\s\S]*?<\/div>/)![0]!;
+    expect(bar).toContain("data-os-switch");
+    expect(bar).toMatch(/<details class="os-menu">[\s\S]*<button[\s\S]*<a class="seg brand-link"/);
+    // Global first and pre-selected — the cards' order, and the scope that
+    // needs no project open.
+    expect([...bar.matchAll(/data-os-name="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      "Global",
+      "Project",
+    ]);
+    expect(bar).toContain("grim add --global ghcr.io/acme/code-review");
+    expect(bar).toContain('title="Open in VS Code"');
+    // The rail link it replaced is gone, not duplicated.
+    expect(detailHtml).not.toContain("vscode-link");
+  });
+
+  // The rail pairs a small muted label with a larger value. Grid's default
+  // `stretch` sits each at its own box top, so the two never line up — the
+  // icon makes that worse, not better, unless the row centres.
+  it("gives every detail row an icon and centres the row on it", () => {
+    const dl = detailHtml.match(/<dl[^>]*>([\s\S]*?)<\/dl>/)![1]!;
+    const labels = [...dl.matchAll(/<dt[^>]*>([\s\S]*?)<\/dt>/g)].map((m) => m[1]!);
+    expect(labels.map((l) => l.replace(/<[^>]+>/g, "").trim())).toEqual([
+      "License",
+      "Repository",
+      "Owner",
+    ]);
+    // Icon first, so the label text of every row starts on one x.
+    for (const label of labels) expect(label.trimStart()).toMatch(/^<svg/);
+    expect(bundledCss).toMatch(/\bdl\[[^\]]+\]\{[^}]*align-items:\s*center/);
+  });
+
+  // `latest` is what an untagged `grim add` resolves to, so it is the strip's
+  // default — and the tag never has to be spelled out, in the pill's own copy
+  // or in any command its menu offers.
+  it("defaults the version strip to latest and never writes the tag out", () => {
+    const pills = [...detailHtml.matchAll(/<button[^>]*class="version[^"]*"[^>]*>/g)].map(
+      (m) => m[0]!,
+    );
+    const current = pills.filter((p) => p.includes('aria-current="true"'));
+    expect(current).toHaveLength(1);
+    expect(current[0]).toContain('data-menu="vm-latest"');
+    expect(current[0]).toContain('data-copy="ghcr.io/acme/code-review"');
+    // The exact release is one of the things latest points at, not the default.
+    expect(pills.find((p) => p.includes('data-menu="vm-1-2-3"'))).not.toContain("aria-current");
+    expect(detailHtml).not.toContain(":latest");
+  });
+
+  // Radio tabs, so the ribbon has to switch with no script at all — the
+  // checked input, not a handler, is what shows a panel.
+  it("switches the main panel with a scriptless ribbon", () => {
+    const main = detailHtml.match(/<main class="detail-main"[\s\S]*?<\/main>/)![0]!;
+    expect([...main.matchAll(/<label for="panel-([a-z]+)"/g)].map((m) => m[1])).toEqual([
+      "readme",
+      "contents",
+      "changelog",
+    ]);
+    expect(main).toMatch(/id="panel-readme"[^>]*checked/);
+    expect(main).not.toContain("<details class=\"changelog\"");
+    expect(bundledCss).toMatch(/#panel-readme\[[^\]]+\]:checked~#tab-readme/);
+    // A README opens with its own heading; its margin on top of the panel
+    // padding is what read as a hole.
+    expect(bundledCss).toMatch(/\.prose\[[^\]]+\]>:first-child\{margin-block-start:0/);
+  });
+
+  // Every tab is a fixed part of the panel — one that grows a tab per package
+  // is a different shape on every page. An empty tab is disabled rather than
+  // removed, and rather than clickable through to an apology.
+  it("greys out the tabs with nothing behind them", async () => {
+    const partial = await readOut("p/github.com/acme/rust-style/index.html");
+    expect(partial).toContain('<label for="panel-changelog"');
+    expect(partial).toMatch(/id="panel-changelog"[^>]*disabled/);
+    expect(partial).not.toMatch(/id="panel-readme"[^>]*disabled/);
+    expect(partial).not.toContain("available.");
+    expect(bundledCss).toMatch(/#panel-changelog\[[^\]]+\]:disabled~\.ribbon/);
+    // Greyed says "not for clicking"; the tooltip says why.
+    expect(partial).toContain('title="no changelog available"');
+    expect(partial).not.toContain('title="no readme available"');
+
+    // Nothing anywhere: one statement in the middle of the panel, not three
+    // tabs each denying it separately.
+    const none = await readOut("p/github.com/acme/old-helper/index.html");
+    for (const tab of ["readme", "contents", "changelog"]) {
+      expect(none, tab).toMatch(new RegExp(`id="panel-${tab}"[^>]*disabled`));
+    }
+    expect(none).toContain("No content available.");
+    expect(none.match(/No \w+ available/g)).toHaveLength(1);
+  });
+
+  // A package whose README is missing must not open on a blank panel just
+  // because Readme is first in the ribbon.
+  it("opens on the first tab that has something", async () => {
+    const noReadme = await readOut("p/registry.example/team/bare/index.html");
+    expect(noReadme).not.toMatch(/id="panel-readme"[^>]*checked/);
+    expect(noReadme).toMatch(/id="panel-contents"[^>]*checked/);
+  });
+
+  // What the artifact IS, as opposed to what its README claims. One shape per
+  // kind family, all three from the same `enrich/<ns>/<name>/contents.*`.
+  it("renders contents as prose, a member list, or highlighted JSON", async () => {
+    // Between the two ids — the panel nests elements, so a lazy `</div>`
+    // match would stop at the first one inside it.
+    const panel = (html: string) =>
+      html.slice(html.indexOf('id="tab-contents"'), html.indexOf('id="tab-changelog"'));
+
+    // Skill: the entry-point markdown, rendered — it is instruction text.
+    expect(panel(detailHtml)).toContain("The entry point the artifact ships");
+
+    // Bundle: what installing it installs. A member of this index is a link;
+    // one published elsewhere is named, never linked into a 404.
+    const bundle = panel(await readOut("p/github.com/acme/starter-pack/index.html"));
+    expect(bundle).toContain('href="/p/github.com/acme/code-review/"');
+    expect(bundle).toContain('href="/p/github.com/acme/rust-style/"');
+    expect(bundle).toContain("elsewhere");
+    expect(bundle).not.toContain('href="/p/github.com/other/');
+    // The relative member id resolved against the bundle's own repo.
+    expect(bundle).toContain("ghcr.io/acme/code-review");
+
+    // MCP: the descriptor, as JSON, syntax-highlighted by the same Shiki the
+    // markdown fences use.
+    const mcp = panel(await readOut("p/registry.example/team/bare/index.html"));
+    expect(mcp).toMatch(/<pre class="astro-code[^"]*"/);
+    expect(mcp).toContain("The fixture MCP server.");
+    expect(mcp).toMatch(/<span style="[^"]*">/); // tokens, not a plain block
+
+    // Nothing to show renders no panel at all — the tab is greyed instead.
+    const none = await readOut("p/github.com/acme/test-writer/index.html");
+    expect(none).toMatch(/id="panel-contents"[^>]*disabled/);
+    expect(none).not.toContain('id="tab-contents"');
+  });
+
+  // The UA marker flips between two glyphs with no in-between; a real
+  // chevron rotates, and only if the marker is gone in the first place.
+  it("draws the older-versions toggle as a chevron that turns", () => {
+    expect(detailHtml).toMatch(/<summary[^>]*>\s*<svg/);
+    expect(bundledCss).toMatch(/\.older\[[^\]]+\]>summary\[[^\]]+\]\{[^}]*list-style:none/);
+    expect(bundledCss).toMatch(/::-webkit-details-marker\{display:none/);
+    expect(bundledCss).toMatch(/transition:transform \.16s/);
+    // A quarter turn: closed points right at the row it opens, open points
+    // down at it.
+    expect(bundledCss).toMatch(/\.older\[[^\]]+\]\[open\][^{]*svg\{transform:rotate\(90deg\)/);
+    expect(detailHtml).toMatch(/<summary[^>]*>\s*<svg[\s\S]*?<\/svg>\s*older versions\s*<\/summary>/);
+  });
+
+  // Both halves, because either alone is a dead end: the page emits the
+  // query, the island reads it back into the search box on mount.
+  it("routes a keyword back to the catalog, prefiltered", async () => {
+    expect(detailHtml).toContain('href="/?q=review"');
+    expect(detailHtml).toContain('title="Find packages tagged review"');
+    const chunks = (await fs.readdir(path.join(site.outDir, "_astro"))).filter((f) =>
+      f.endsWith(".js"),
+    );
+    const js = await Promise.all(
+      chunks.map((f) => fs.readFile(path.join(site.outDir, "_astro", f), "utf8")),
+    );
+    expect(js.some((chunk) => chunk.includes("URLSearchParams"))).toBe(true);
+  });
+
+  // Both of these are ordering bugs, not markup bugs: the right answer
+  // arriving after the browser has painted the wrong one is the whole defect.
+  it("settles the platform and the deep-linked query before first paint", () => {
+    // Detection is offered to the install bar and nothing else — the scope
+    // picker's choices are not platforms.
+    expect(indexHtml.match(/<div [^>]*data-os-detect/g)).toHaveLength(1);
+    expect(indexHtml).toMatch(/<div class="cmd-bar" data-os-switch data-os-detect/);
+    // The preselect has to run in the same parse as the hero. The layout's
+    // picker script is past the catalog, which is late enough to paint first.
+    const preselect = indexHtml.indexOf("__grimHostOs()");
+    expect(preselect).toBeGreaterThan(-1);
+    expect(preselect).toBeLessThan(indexHtml.indexOf("<astro-island"));
+    // One definition of the swap, called from both places.
+    expect(indexHtml.match(/window\.__grimPick = /g)).toHaveLength(1);
+
+    // The deep-linked catalog is held back by an attribute the head sets and
+    // the island's first — already filtered — render drops.
+    expect(indexHtml).toContain('<section class="catalog"');
+    expect(indexHtml).toContain('dataset.query = ""');
+    expect(bundledCss).toMatch(/:root\[data-query\] \.catalog\{visibility:hidden/);
+  });
+
+  // Shiki, configured rather than replaced. One theme left every block dark
+  // on a light page; a pair writes both colours per token and the stylesheet
+  // picks. The `<Code>` component and the markdown pipeline share the pair,
+  // so a JSON descriptor and a README fence cannot end up on different ones.
+  it("themes code blocks for both schemes and makes them copyable", async () => {
+    // A fence inside rendered markdown…
+    const fenced = await readOut("p/github.com/acme/starter-pack/index.html");
+    expect(fenced).toMatch(/<pre class="astro-code[^"]*"[^>]*style="[^"]*--shiki-dark:/);
+    // …and the JSON the `<Code>` component renders, on the same pair.
+    const mcp = await readOut("p/registry.example/team/bare/index.html");
+    expect(mcp).toMatch(/<pre class="astro-code[^"]*"[^>]*style="[^"]*--shiki-dark:/);
+
+    expect(bundledCss).toMatch(/\.astro-code\{[^}]*border-radius:8px/);
+    expect(bundledCss).toMatch(/:root\[data-theme=dark\][^{]*\.astro-code[^{]*\{[^}]*--shiki-dark/);
+    // Injected, because the blocks come out of Shiki inside rendered
+    // markdown — there is no authored markup to hang a button on. It joins
+    // the one clipboard path by carrying `data-copy`, like every other.
+    expect(detailHtml).toContain('btn.className = "code-copy"');
+    expect(detailHtml).toContain('btn.dataset.copyName = "code block"');
+  });
+
+  it("attributes the renderer in the footer, and lets an index turn it off", async () => {
+    // New tab, and `noopener` with it — the opened page must not get a
+    // handle on this one through `window.opener`.
+    expect(indexHtml).toMatch(
+      /<a href="https:\/\/grimoire\.rs" target="_blank" rel="[^"]*noopener/,
+    );
+    // "using", not "by" — the index runner built the site, with this tool.
+    expect(indexHtml).toMatch(/Built with[\s\S]*using/);
+
+    const off = await render("https://index.example.test", { attribution: false });
+    try {
+      expect(off.indexHtml).not.toContain("https://grimoire.rs");
+      expect(off.indexHtml).not.toContain("Built with");
+      // …and nothing else about the footer moves.
+      expect(off.indexHtml).toContain("fixture footer note");
+    } finally {
+      await fs.rm(off.root, { recursive: true, force: true });
+    }
+  }, 300_000);
+
+  it("renders the add-this-index command", () => {
     expect(indexHtml).toContain(
       "grim config registry add acme --index https://index.example.test",
     );
-    expect(indexHtml).toContain("[[registries]]");
-    expect(indexHtml).toContain("alias =");
   });
 
   it("uses the configured VS Code extension id on both pages", () => {
@@ -258,7 +579,9 @@ describe("config reaches the rendered HTML", () => {
   // Asserted by re-parsing the rendered href rather than by string match, so
   // a change to how the query is built cannot quietly emit a dead button.
   it("offers the index as an add-registry deep link the extension accepts", () => {
-    const href = /<a class="vscode-add" href="([^"]+)"/.exec(indexHtml)?.[1];
+    // Matched on the scheme, not on a class name: the presentation of this
+    // link has moved twice, and the contract under test is the URL.
+    const href = /href="(vscode:\/\/[^"]*\/add-registry[^"]*)"/.exec(indexHtml)?.[1];
     expect(href, "the add-this-index block offers a VS Code link").toBeDefined();
 
     const url = new URL(href!.replaceAll("&amp;", "&"));

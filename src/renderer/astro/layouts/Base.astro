@@ -3,6 +3,7 @@
 // sheet. Everything in the global block sits in `@layer grimoire`, so a
 // user CSS file (unlayered) wins over any of it regardless of specificity
 // or injection order — that layer is the entire theming contract.
+import { Moon, Sun } from "lucide-preact";
 import { withBase } from "../lib/base";
 import { data } from "../lib/data";
 
@@ -12,7 +13,9 @@ interface Props {
   image?: string;
 }
 const { config, css } = data;
-const { title, description, image = config.favicon } = Astro.props;
+// `og:image` falls back to the logo before the favicon: a favicon is drawn to
+// read at 16px, and a link preview is not that.
+const { title, description, image = config.logo ?? config.favicon } = Astro.props;
 // Shown as well as linked: on a subpath deployment the bare path is not
 // where the file is, so the label has to carry the prefix too.
 const allJson = withBase("/all.json");
@@ -22,6 +25,24 @@ const brandRest =
   config.brandMark && config.brand.startsWith(config.brandMark)
     ? config.brand.slice(config.brandMark.length)
     : null;
+
+/**
+ * Name the forge `repoUrl` actually points at, rather than assuming one.
+ * `repoUrl` is free-form config: an index hosted on GitLab was previously
+ * labelled "GitHub" in its own header. An unrecognized host is named
+ * outright — honest, and already lowercase, which is the house style for
+ * this nav.
+ */
+const FORGES = ["github", "gitlab", "bitbucket", "codeberg", "sourcehut"];
+function repoLabel(url: string): string {
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "repo";
+  }
+  return FORGES.find((forge) => host.includes(forge)) ?? host;
+}
 ---
 
 <html lang="en">
@@ -42,12 +63,67 @@ const brandRest =
         (matchMedia("(prefers-color-scheme: dark)").matches
           ? "dark"
           : "light");
+
+      // Also before first paint: a `?q=` deep link (a keyword chip on a
+      // package page) means the catalog the server rendered — every package,
+      // empty search box — is the wrong one. Flag it so CSS holds the
+      // catalog back rather than showing the full list and collapsing it a
+      // moment later. The island drops the flag on its first render, which
+      // is already the filtered one; the timeout is the failsafe for an
+      // island that never hydrates, where a flash beats a blank page.
+      if (new URLSearchParams(location.search).get("q")) {
+        document.documentElement.dataset.query = "";
+        setTimeout(() => delete document.documentElement.dataset.query, 3000);
+      }
+
+      // Selecting one choice in a command bar. Defined here, in the head,
+      // because it has two callers that cannot share a script: the click
+      // handler at the end of the document, and the host-platform preselect
+      // that has to run while the hero is still being parsed (see
+      // `index.astro`). One definition, so the two cannot drift.
+      window.__grimPick = (bar, pick) => {
+        const command = pick.dataset.osPick;
+        const field = bar.querySelector("[data-copy]");
+        const code = field?.querySelector("code");
+        // One element is both the shown command and what gets copied, so
+        // they cannot drift apart.
+        if (code) code.textContent = command;
+        if (field) field.dataset.copy = command;
+        // Keep the toast's name in step with the choice: the bar's noun is
+        // fixed ("install command"), the choice supplies the adjective.
+        if (field && bar.dataset.osNoun) {
+          field.dataset.copyName = `${pick.dataset.osName} ${bar.dataset.osNoun}`;
+        }
+        for (const other of bar.querySelectorAll("[data-os-pick]")) {
+          other.setAttribute("aria-checked", other === pick ? "true" : "false");
+        }
+        // The trigger carries every glyph and shows one; swapping which is
+        // hidden beats rewriting an SVG path.
+        for (const glyph of bar.querySelectorAll("[data-os-glyph]")) {
+          glyph.hidden = glyph.dataset.osGlyph !== pick.dataset.osName;
+        }
+      };
+
+      // The platform a bar should start on, or null for one this visitor's
+      // host is not among. Order matters: a macOS UA string contains "Mac"
+      // but a Windows one contains "Win", and ChromeOS reports "CrOS" while
+      // running the same shell installer as Linux.
+      window.__grimHostOs = () => {
+        const ua = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent;
+        if (/mac|iphone|ipad|darwin/i.test(ua)) return "macOS";
+        if (/win/i.test(ua)) return "Windows";
+        if (/linux|android|cros|x11/i.test(ua)) return "Linux";
+        return null;
+      };
     </script>
   </head>
   <body>
     <header>
       <div class="shell header-row">
         <a class="brand" href={withBase("/")}>
+          {/* Decorative: the brand text is right beside it, so announcing the
+              logo too would read the index's name twice. */}
+          {config.logo && <img class="brand-logo" src={withBase(config.logo)} alt="" />}
           {
             brandRest === null ? (
               config.brand
@@ -64,13 +140,17 @@ const brandRest =
           {
             config.repoUrl && (
               <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">
-                GitHub
+                {repoLabel(config.repoUrl)}
               </a>
             )
           }
+          {/* Stroked, not filled, and inheriting the nav's own colour, so the
+              toggle reads as a third nav item rather than a control bolted
+              beside them. Rendered statically — no client directive, so no
+              JavaScript ships for the icons. */}
           <button id="theme-toggle" type="button" aria-label="Toggle theme">
-            <span class="when-light" aria-hidden="true">🌙</span>
-            <span class="when-dark" aria-hidden="true">☀️</span>
+            <Moon class="when-light" size={16} aria-hidden="true" />
+            <Sun class="when-dark" size={16} aria-hidden="true" />
           </button>
         </nav>
       </div>
@@ -87,8 +167,36 @@ const brandRest =
             config.footerNote ? ` · ${config.footerNote}` : ""
           }
         </p>
+        {/* Opt-out, not opt-in: an index runner who does not want to say
+            where the software came from sets `attribution: false`, and this
+            disappears. Nothing else on the page changes.
+
+            "using", not "by": the index runner built this site — Grimoire is
+            the tool they built it with. */}
+        {
+          config.attribution && (
+            <p class="attribution">
+              Built with <span aria-hidden="true">♥</span><span class="sr-only">love</span> using{" "}
+              {/* New tab: this is the one link that leaves the index for an
+                  unrelated site, and a visitor mid-browse should not lose
+                  their place to it. */}
+              <a href="https://grimoire.rs" target="_blank" rel="noopener">
+                Grimoire
+              </a>
+            </p>
+          )
+        }
       </div>
     </footer>
+
+    {/* One toast for the whole page, outside every scrolling container so a
+        copy from a card at the bottom lands in the same place as one from
+        the hero. `aria-hidden`, because each copy button already carries its
+        own `role="status"` — without this it is announced twice. */}
+    <div id="copy-toast" aria-hidden="true">
+      <span class="toast-name"></span>
+      <code class="toast-value"></code>
+    </div>
 
     <script is:inline>
       document.getElementById("theme-toggle").addEventListener("click", () => {
@@ -98,18 +206,139 @@ const brandRest =
         localStorage.setItem("theme", next);
       });
 
+      // Static-page logo slots. The catalog island runs the same state
+      // machine in Preact, because it owns those nodes; this drives the ones
+      // Astro rendered. The placeholder is already in the markup, so all
+      // there is to do is move the slot from `loading` to `ready`/`broken`.
+      //
+      // The initial `complete` sweep is not redundant with the listeners: an
+      // image starts loading while the document is parsed, so a fast result
+      // can land before this script runs and fire its event at nobody.
+      // `complete` says the browser finished, not how it went — `decode()`
+      // separates them, and unlike `naturalWidth === 0` it does not
+      // misreport an SVG that has no intrinsic size.
+      // `[data-static]` is load-bearing, not decoration: the catalog island
+      // renders `.logo-slot` too, and Preact owns `data-state` there. Writing
+      // it from here made the slot flip to the script's answer, then back to
+      // Preact's `loading` on hydration, then forward again — the icon fading
+      // in and straight back out.
+      for (const slot of document.querySelectorAll(".logo-slot[data-static]")) {
+        const img = slot.querySelector("img");
+        if (!img) continue;
+        const settle = (state) => slot.setAttribute("data-state", state);
+        img.addEventListener("load", () => settle("ready"));
+        img.addEventListener("error", () => settle("broken"));
+        if (img.complete) {
+          img.decode().then(
+            () => settle("ready"),
+            () => settle("broken"),
+          );
+        }
+      }
+
+      // Command-bar pickers. `__grimPick` (head) does the swap; this only
+      // wires the ways a choice gets made and the menu closed. The copy
+      // handler reads `data-copy` at click time, so it needs no part in this.
+      for (const bar of document.querySelectorAll("[data-os-switch]")) {
+        const menu = bar.querySelector(".os-menu");
+        const summary = menu?.querySelector("summary");
+        for (const pick of bar.querySelectorAll("[data-os-pick]")) {
+          pick.addEventListener("click", () => {
+            window.__grimPick(bar, pick);
+            if (menu) menu.open = false;
+            summary?.focus();
+          });
+        }
+        // `<details>` opens and closes itself but knows nothing about the
+        // two ways every other menu closes.
+        if (menu) {
+          document.addEventListener("click", (event) => {
+            if (!menu.contains(event.target)) menu.open = false;
+          });
+          menu.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return;
+            menu.open = false;
+            summary?.focus();
+          });
+        }
+      }
+
+      // One toast for every copy on the page. The in-place check confirms
+      // that *something* was copied; a card has three copy buttons a few
+      // pixels apart, all of which flash the same check, so the toast is
+      // what says WHICH. It carries both readings: a name for what was
+      // copied, and the exact string, because "the install command" is the
+      // useful part when you meant to pick a different platform and the raw
+      // text is the useful part when you are not sure what landed.
+      //
+      // Announcing is left to the per-button status span that already exists
+      // — this element is `aria-hidden`, or every copy would be read twice.
+      const toast = document.getElementById("copy-toast");
+      let toastTimer;
+      function showToast(name, value) {
+        if (!toast) return;
+        toast.querySelector(".toast-name").textContent = name
+          ? `Copied ${name}`
+          : "Copied";
+        toast.querySelector(".toast-value").textContent = value;
+        // Restart the animation even mid-fade: without the reflow a second
+        // copy inside the window leaves the class already set and nothing
+        // moves.
+        toast.classList.remove("show");
+        void toast.offsetWidth;
+        toast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+      }
+      // Hydrated islands cannot reach this function, so they say so by event.
+      document.addEventListener("grimoire:copied", (event) => {
+        showToast(event.detail.name, event.detail.value);
+      });
+
+      // A copy button on every code block. Injected rather than authored:
+      // the blocks come out of Shiki, inside rendered markdown, so there is
+      // no markup to add one to. `data-copy` is all it takes to join the
+      // handler below — same clipboard path, same flash, same toast.
+      const CLIPBOARD_ICON =
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>' +
+        '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+
+      for (const pre of document.querySelectorAll("pre.astro-code")) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "code-block";
+        pre.replaceWith(wrapper);
+        wrapper.append(pre);
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "code-copy";
+        btn.title = "Copy";
+        btn.setAttribute("aria-label", "Copy this code block");
+        // `textContent`, not `innerText`: the block is not rendered yet at
+        // this point, and `innerText` would collapse its whitespace.
+        btn.dataset.copy = pre.textContent ?? "";
+        btn.dataset.copyName = "code block";
+        btn.innerHTML = CLIPBOARD_ICON + '<span class="sr-only" role="status"></span>';
+        wrapper.append(btn);
+      }
+
       for (const btn of document.querySelectorAll("[data-copy]")) {
-        // Read the label up front: re-reading it inside the handler snapshots
-        // "copied" when the button is clicked twice inside the 1500ms window.
-        const label = btn.querySelector("span");
-        const original = label?.textContent ?? "copy";
+        // The visible label never changes — swapping "copy" for "copied"
+        // resized the button and shifted its neighbours. `.copied` swaps the
+        // icon instead, and the status span carries the same news to a
+        // screen reader without occupying any width.
+        const status = btn.querySelector('[role="status"]');
         btn.addEventListener("click", () => {
-          navigator.clipboard.writeText(btn.dataset.copy ?? "").then(() => {
+          const value = btn.dataset.copy ?? "";
+          navigator.clipboard.writeText(value).then(() => {
             btn.classList.add("copied");
-            if (label) label.textContent = "copied";
+            if (status) status.textContent = "copied";
+            showToast(btn.dataset.copyName ?? "", value);
             setTimeout(() => {
               btn.classList.remove("copied");
-              if (label) label.textContent = original;
+              if (status) status.textContent = "";
             }, 1500);
           });
         });
@@ -222,10 +451,20 @@ const brandRest =
           gap: 1rem;
         }
         .brand {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.55rem;
           color: var(--fg);
           text-decoration: none;
           font-weight: 600;
           font-size: 1.05rem;
+        }
+        /* Height-bound, width free: a wordmark and a square icon are both
+           valid logos and neither should be squashed into the other's box. */
+        .brand-logo {
+          height: 1.5rem;
+          width: auto;
+          max-width: 12rem;
         }
         .brand-mark {
           color: var(--accent);
@@ -243,45 +482,73 @@ const brandRest =
         nav a:hover {
           color: var(--fg);
         }
+        /* Borderless and colour-inheriting: same resting and hover colours as
+           the nav links beside it, so the row reads as one set. */
         #theme-toggle {
-          border: 1px solid var(--border);
-          background: transparent;
-          border-radius: 999px;
-          padding: 0.25rem 0.5rem;
+          display: inline-flex;
+          align-items: center;
+          border: none;
+          background: none;
+          padding: 0;
+          color: var(--muted);
           cursor: pointer;
-          font-size: 0.9rem;
-          line-height: 1;
+        }
+        #theme-toggle:hover {
+          color: var(--fg);
         }
         [data-theme="dark"] .when-light,
         [data-theme="light"] .when-dark {
           display: none;
         }
 
+        /* Description left, getting-started block right. The right column is
+           `auto` — it takes exactly what the add-index unit needs and gives
+           the rest to the text. h1 spans both. */
         .hero {
           display: grid;
-          /* fit-content: install column takes what its rows need, but can
-             shrink below content width (commands scroll) before squeezing
-             the text column out. h1 spans the full row; paragraph and
-             install strip share the second row, top-aligned. */
-          grid-template-columns: 1fr fit-content(44rem);
+          grid-template-columns: 1fr auto;
           align-items: start;
-          gap: 0.75rem 2rem;
-          margin-block: 1rem 1.5rem;
+          gap: 0.6rem 2rem;
+          margin-block: 1rem 1.25rem;
         }
         .hero h1 {
           grid-column: 1 / -1;
           margin: 0;
           font-size: 1.6rem;
         }
+        /* Label column, bar column. `minmax(0, …)` on the bars is what lets
+           the commands scroll instead of widening the grid. */
+        .hero-side {
+          display: grid;
+          grid-template-columns: auto minmax(0, 34rem);
+          align-items: center;
+          gap: 0.4rem 0.7rem;
+        }
+        .side-label {
+          color: var(--muted);
+          font-size: 0.72rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          white-space: nowrap;
+        }
+        /* Stacked below the description before the two get cramped rather
+           than after — a command squeezed to a few visible characters is
+           worse than one on its own row. Stacked, the bars take the whole
+           width instead of staying at their side-by-side cap, which is the
+           point of dropping down. */
+        @media (max-width: 72rem) {
+          .hero {
+            grid-template-columns: 1fr;
+          }
+          .hero-side {
+            grid-template-columns: auto minmax(0, 1fr);
+          }
+        }
         .hero p {
           margin: 0;
           color: var(--muted);
           max-width: 46rem;
-        }
-        @media (max-width: 64rem) {
-          .hero {
-            grid-template-columns: 1fr;
-          }
         }
         .hero code {
           background: var(--chip-bg);
@@ -290,72 +557,297 @@ const brandRest =
           font-size: 0.9em;
         }
 
-        .install {
-          display: grid;
-          /* One track set for all rows so the commands start at the same x
-             regardless of OS-label width; rows pick it up via subgrid. */
-          grid-template-columns: auto 1fr auto;
-          gap: 0.5rem;
+        /* The command and every way to act on it inside one border — a
+           single control, not a field with buttons parked beside it. */
+        .cmd-bar {
+          display: flex;
+          align-items: stretch;
           min-width: 0;
-        }
-        .install-row {
-          grid-column: 1 / -1;
-          display: grid;
-          grid-template-columns: subgrid;
-          align-items: center;
-          column-gap: 0.6rem;
           background: var(--card);
           border: 1px solid var(--border);
           border-radius: 8px;
-          padding: 0.45rem 0.7rem;
         }
-        .install-row .os {
-          color: var(--muted);
-          font-size: 0.78rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          white-space: nowrap;
-        }
-        .install-row code {
+        /* No `overflow: hidden` — that would clip the platform menu. The end
+           segments round themselves instead (8px border box, 1px border).
+           Stated at the bottom of this block, after `.seg`, because that is
+           what the cascade needs — see the note there. */
+        /* The command *is* the copy button: the whole field is clickable, so
+           there is no separate control taking width beside it. */
+        .cmd-field {
+          position: relative;
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          align-items: center;
+          border: none;
           background: none;
           padding: 0;
-          font-size: 0.85rem;
-          overflow-x: auto;
-          white-space: nowrap;
-          /* still scrollable, no visible bar */
-          scrollbar-width: none;
+          font: inherit;
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
         }
-        .install-row code::-webkit-scrollbar {
+        .cmd-field:hover {
+          background: var(--chip-bg);
+        }
+        .cmd-field:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: -2px;
+        }
+        .cmd-field code {
+          flex: 1;
+          min-width: 0;
+          background: none;
+          border-radius: 0;
+          /* Right padding is the icon's lane — the text scrolls under the
+             fade rather than up against the glyph. */
+          padding: 0.4rem 2.1rem 0.4rem 0.7rem;
+          font-size: 0.85rem;
+          white-space: nowrap;
+          overflow-x: auto;
+          /* Scrollable, no bar: the bar is the height of the control and
+             would sit under the text. The mask says "there is more" in its
+             place — it rides the padding box, so it stays at the visible
+             edge as the text scrolls under it. */
+          scrollbar-width: none;
+          /* Fully transparent 1.8rem from the edge — where the icon lane
+             starts — not at the edge itself, so no text is ever visible
+             under the glyph. */
+          mask-image: linear-gradient(
+            to right,
+            #000 calc(100% - 3.2rem),
+            transparent calc(100% - 1.8rem)
+          );
+        }
+        .cmd-field code::-webkit-scrollbar {
           display: none;
         }
-        /* The one row whose action is the link itself rather than a command
-           to copy, so it spans the code and copy-button columns. */
-        .install-row .vscode-add {
-          grid-column: 2 / -1;
-          justify-self: start;
-          font-size: 0.85rem;
-          font-weight: 500;
-          color: var(--accent);
+        /* One grid cell holds both icons, so the check lands exactly where
+           the copy glyph was and nothing reflows during the swap. */
+        .cmd-icons {
+          position: absolute;
+          right: 0.6rem;
+          display: grid;
+          place-items: center;
+          color: var(--muted);
+        }
+        .cmd-icons > * {
+          grid-area: 1 / 1;
+          transition: opacity 0.18s ease;
+        }
+        .cmd-icons .icon-done {
+          opacity: 0;
+          color: var(--kind-rule);
+        }
+        .cmd-field:hover .cmd-icons,
+        .cmd-field:focus-visible .cmd-icons {
+          color: var(--fg);
+        }
+        .cmd-field.copied .icon-idle {
+          opacity: 0;
+        }
+        .cmd-field.copied .icon-done {
+          opacity: 1;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .cmd-icons > * {
+            transition: none;
+          }
+        }
+        /* Segments: they drop their own border and radius, and one hairline
+           divides them. `flex: none` keeps them at full size while the
+           command scrolls. */
+        .cmd-bar .seg {
+          flex: none;
+          display: inline-flex;
+          align-items: center;
+          border: none;
+          border-left: 1px solid var(--border);
+          border-radius: 0;
+          background: none;
+          padding: 0 0.5rem;
+          color: var(--muted);
           text-decoration: none;
+          cursor: pointer;
         }
-        .install-row .vscode-add:hover,
-        .install-row .vscode-add:focus-visible {
-          text-decoration: underline;
+        /* Platform picker, at the head of the bar: the trigger shows the
+           chosen platform's glyph, the menu names them all. */
+        .os-menu {
+          position: relative;
+          flex: none;
+          display: flex;
         }
-        /* The `[[registries]]` snippet is the one multi-line command: let it
-           wrap inside its cell instead of scrolling a three-line block. */
-        .install-row code.block {
-          white-space: pre;
-          line-height: 1.35;
+        .os-menu > summary {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.1rem;
+          padding: 0 0.45rem;
+          color: var(--muted);
+          cursor: pointer;
+          border-right: 1px solid var(--border);
+          /* Both spellings: the default triangle is a marker in Firefox and
+             a `::-webkit-details-marker` pseudo-element in older WebKit. */
+          list-style: none;
         }
-        @media (max-width: 40rem) {
-          .install {
-            grid-template-columns: 1fr auto;
+        .os-menu > summary::-webkit-details-marker {
+          display: none;
+        }
+        .os-menu > summary:hover,
+        .os-menu > summary:focus-visible,
+        .os-menu[open] > summary {
+          background: var(--chip-bg);
+          color: var(--fg);
+        }
+        .os-glyph {
+          display: inline-flex;
+        }
+        /* Any author `display` beats the UA sheet's `[hidden] { display: none }`
+           regardless of specificity, so the rule above showed all three glyphs
+           at once — the `hidden` attribute the markup and the toggle both set
+           had no effect at all. Restore it for this class rather than trusting
+           the UA default. */
+        .os-glyph[hidden] {
+          display: none;
+        }
+        .os-menu ul {
+          position: absolute;
+          top: calc(100% + 4px);
+          left: 0;
+          z-index: 5;
+          min-width: 9rem;
+          margin: 0;
+          padding: 0.25rem;
+          list-style: none;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+        }
+        .os-menu li button {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+          border: none;
+          border-radius: 6px;
+          background: none;
+          padding: 0.35rem 0.5rem;
+          color: var(--fg);
+          font: inherit;
+          font-size: 0.85rem;
+          text-align: left;
+          cursor: pointer;
+        }
+        .os-menu li button:hover,
+        .os-menu li button:focus-visible {
+          background: var(--chip-bg);
+        }
+        .os-menu li button[aria-checked="true"] {
+          color: var(--accent);
+        }
+        /* Borderless segments need a different hover than the pills do — the
+           border they would have tinted is not theirs any more. */
+        .cmd-bar .seg:hover,
+        .cmd-bar .seg:focus-visible {
+          background: var(--chip-bg);
+          color: var(--fg);
+        }
+
+        /* The bar's end rounding, last so it wins.
+           Two things defeated it while it sat higher up: `.cmd-bar .seg` is
+           the same specificity and declares `border-radius: 0`, which squared
+           the trailing segment; and `<summary>` took `border-radius: inherit`
+           yet still computed 0, so the leading segment was square too. Neither
+           shows until a hover, focus or open state paints a background — then
+           square corners poke out past the bar's own 8px rounding.
+           The summary is named explicitly rather than left to inherit. */
+        .cmd-bar > :first-child,
+        .cmd-bar > :first-child > summary {
+          border-start-start-radius: 7px;
+          border-end-start-radius: 7px;
+        }
+        .cmd-bar > :last-child {
+          border-start-end-radius: 7px;
+          border-end-end-radius: 7px;
+        }
+
+        /* Attribution sits opposite the raw-data line, on the same row where
+           there is width for it and beneath it when there is not. */
+        footer .shell {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 0.35rem 1rem;
+        }
+        .attribution {
+          margin: 0;
+          margin-inline-start: auto;
+          text-align: end;
+        }
+        .attribution span[aria-hidden] {
+          color: var(--accent);
+        }
+
+        /* Copy toast. Fixed and centred at the bottom: a card's three copy
+           buttons sit a few pixels apart and all flash the same check, so
+           this is what says which one fired — and it has to land in the same
+           place whether the copy came from the hero or a card at the bottom
+           of a long list. */
+        #copy-toast {
+          position: fixed;
+          left: 50%;
+          bottom: 1.25rem;
+          z-index: 20;
+          display: grid;
+          gap: 0.15rem;
+          max-width: min(30rem, calc(100vw - 2rem));
+          padding: 0.5rem 0.85rem;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+          /* Out of the layout and unhittable until shown, so it never eats a
+             click aimed at whatever is beneath it. */
+          pointer-events: none;
+          opacity: 0;
+          transform: translate(-50%, 0.5rem);
+          transition:
+            opacity 160ms ease,
+            transform 160ms ease;
+        }
+        #copy-toast.show {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+        #copy-toast .toast-name {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: var(--fg);
+        }
+        /* The exact string, one line, clipped rather than wrapped — a long
+           install one-liner must not grow the toast into the page. */
+        #copy-toast .toast-value {
+          font-size: 0.78rem;
+          color: var(--muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #copy-toast {
+            transition-duration: 0ms;
           }
-          .install-row .os {
-            grid-column: 1 / -1;
-          }
+        }
+
+        /* Arriving on `?q=…`: the server rendered every package and an empty
+           search box, so painting it and then collapsing to the match is a
+           flash of the wrong answer. `visibility` rather than `display` —
+           the space stays reserved, so the footer does not jump either. The
+           attribute is set before first paint and dropped by the island's
+           first render, which is already the filtered one. */
+        :root[data-query] .catalog {
+          visibility: hidden;
         }
 
         .controls {
@@ -365,23 +857,85 @@ const brandRest =
           gap: 0.75rem;
           margin-bottom: 1.25rem;
         }
+        /* Full-width basis in a wrapping row: the search bar takes a line to
+           itself and pushes both chip groups onto the next one, which then
+           sit side by side. The container's 0.75rem gap separates the two
+           rows, and reads wider than the 0.4rem inside a group — so sort and
+           kind still group visually without a wrapper element. */
+        .search-field {
+          position: relative;
+          display: flex;
+          flex: 1 1 100%;
+          /* Breathing room above the field when `/` scrolls it to the top of
+             the viewport, so it does not sit flush against the edge. */
+          scroll-margin-top: 1.25rem;
+        }
         .controls input[type="search"] {
-          flex: 1 1 16rem;
+          flex: 1;
           padding: 0.55rem 0.8rem;
+          /* Room for the key hint, so a long query never runs under it. */
+          padding-right: 2.4rem;
           border: 1px solid var(--border);
           border-radius: 8px;
           background: var(--card);
           color: var(--fg);
           font-size: 0.95rem;
+          min-width: 0;
         }
         .controls input[type="search"]:focus-visible {
           outline: 2px solid var(--accent);
           outline-offset: 1px;
         }
+        /* The `/` shortcut, shown as the key it is. It is a hint for a field
+           that is not yet in use, so it withdraws the moment the field is
+           focused or holds a query — at which point it would only be
+           sitting on top of what is being typed. */
+        .search-hint {
+          position: absolute;
+          right: 0.5rem;
+          top: 50%;
+          translate: 0 -50%;
+          pointer-events: none;
+          border: 1px solid var(--border);
+          border-bottom-width: 2px;
+          border-radius: 5px;
+          background: var(--chip-bg);
+          color: var(--muted);
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+          font-size: 0.72rem;
+          line-height: 1;
+          padding: 0.2rem 0.4rem;
+        }
+        .search-field:focus-within .search-hint,
+        .search-field:has(input:not(:placeholder-shown)) .search-hint {
+          display: none;
+        }
         .chips {
           display: flex;
           flex-wrap: wrap;
           gap: 0.4rem;
+        }
+        /* A drawn rule rather than a "|" glyph: its height is the chip row's,
+           not whatever the font gives a pipe. `stretch` overrides the
+           container's `align-items: center` for this one item. */
+        .chip-sep {
+          align-self: stretch;
+          width: 1px;
+          background: var(--border);
+        }
+        /* Held at the far end of the chip row: it answers a different
+           question from sort and kind — what the catalog is withholding,
+           not how to arrange it. */
+        .chip.deprecated-toggle {
+          margin-left: auto;
+        }
+        /* Pressed state borrows the deprecation colour rather than the
+           accent, so "deprecated entries are in view" is signalled by the
+           same colour the badges on those entries carry. */
+        .chip.deprecated-toggle.active {
+          color: var(--deprecated);
+          border-color: var(--deprecated);
+          background: var(--chip-bg);
         }
         .chip {
           border: 1px solid var(--border);
@@ -434,6 +988,14 @@ const brandRest =
           ) {
           border-color: var(--accent);
         }
+        /* Keyboard focus wears the hover treatment rather than an outline on
+           top of it — one affordance, whichever way the card was reached.
+           The border-colour change is still a visible focus indicator, which
+           is the part that may not be dropped. */
+        .card:focus-visible {
+          outline: none;
+          border-color: var(--accent);
+        }
         .card h2 a::after {
           content: "";
           position: absolute;
@@ -479,6 +1041,68 @@ const brandRest =
           font-weight: 700;
           font-size: 0.85rem;
           font-family: ui-monospace, "SFMono-Regular", monospace;
+        }
+        /* THE LOGO SLOT — one box, three states, no layout shift.
+           The placeholder ships in the HTML and the image sits on top of it
+           starting fully transparent, so a failing load never gets to paint
+           the browser's broken glyph and a slow one never leaves a hole. The
+           image fades in only once it is known good; `loading="lazy"` keeps
+           off-screen cards from fetching at all, which is the state this
+           placeholder was designed to look deliberate in.
+
+             loading  placeholder, no slash — the resting state
+             ready    image faded in, placeholder faded out
+             broken   placeholder with its slash, dashed edge
+
+           Kept distinct from `.card-logo-fallback`: that is a package with
+           no logo at all, which is normal, not a fault. */
+        .logo-slot {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          background: var(--chip-bg);
+          color: var(--muted);
+        }
+        .logo-slot .logo-mark,
+        .logo-slot img {
+          transition: opacity 200ms ease;
+        }
+        .logo-slot .logo-mark {
+          width: 60%;
+          height: 60%;
+        }
+        .logo-slot img {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          opacity: 0;
+        }
+        .logo-slot[data-state="ready"] img {
+          opacity: 1;
+        }
+        .logo-slot[data-state="ready"] .logo-mark {
+          opacity: 0;
+        }
+        /* Two marks, one shown per state — the static page cannot choose in
+           markup, because nothing has run yet when it is parsed. The card
+           grid renders only the one it needs, so these rules never apply
+           there. */
+        .logo-slot[data-state="broken"] .mark-loading,
+        .logo-slot:not([data-state="broken"]) .mark-broken {
+          display: none;
+        }
+        .logo-slot[data-state="broken"] {
+          border: 1px dashed var(--border);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .logo-slot .logo-mark,
+          .logo-slot img {
+            transition: none;
+          }
         }
         .badge {
           flex-shrink: 0;
@@ -602,6 +1226,96 @@ const brandRest =
         .copy.copied {
           color: var(--kind-rule);
           border-color: var(--kind-rule);
+        }
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          border: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* Code blocks — Shiki's output, wearing this site's box. Shiki owns
+           the token colours and nothing else: the frame, the spacing and the
+           corners are the same ones every other panel uses. */
+        .code-block {
+          position: relative;
+          margin: 1rem 0;
+        }
+        .astro-code {
+          margin: 0;
+          padding: 0.9rem 1rem;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          overflow-x: auto;
+          font-size: 0.85rem;
+          line-height: 1.5;
+          tab-size: 2;
+          /* Shiki colours tokens; the surface is ours. Its own background is
+             the theme's editor chrome — GitHub's blue-grey `#24292e` — which
+             next to this page's purple-tinted card reads as a green cast.
+             `!important` because Shiki writes it as an inline style. */
+          background-color: var(--chip-bg) !important;
+        }
+        /* The dark half of the pair. Shiki writes the light colour inline and
+           the dark one as a custom property on the same token, so switching
+           themes is this rule rather than a second render. `!important` for
+           the same reason: the light value is inline. */
+        :root[data-theme="dark"] .astro-code,
+        :root[data-theme="dark"] .astro-code span {
+          color: var(--shiki-dark) !important;
+          font-style: var(--shiki-dark-font-style) !important;
+          font-weight: var(--shiki-dark-font-weight) !important;
+          text-decoration: var(--shiki-dark-text-decoration) !important;
+        }
+        /* A token can carry its own highlight background; nothing else may. */
+        .astro-code span:not([style*="background"]) {
+          background-color: transparent !important;
+        }
+        /* Reveals on hover or keyboard focus, so it is not a permanent
+           smudge over the first line of every block. */
+        .code-copy {
+          position: absolute;
+          top: 0.45rem;
+          right: 0.45rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 1.9rem;
+          height: 1.9rem;
+          padding: 0;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: var(--card);
+          color: var(--muted);
+          cursor: pointer;
+          opacity: 0;
+          transition:
+            opacity 120ms ease,
+            color 120ms ease,
+            border-color 120ms ease;
+        }
+        .code-block:hover .code-copy,
+        .code-copy:focus-visible {
+          opacity: 1;
+        }
+        .code-copy:hover {
+          color: var(--accent);
+          border-color: var(--accent);
+        }
+        .code-copy.copied {
+          color: var(--kind-rule);
+          border-color: var(--kind-rule);
+          opacity: 1;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .code-copy {
+            transition: none;
+          }
         }
         /* card actions: icon-only square buttons. Scoped to .copy-group so the
            hero install buttons (also .copy, elsewhere) keep their text label. */
