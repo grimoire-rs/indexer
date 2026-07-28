@@ -236,12 +236,11 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
       forge: flags.forge ?? "github",
       git: flags.git ?? true,
       withSkills,
-      // Only the combined layout writes an announce target, so only it pays
-      // for the derivation. An empty answer stays empty — a guessed index
-      // repo is worse than a placeholder that refuses to publish.
-      repoUrl: withSkills
-        ? (flags.repoUrl ?? gitRemoteUrl(dir) ?? repoUrlFromPages(baseUrl) ?? "")
-        : "",
+      // Derived either way now: the combined layout needs an announce
+      // target, and every layout wants the header's "github" link, which
+      // has no default to fall back on. Empty stays empty — nothing is
+      // guessed, and a `publish.toml` with no target refuses to publish.
+      repoUrl: flags.repoUrl ?? gitRemoteUrl(dir) ?? repoUrlFromPages(baseUrl) ?? "",
     };
   }
 
@@ -278,11 +277,12 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
       }),
     ));
 
-  // Asked only for the combined layout — the standalone one writes no
-  // `publish.toml` and so announces nothing.
+  // Prompted only for the combined layout — the standalone one writes no
+  // `publish.toml` and so announces nothing. The *derived* value is used
+  // either way, for the site's own "github" link (see `siteConfig`).
   const derivedRepoUrl = gitRemoteUrl(dir) ?? repoUrlFromPages(baseUrl);
   const repoUrl = !flags.withSkills
-    ? ""
+    ? (flags.repoUrl ?? derivedRepoUrl ?? "")
     : (flags.repoUrl ??
       (await ask(
         prompts.text({
@@ -372,6 +372,10 @@ function siteConfig(answers: InitAnswers): string {
     brand: answers.title,
     description: `${answers.title}, a Grimoire package index.`,
     ...(answers.logo ? { favicon: answers.logo } : {}),
+    // The header's "github" link. Written whenever it could be derived —
+    // it has no default, because the only sane one would be somebody
+    // else's repository.
+    ...(answers.repoUrl ? { repoUrl: answers.repoUrl } : {}),
     registry: { alias: answers.registryAlias, index: answers.baseUrl },
   });
 }

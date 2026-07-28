@@ -85,6 +85,19 @@ describe("init --quick", () => {
     expect(config.registry).toEqual({ alias: "acme", index: "https://index.acme.test" });
     // An unanswered logo prompt omits the key rather than writing "".
     expect("favicon" in config).toBe(false);
+    // Not a Pages URL and no git remote in a fresh temp dir, so nothing to
+    // derive — and the key stays out rather than inheriting a default that
+    // would link this index's header at somebody else's repository.
+    expect("repoUrl" in config).toBe(false);
+  });
+
+  // The header's "github" link. `repoUrl` has no default for good reason, so
+  // scaffolding has to work it out — from the git remote if there is one,
+  // otherwise from the Pages URL the index is served from.
+  it("derives repoUrl from a Pages base URL", async () => {
+    await run(initArgs(dir, "--name", "idx", "--base-url", "https://acme.github.io/idx"));
+
+    expect(JSON.parse(read("index.config.json")).repoUrl).toBe("https://github.com/acme/idx");
   });
 
   it("writes the registry-host allowlist the gate reads", async () => {

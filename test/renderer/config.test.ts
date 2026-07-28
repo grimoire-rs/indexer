@@ -78,4 +78,20 @@ describe("resolveConfig", () => {
     expect(resolved.brand).toBe(DEFAULT_CONFIG.brand);
     expect(resolved.docsUrl).toBeNull();
   });
+
+  // A default that names one specific index is a default that ships that
+  // index's identity to everyone else. `repoUrl` put a "github" link on
+  // every site pointing at grimoire-rs/index; `registry` handed out a
+  // working `grim config registry add` for the wrong index entirely.
+  it("has no default for the keys that name a particular index", () => {
+    expect(DEFAULT_CONFIG.repoUrl).toBeNull();
+    expect(DEFAULT_CONFIG.registry).toBeNull();
+    // The tool's own docs are the same page whoever runs the index, so
+    // those keep theirs.
+    expect(DEFAULT_CONFIG.docsUrl).toBe("https://grimoire.rs");
+    for (const [key, value] of Object.entries(DEFAULT_CONFIG)) {
+      if (key === "site") continue; // every index sets its own; init writes it
+      expect(JSON.stringify(value), key).not.toContain("index.grimoire.rs");
+    }
+  });
 });

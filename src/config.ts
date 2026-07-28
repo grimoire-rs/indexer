@@ -104,9 +104,15 @@ export const DEFAULT_CONFIG: ResolvedSiteConfig = {
     "Browse and search AI-config packages (skills, rules, agents, MCP servers, and bundles), installable with the grim package manager.",
   tagline:
     "Skills, rules, agents, MCP servers, and bundles for AI coding agents, hosted on OCI registries.",
+  // grimoire.rs is the tool's documentation, which is the same page whoever
+  // runs the index — unlike the two keys below, which name a *specific*
+  // index and so cannot have a first-party default.
   docsUrl: "https://grimoire.rs",
   installDocsUrl: "https://grimoire.rs/installation.html",
-  repoUrl: "https://github.com/grimoire-rs/index",
+  // No default: this is the repo the index itself lives in. Defaulting it to
+  // the first-party index put a "github" link on every other index that
+  // pointed at grimoire-rs/index — someone else's repo, quietly.
+  repoUrl: null,
   favicon: "/favicon.svg",
   logo: null,
   install: [
@@ -117,7 +123,11 @@ export const DEFAULT_CONFIG: ResolvedSiteConfig = {
     { os: "Windows", command: "irm https://setup.grimoire.rs/ps1 | iex" },
   ],
   vscodeExtension: "grimoire-rs.grimoire-vscode",
-  registry: { alias: "hub", index: "https://index.grimoire.rs" },
+  // Same reasoning, and worse if wrong: this block tells a visitor which
+  // index to add. Defaulted, an index that never configured it handed out
+  // `grim config registry add hub --index https://index.grimoire.rs` — a
+  // working command pointing at the wrong index.
+  registry: null,
   // Two facts a visitor may actually need: what they may do with the data
   // they just read, and where the packages themselves are. Dropped from the
   // old default: "pointers, not payloads", which explains the architecture
