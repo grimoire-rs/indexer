@@ -143,6 +143,40 @@ describe("bad input data exits 65", () => {
   });
 });
 
+describe("a registry it cannot reach exits 69", () => {
+  function addPackage(name: string): void {
+    const pkg = path.join(dir, "index", "github.com", "acme", name);
+    fs.mkdirSync(pkg, { recursive: true });
+    fs.writeFileSync(
+      path.join(pkg, "metadata.json"),
+      JSON.stringify({
+        schema: 1,
+        name,
+        kind: "skill",
+        ref: `ghcr.io/acme/skills/${name}`,
+        description: "A test skill.",
+        owner: { id: 1, github: "octocat" },
+      }),
+    );
+  }
+
+  // The common way this fails in CI: the job never installed grim. Every
+  // package fails at once, which is an outage, not a bad package.
+  it("enrich with no grim on PATH", async () => {
+    addPackage("foo");
+    expect(
+      await run(["node", "grim-indexer", "enrich", dir, "--grim", "grim-does-not-exist"]),
+    ).toBe(69);
+  });
+
+  // Nothing to enrich is not an outage, however unreachable the registry is.
+  it("enrich on an index with no packages", async () => {
+    expect(
+      await run(["node", "grim-indexer", "enrich", dir, "--grim", "grim-does-not-exist"]),
+    ).toBe(0);
+  });
+});
+
 describe("success exits 0", () => {
   it("--help", async () => {
     expect(await run(["node", "grim-indexer", "--help"])).toBe(0);

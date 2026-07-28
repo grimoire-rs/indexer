@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { Command, CommanderError, Option } from "commander";
 
 import { build } from "./build.js";
+import { enrich, type EnrichFlags } from "./enrich.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 import { init, type Forge } from "./init.js";
 import { validate, type ValidateFlags } from "./validate.js";
@@ -116,6 +117,15 @@ export async function run(argv: string[]): Promise<number> {
     .option("--out-dir <dir>", "output directory", "dist")
     .action(async (root: string, opts: { outDir?: string }) => {
       code = await build(root, { outDir: opts.outDir });
+    });
+
+  program
+    .command("enrich")
+    .argument("[root]", "index repo root", ".")
+    .description("refresh enrich/ sidecars (README, logo, versions) from the registry")
+    .option("--grim <path>", "grim binary to read the registry with", "grim")
+    .action(async (root: string, opts: EnrichFlags) => {
+      code = await enrich(root, opts);
     });
 
   program

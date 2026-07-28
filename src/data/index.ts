@@ -93,7 +93,7 @@ function validate(root: string, file: string, meta: Record<string, unknown>): vo
   }
 }
 
-function findMetadataFiles(indexDir: string): string[] {
+export function findMetadataFiles(indexDir: string): string[] {
   if (!fs.existsSync(indexDir)) return [];
   const entries = fs.readdirSync(indexDir, { recursive: true, withFileTypes: true });
   const files: string[] = [];
@@ -103,6 +103,19 @@ function findMetadataFiles(indexDir: string): string[] {
     }
   }
   return files.sort();
+}
+
+/**
+ * Namespace of a `metadata.json`, derived from its path under `index/` —
+ * `index/github.com/acme/foo/metadata.json` -> `github.com/acme`. The single
+ * definition: `enrich` writes sidecars keyed on it and the compiler reads them
+ * back, so a second derivation is a silent mismatch waiting to happen.
+ */
+export function namespaceOf(indexDir: string, file: string): string {
+  return path
+    .relative(indexDir, path.dirname(path.dirname(file)))
+    .split(path.sep)
+    .join("/");
 }
 
 export async function compileIndex(opts: CompileOptions): Promise<CompileResult> {
@@ -117,10 +130,7 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
     const meta = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
     validate(root, file, meta);
 
-    const ns = path
-      .relative(indexDir, path.dirname(path.dirname(file)))
-      .split(path.sep)
-      .join("/");
+    const ns = namespaceOf(indexDir, file);
     const withNamespace: Record<string, unknown> = { ...meta, namespace: ns };
 
     const dataPath = path.join(enrichDir, ns, meta.name as string, "data.json");
