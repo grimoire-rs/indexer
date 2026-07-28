@@ -63,6 +63,14 @@ describe("init --quick", () => {
       expect(exists(file), file).toBe(true);
     }
 
+    // `public/` is the index's own asset layer — the logo and favicon the
+    // config names live there and the build copies them into `dist/`.
+    // Ignoring it deploys a site referencing files the deploy never had,
+    // which is silent: the build succeeds and the image 404s.
+    const ignored = fs.readFileSync(path.join(dir, ".gitignore"), "utf8");
+    expect(ignored).toContain("dist/");
+    expect(ignored).not.toMatch(/^public\/$/m);
+
     // Default forge is github, so no GitLab CI and no skills layout.
     expect(exists(".gitlab-ci.yml")).toBe(false);
     expect(exists("publish.toml")).toBe(false);
