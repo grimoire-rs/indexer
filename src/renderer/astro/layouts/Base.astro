@@ -329,6 +329,20 @@ const brandRest =
         .install-row code::-webkit-scrollbar {
           display: none;
         }
+        /* The one row whose action is the link itself rather than a command
+           to copy, so it spans the code and copy-button columns. */
+        .install-row .vscode-add {
+          grid-column: 2 / -1;
+          justify-self: start;
+          font-size: 0.85rem;
+          font-weight: 500;
+          color: var(--accent);
+          text-decoration: none;
+        }
+        .install-row .vscode-add:hover,
+        .install-row .vscode-add:focus-visible {
+          text-decoration: underline;
+        }
         /* The `[[registries]]` snippet is the one multi-line command: let it
            wrap inside its cell instead of scrolling a three-line block. */
         .install-row code.block {

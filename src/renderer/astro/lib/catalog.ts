@@ -67,3 +67,38 @@ export function timeAgo(iso: string): string {
 export function vscodeUrl(extension: string | null, ref: string): string | null {
   return extension ? `vscode://${extension}/open?repo=${encodeURIComponent(ref)}` : null;
 }
+
+/**
+ * Alias charset the extension's `/add-registry` handler accepts. It has to be
+ * a TOML bare key and safe as a CLI argument, so it refuses a link rather
+ * than escaping one. Mirrored here so a config that cannot produce a working
+ * link renders no button at all, instead of one that silently does nothing.
+ */
+const REGISTRY_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+
+/**
+ * `vscode://<publisher.extension>/add-registry?index=<url>&alias=<name>` — the
+ * one-click counterpart of the `grim config registry add` line beside it.
+ *
+ * Null unless the link would actually work: the handler takes https only (an
+ * index locator is fetched with whatever credentials the user configures for
+ * it), refuses embedded credentials, and caps the URL at 2048 characters.
+ * Checking here keeps a broken button off the page rather than putting the
+ * failure in the user's hands.
+ */
+export function addRegistryUrl(
+  extension: string | null,
+  registry: { alias: string; index: string } | null,
+): string | null {
+  if (!extension || !registry || !REGISTRY_ALIAS.test(registry.alias)) return null;
+  let url: URL;
+  try {
+    url = new URL(registry.index);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") return null;
+  if (url.href.length > 2048) return null;
+  const query = new URLSearchParams({ index: url.href, alias: registry.alias });
+  return `vscode://${extension}/add-registry?${query.toString()}`;
+}

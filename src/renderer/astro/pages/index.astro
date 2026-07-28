@@ -2,9 +2,15 @@
 import Base from "../layouts/Base.astro";
 import Catalog from "../components/Catalog.tsx";
 import CopyButton from "../components/CopyButton.astro";
+import { addRegistryUrl } from "../lib/catalog";
 import { data } from "../lib/data";
 
 const { config, packages } = data;
+
+// One-click counterpart of the `grim config registry add` line: the VS Code
+// extension registers a URI handler that writes the registry after a modal
+// confirmation. Null whenever the link would not work — see `addRegistryUrl`.
+const addRegistry = addRegistryUrl(config.vscodeExtension, config.registry);
 
 // The "add this index" ergonomic (`helm repo add`): the command a visitor
 // needs to point their own grim at *this* index, plus the equivalent
@@ -60,6 +66,14 @@ const registryRows = config.registry
               <CopyButton value={row.command} label={row.label} />
             </div>
           ))}
+          {addRegistry && (
+            <div class="install-row">
+              <span class="os">VS Code</span>
+              <a class="vscode-add" href={addRegistry}>
+                Add this index to VS Code
+              </a>
+            </div>
+          )}
         </div>
       )
     }
