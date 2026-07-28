@@ -13,6 +13,16 @@
 # Do not switch this to run contributor code, and do not widen
 # `permissions:` here.
 #
+# This gate covers third-party contributions. It does NOT cover an announce
+# your own CI makes (the `--with-skills` layout, where this repo publishes
+# into its own index): GitHub runs no workflows on a PR opened with
+# `secrets.GITHUB_TOKEN`, so `grim publish --announce` from CI lands an
+# effectively ungated PR — review it by hand. That PR also needs "Allow
+# GitHub Actions to create and approve pull requests" (Settings → Actions)
+# turned on, off by default; without it grim only pushes the branch and
+# reports `outcome: "branch-pushed"`. Enabling it lets any workflow in this
+# repo approve PRs too, so weigh it against your branch protection.
+#
 # Deliberately a thin caller: the job logic lives in a reusable workflow
 # grim-indexer owns, so upgrades arrive by bumping the pinned ref below
 # instead of re-scaffolding this repo over your edits.
