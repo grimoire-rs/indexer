@@ -1,6 +1,6 @@
 {
   "name": "@grimoire-rs/indexer",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "CLI + Astro integration for running your own grim package index",
   "type": "module",
   "license": "Apache-2.0",
@@ -25,7 +25,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && mkdir -p dist/renderer/astro dist/renderer/public && cp -r src/renderer/astro/. dist/renderer/astro/ && cp -r src/renderer/public/. dist/renderer/public/",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/renderer/astro dist/renderer/public && cp -r src/renderer/astro/. dist/renderer/astro/ && cp -r src/renderer/public/. dist/renderer/public/ && node scripts/prune-template-maps.mjs",
     "dev": "npm run build && node scripts/dev.mjs",
     "dev:smoke": "npm run build && node scripts/dev.mjs --smoke",
     "test": "vitest run",

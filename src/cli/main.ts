@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { Command, CommanderError, Option } from "commander";
 
-import type { Forge } from "../ci.js";
+import type { Forge, PublishTrigger } from "../ci.js";
 import { build } from "./build.js";
 import { ci } from "./ci.js";
 import { dev } from "./dev.js";
@@ -29,6 +29,7 @@ interface InitCliOptions {
   git?: boolean;
   install?: boolean;
   withSkills?: boolean;
+  publish?: PublishTrigger;
   repoUrl?: string;
   force?: boolean;
 }
@@ -121,7 +122,11 @@ export async function run(argv: string[]): Promise<number> {
     .option("--title <title>", "display title")
     .option("--base-url <url>", "URL the index is served from")
     .option("--registry <alias>", "registry alias packages are published under")
-    .option("--registry-host <host>", "OCI registry host", "ghcr.io")
+    // No commander default. A default here is indistinguishable from the flag
+    // being passed, so `flags.registryHost` was always set and the interactive
+    // prompt for it — the committed allowlist the gate bounds every entry by —
+    // could never fire. `--quick` supplies the same fallback itself.
+    .option("--registry-host <host>", "OCI registry host (default: ghcr.io)")
     .option("--logo <path>", "brand logo path or URL")
     .addOption(new Option("--forge <forge>", "CI to scaffold").choices(["github", "gitlab"]))
     .option("--no-git", "do not run `git init`")
@@ -130,8 +135,17 @@ export async function run(argv: string[]): Promise<number> {
       "--with-skills",
       "scaffold the combined layout: this repo holds its skills and its index",
     )
+    .addOption(
+      new Option("--publish <when>", "when CI publishes this repo's own packages")
+        .choices(["never", "tag", "default-branch"])
+        .implies({ withSkills: true }),
+    )
     .option("--repo-url <url>", "URL of the repo being scaffolded (`--announce` targets it)")
-    .option("--force", "overwrite files that differ from the scaffold")
+    .option(
+      "--force",
+      "rewrite files that differ from the scaffold, discarding their contents " +
+        "(never publish.toml or index-policy.json — those are only ever created)",
+    )
     .action(async (dir: string, opts: InitCliOptions, cmd: Command) => {
       code = await init(
         dir,

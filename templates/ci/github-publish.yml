@@ -1,0 +1,89 @@
+{{header}}
+# Publishes this repository's own packages to the registry, then announces
+# them into the index that lives beside them - the combined layout
+# `grim-indexer init --with-skills` scaffolds. `publish.toml` says what gets
+# pushed and where; the `ci.publish` key in index.config.json says when.
+#
+# ONE REPOSITORY SETTING is needed and cannot be set from here: Settings ->
+# Actions -> General -> Workflow permissions -> "Allow GitHub Actions to
+# create and approve pull requests". Without it the packages publish and the
+# announce then fails with a 403 opening the pull request.
+name: publish
+
+on:
+{{publishTrigger}}
+  workflow_dispatch:
+
+# Default-deny at the top; the job pays for exactly what it needs.
+permissions: {}
+
+# Serialized against itself. Two publishes racing would both read the same
+# "already published?" answer and both push.
+concurrency:
+  group: grim-indexer-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Pushing to this repository's own GHCR packages.
+      packages: write
+      # `--announce` opens its pull request against THIS repository, because in
+      # the combined layout this repository is the index.
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The same pinned-by-config install the enrichment step uses: a release
+      # tarball whose checksum is verified before it runs, at the version
+      # `ci.grimVersion` resolved when this file was rendered.
+      - name: Install grim
+        env:
+          GRIM_RELEASE_BASE: "{{grimReleaseBase}}"
+        run: |
+          set -euo pipefail
+          tarball="grimoire-$(uname -m)-unknown-linux-gnu.tar.gz"
+          cd "$(mktemp -d)"
+          curl -fsSL --proto '=https' --tlsv1.2 \
+            -O "${GRIM_RELEASE_BASE}/${tarball}" -O "${GRIM_RELEASE_BASE}/${tarball}.sha256"
+          sha256sum -c "${tarball}.sha256"
+          tar -xzf "${tarball}" --strip-components=1 --wildcards -C /usr/local/bin '*/grim'
+          grim --version
+
+      # The defaults are the zero-setup GHCR path: the built-in token can push
+      # to this repository's own packages, so nothing has to be configured.
+      # Publishing anywhere else is three repository settings and no edit to
+      # this generated file - set the variables GRIM_REGISTRY_HOST and
+      # GRIM_REGISTRY_USER, and the secret GRIM_REGISTRY_TOKEN.
+      - name: Log in to the registry
+        env:
+          REGISTRY: ${{ vars.GRIM_REGISTRY_HOST || 'ghcr.io' }}
+          REGISTRY_USER: ${{ vars.GRIM_REGISTRY_USER || github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GRIM_REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | grim login "$REGISTRY" \
+            -u "$REGISTRY_USER" --password-stdin --allow-insecure-store
+
+      # `--announce` opens the pull request through the REST API, but the
+      # branch it proposes is pushed over git - which reads the token from
+      # git's credential helper, not from the environment.
+      - name: Wire the announce token into git
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh auth setup-git
+
+      # Skip-existing is the default, so a re-run over unchanged versions is a
+      # no-op and only a bumped version pushes. That is what makes triggering
+      # on every default-branch push reasonable.
+      #
+      # THE PULL REQUEST THIS OPENS IS NOT GATED. GitHub runs no workflows on a
+      # pull request opened with the built-in token, so `validate` never fires
+      # on it - review it, or merge it knowing nothing checked it. That is the
+      # standing cost of the combined layout, not a fault in this workflow.
+      - name: Publish and announce
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: grim publish --announce

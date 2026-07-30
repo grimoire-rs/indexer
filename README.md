@@ -123,11 +123,14 @@ this early.
 > own. It breaks the moment something bumps the pinned ref, because `main`
 > no longer defines any reusable workflow or remote include for it to
 > resolve to: a Renovate update of an `@grimoire-rs/indexer` action ref
-> will now fail hard. Fix it before that happens by re-scaffolding the CI -
-> `npx @grimoire-rs/indexer init . --force` and commit the result, or, if
-> you would rather not touch anything else `init` writes, add a
-> `package.json` pinning this package (if the old scaffold has none) and
-> run `npm run ci` to re-render just the workflow files.
+> will now fail hard. Fix it before that happens by adding a `package.json`
+> pinning this package (if the old scaffold has none) and running
+> `npm run ci`, which re-renders the workflow files and nothing else.
+> **Not `init --force`**: that rewrites the whole scaffold from its
+> templates, discarding the added scripts in `package.json`, your
+> `.gitignore` rules, your `README.md`, and any `uses:` pin Renovate has
+> bumped since - `npm run ci` keeps all four. `publish.toml` and
+> `index-policy.json` are never rewritten, by `--force` or anything else.
 >
 > Through `0.1.3`, `init --with-skills` wrote a `publish.toml` with no
 > `[announce]` table, so `grim publish --announce` in a combined-layout
