@@ -202,8 +202,27 @@ async function stage(
   // `content.config.ts` globs `./enrich` relative to the Astro root, so the
   // index repo's tree has to appear there. Absent is fine: the glob loader
   // degrades to an empty collection.
+  // An index that has never run `enrich` has no such directory. The glob
+  // loader degrades to an empty collection either way, but its warning for a
+  // *missing* base directory reads as a broken scaffold rather than as an
+  // index with no READMEs yet. Staging the empty directory downgrades it to
+  // "no files found", which is both true and unalarming. It does not silence
+  // the loader — four empty collections still log four lines.
   const enrich = path.join(root, "enrich");
   if (await exists(enrich)) await fs.symlink(enrich, path.join(dir, "enrich"), LINK_TYPE);
+  else await fs.mkdir(path.join(dir, "enrich"), { recursive: true });
+
+  // The staged dir is an Astro project root, and an Astro project root is
+  // expected to carry a tsconfig. Without one the dev server's dependency
+  // scanner — which reads `jsx`/`jsxImportSource` from exactly this file and
+  // from nowhere Astro configures — defaulted to React, failed the scan on an
+  // unresolvable `react/jsx-dev-runtime` imported by `Catalog.tsx`, and
+  // silently disabled pre-bundling for the whole session. Astro's own
+  // transform was never wrong; only the scan that runs ahead of it was.
+  await fs.writeFile(
+    path.join(dir, "tsconfig.json"),
+    `${JSON.stringify({ compilerOptions: { jsx: "react-jsx", jsxImportSource: "preact" } }, null, 2)}\n`,
+  );
 
   const staticDir = path.join(dir, "public");
   await fs.mkdir(staticDir, { recursive: true });
