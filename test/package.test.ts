@@ -43,6 +43,28 @@ describe("published manifest", () => {
     expect(files).toContain("templates");
   });
 
+  // Everything under templates/ is written verbatim into somebody else's
+  // repository and then read back in CI logs, forge diff views, terminals and
+  // editors whose encoding this package does not get to choose. A generated
+  // file is worse than an ordinary one: the index owner cannot fix a stray em
+  // dash in it without tripping the drift guard. So the scaffold is ASCII,
+  // while this repo's own prose is free not to be.
+  it("keeps the scaffold ASCII", () => {
+    const walk = (at: string): string[] =>
+      fs.readdirSync(at, { withFileTypes: true }).flatMap((entry) => {
+        const full = path.join(at, entry.name);
+        return entry.isDirectory() ? walk(full) : [full];
+      });
+
+    for (const file of walk(path.join(root, "templates"))) {
+      const offending = [...fs.readFileSync(file, "utf8")].filter((ch) => ch.charCodeAt(0) > 127);
+      expect(
+        [...new Set(offending)].join(""),
+        `${path.relative(root, file)} carries non-ASCII`,
+      ).toBe("");
+    }
+  });
+
   // Trusted publishing attaches a sigstore provenance bundle naming the repo
   // that built the tarball. npm cross-checks it against `repository.url` and
   // rejects the publish with a 422 if they disagree — which is only visible

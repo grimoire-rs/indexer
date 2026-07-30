@@ -1,0 +1,27 @@
+
+      # The index stores pointers; everything a reader looks at - README,
+      # changelog, logo, version list - lives in the registry, and grim is
+      # what reads a registry. `ci.grimVersion` pins the binary.
+      - name: Install grim
+        env:
+          # Resolved from `ci.grimVersion` when this file was rendered, so
+          # there is no version branch left to take at run time.
+          GRIM_RELEASE_BASE: "{{grimReleaseBase}}"
+        run: |
+          set -euo pipefail
+          tarball="grimoire-$(uname -m)-unknown-linux-gnu.tar.gz"
+          cd "$(mktemp -d)"
+          curl -fsSL --proto '=https' --tlsv1.2 \
+            -O "${GRIM_RELEASE_BASE}/${tarball}" -O "${GRIM_RELEASE_BASE}/${tarball}.sha256"
+          sha256sum -c "${tarball}.sha256"
+          tar -xzf "${tarball}" --strip-components=1 --wildcards -C /usr/local/bin '*/grim'
+          grim --version
+
+      # Enrichment is best-effort by design: a registry outage must degrade
+      # the site to pointers-only, never block a deploy that is otherwise
+      # ready. `enrich` itself keeps any sidecar it fails to refresh. Set
+      # `"enrich": false` in the `ci` block to drop these two steps entirely.
+      - name: Refresh package metadata
+        run: |
+          npm run enrich ||
+            echo "::warning::enrich failed - building without READMEs, logos and version lists"

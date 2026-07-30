@@ -1,0 +1,47 @@
+{{header}}
+# Fail closed when a generated CI file is hand-edited: this job re-renders from
+# index.config.json and diffs against what is committed. Fix drift by running
+# `npm run ci` locally and committing the result.
+#
+# It runs under `pull_request`, so it needs no secrets and never checks out a
+# trusted token. That also means a fork's copy of this file is what runs on
+# that fork's pull request - the guard is a maintenance check on the
+# repository's own history, not a trust boundary. The contribution gate
+# (validate.yml) is the trust boundary, and it rejects any pull request that
+# touches a path outside `index/<host>/<namespace>/<package>/`.
+name: verify-ci
+
+on:
+  pull_request:
+    paths:
+{{verifyPaths}}
+  push:
+    branches: [main]
+    paths:
+{{verifyPaths}}
+
+permissions: {}
+
+jobs:
+  verify-ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "{{nodeVersion}}"
+          cache: npm
+
+      # Rendering needs no build toolchain, so nothing here runs a dependency's
+      # lifecycle script.
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      # Exits 65 on drift; the hint names the stale path and never its contents.
+      - name: Check the committed CI matches index.config.json
+        run: npm run ci:check

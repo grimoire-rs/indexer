@@ -8,10 +8,13 @@ import { fileURLToPath } from "node:url";
 
 import { Command, CommanderError, Option } from "commander";
 
+import type { Forge } from "../ci.js";
 import { build } from "./build.js";
+import { ci } from "./ci.js";
+import { dev } from "./dev.js";
 import { enrich, type EnrichFlags } from "./enrich.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
-import { init, type Forge } from "./init.js";
+import { init } from "./init.js";
 import { validate, type ValidateFlags } from "./validate.js";
 
 interface InitCliOptions {
@@ -24,6 +27,7 @@ interface InitCliOptions {
   logo?: string;
   forge?: Forge;
   git?: boolean;
+  install?: boolean;
   withSkills?: boolean;
   repoUrl?: string;
   force?: boolean;
@@ -38,18 +42,34 @@ function packageVersion(): string {
 }
 
 /**
+ * The one subcommand whose exit code is an authorization rather than a
+ * status: CI reads `validate`'s 0 as "eligible for auto-merge".
+ */
+const GATE = "validate";
+
+/**
  * Map a thrown value to an exit code, printing whatever the user needs to
  * see. Commander has already written its own usage text by the time its
  * errors land here.
+ *
+ * `gate` is set when the invocation was `validate`, and it makes every
+ * exit-0 path other than the eligible branch unreachable. `--help` and
+ * `--version` short-circuit commander with exitCode 0, and CI used to append
+ * attacker-controlled filenames to argv — so a pull request that added an
+ * empty file named `-h` printed help and exited 0, which the gate contract
+ * reads as an authorization to merge. The templates no longer put those
+ * strings on the command line at all (see `--changed-from`), and this makes
+ * the same mistake unreachable for anyone who wires their own.
  */
-function classify(err: unknown): ExitCode {
+function classify(err: unknown, gate = false): ExitCode {
   if (err instanceof CommanderError) {
     // `--help` and `--version` also arrive here, with exitCode 0.
-    return err.exitCode === 0 ? EXIT.ok : EXIT.usage;
+    if (err.exitCode === 0) return gate ? EXIT.usage : EXIT.ok;
+    return EXIT.usage;
   }
   if (err instanceof CliError) {
     if (err.code !== EXIT.ok) console.error(err.message);
-    return err.code;
+    return gate && err.code === EXIT.ok ? EXIT.usage : err.code;
   }
   if (err instanceof Error && "code" in err && err.code === "ERR_MODULE_NOT_FOUND") {
     console.error(
@@ -74,6 +94,17 @@ function classify(err: unknown): ExitCode {
 export async function run(argv: string[]): Promise<number> {
   const version = packageVersion();
   let code: ExitCode = EXIT.ok;
+  // Read off argv rather than from the parsed command, because the paths this
+  // guards are the ones where parsing never completes. The subcommand is
+  // exactly `argv[2]` — this program has no global options for anything to
+  // sit in front of — so `grim-indexer --help validate` is a help request and
+  // keeps its exit 0, while `validate … -h` does not.
+  //
+  // ADDING A GLOBAL OPTION SILENTLY DISARMS THIS. `--config <file>` on the
+  // program would push the subcommand to `argv[4]`, `gate` would compute
+  // false, and the fail-closed mapping below would stop applying to the one
+  // command whose exit code authorizes a merge. Keep options on subcommands.
+  const gate = argv[2] === GATE;
 
   const program = new Command()
     .name("grim-indexer")
@@ -92,8 +123,9 @@ export async function run(argv: string[]): Promise<number> {
     .option("--registry <alias>", "registry alias packages are published under")
     .option("--registry-host <host>", "OCI registry host", "ghcr.io")
     .option("--logo <path>", "brand logo path or URL")
-    .addOption(new Option("--forge <forge>", "CI to scaffold").choices(["github", "gitlab", "both"]))
+    .addOption(new Option("--forge <forge>", "CI to scaffold").choices(["github", "gitlab"]))
     .option("--no-git", "do not run `git init`")
+    .option("--no-install", "do not run `npm install` (skips writing package-lock.json)")
     .option(
       "--with-skills",
       "scaffold the combined layout: this repo holds its skills and its index",
@@ -103,11 +135,25 @@ export async function run(argv: string[]): Promise<number> {
     .action(async (dir: string, opts: InitCliOptions, cmd: Command) => {
       code = await init(
         dir,
-        // `--no-git` defaults `git` to true, which would silently answer the
-        // interactive prompt; only an explicit flag counts as an answer.
-        { ...opts, git: cmd.getOptionValueSource("git") === "cli" ? opts.git : undefined },
+        // `--no-git`/`--no-install` default their values to true, which would
+        // silently answer the interactive prompt; only an explicit flag counts
+        // as an answer.
+        {
+          ...opts,
+          git: cmd.getOptionValueSource("git") === "cli" ? opts.git : undefined,
+          install: cmd.getOptionValueSource("install") === "cli" ? opts.install : undefined,
+        },
         version,
       );
+    });
+
+  program
+    .command("ci")
+    .argument("[root]", "index repo root", ".")
+    .description("render this repo's CI from index.config.json (--check verifies it)")
+    .option("--check", "verify the committed CI matches the config; exit 65 on drift")
+    .action(async (root: string, opts: { check?: boolean }) => {
+      code = await ci(root, opts);
     });
 
   program
@@ -117,6 +163,16 @@ export async function run(argv: string[]): Promise<number> {
     .option("--out-dir <dir>", "output directory", "dist")
     .action(async (root: string, opts: { outDir?: string }) => {
       code = await build(root, { outDir: opts.outDir });
+    });
+
+  program
+    .command("dev")
+    .argument("[root]", "index repo root", ".")
+    .description("serve this index locally with a live preview")
+    .option("--out-dir <dir>", "output directory", "dist")
+    .option("--port <n>", "port to listen on")
+    .action(async (root: string, opts: { outDir?: string; port?: string }) => {
+      code = await dev(root, opts);
     });
 
   program
@@ -137,6 +193,10 @@ export async function run(argv: string[]): Promise<number> {
     // contract puts a missing `--pr-tree` in the 65 bucket, not commander's 64.
     .option("--pr-tree <dir>", "checkout of the PR head, read as data only")
     .option("--policy <file>", "path to index-policy.json")
+    .option(
+      "--changed-from <file>",
+      "read changed paths from a file (NUL- or newline-separated) instead of argv — what CI uses",
+    )
     .addOption(
       new Option("--forge <forge>", "forge hosting the contribution").choices([
         "github",
@@ -152,7 +212,7 @@ export async function run(argv: string[]): Promise<number> {
   try {
     await program.parseAsync(argv);
   } catch (err) {
-    return classify(err);
+    return classify(err, gate);
   }
   return code;
 }

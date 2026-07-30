@@ -1,0 +1,36 @@
+
+  # `needs: validate` is the entire safety condition. The gate's exit code is
+  # the authorization - 0 means "eligible for auto-merge" - and `needs:` is
+  # what turns that into "this job does not start". A cancelled or skipped
+  # gate is not a success either, so both also stop here.
+  #
+  # This job checks nothing out. Contributor content never touches the runner
+  # that holds the write token; the only thing it does with the pull request is
+  # name its number to `gh`.
+  #
+  # `--match-head-commit` closes the window between the two jobs: the gate
+  # judged one head sha, and without this a push landing while it ran would be
+  # what got merged - the contribution reviewed and the contribution merged
+  # would be different commits. Mismatch fails the job, and the next
+  # `synchronize` event re-runs the gate against the new head anyway.
+  automerge:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write # dispatch pages.yml after the merge
+    steps:
+      - name: Merge and deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          gh pr merge "$PR" --repo "$REPO" --squash --match-head-commit "$HEAD_SHA"
+          # A push made with GITHUB_TOKEN triggers no workflow, so the merge
+          # this job just made would never build the site. Dispatch it.
+          gh workflow run pages.yml --repo "$REPO" --ref "$BRANCH"

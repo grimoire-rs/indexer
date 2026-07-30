@@ -209,8 +209,24 @@ async function checkFile(
 ): Promise<string | null> {
   const read = await readIndexFile(options.prTree, path.file);
   // A path with no file in the PR tree is a deletion by the namespace owner,
-  // whose ownership was already established above.
-  if (read.kind === "missing") return null;
+  // whose ownership was already established above — but only if there was
+  // something there to delete. A path missing from BOTH trees was never real:
+  // that is what a fabricated or shell-mangled changed-path entry looks like,
+  // and treating it as a deletion authorized a merge on the strength of a
+  // file whose ref, owner id and registry host nobody ever read.
+  if (read.kind === "missing") {
+    // `!== "text"`, not `=== "missing"`. Narrowing the adapter's errno
+    // handling made an unreadable base file `{kind:"error"}` rather than
+    // `missing`, and an `=== "missing"` test then fell through to `null` —
+    // "authorized deletion" — for exactly the fault the narrowing was meant
+    // to stop being silent. Only proof that something IS committed there may
+    // authorize removing it.
+    const committed = await readIndexFile(options.root, path.file);
+    if (committed.kind !== "text") {
+      return "present in neither the contribution nor this repository — manual review";
+    }
+    return null;
+  }
   if (read.kind === "error") return read.reason;
 
   const parsed = parseMetadataJson(read.text);

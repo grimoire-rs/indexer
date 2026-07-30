@@ -46,6 +46,10 @@ beforeEach(async () => {
     dir,
     "--quick",
     "--no-git",
+    // Hermetic: `npm install` would reach the network and drop a second copy
+    // of the renderer's own dependencies under the index root, which the
+    // staged Astro build then has to resolve past.
+    "--no-install",
     "--name",
     "acme",
     "--base-url",

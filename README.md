@@ -6,20 +6,33 @@ servers, and bundles available in one or more OCI registries.
 
 ## Subcommands
 
-- `grim-indexer init` — scaffold a new index repo (`index/**` content
-  tree, Astro site config, CI workflow).
+- `grim-indexer init` — scaffold a new index repo: the `index/**` content
+  tree, site config, a `package.json` that pins this package, and the CI
+  its forge runs.
+- `grim-indexer dev` — serve the index locally, through the same renderer
+  `build` uses. The review loop for an entry or a branding change.
 - `grim-indexer enrich` — refresh `enrich/**` from the registry: READMEs,
   changelogs, logos, versions and tag lists. The only step that goes
   online, and the only one that needs `grim` on `PATH`.
 - `grim-indexer build` — render `index/**` into a static site.
 - `grim-indexer validate` — CI gate for contribution PRs/MRs against an
   index repo.
+- `grim-indexer ci` — render the index repo's workflows from the `ci`
+  block of its `index.config.json`; `--check` verifies the committed ones
+  still match and exits 65 on drift.
+
+A scaffolded index owns its CI: the workflow files are committed in that
+repository and run `npm ci` against its own lockfile, so nothing is
+fetched from here at run time and the version that builds an index is the
+one that repo has locked. The generated `verify-ci` job re-renders and
+diffs on every push, which is what keeps a hand-edit from silently
+forking the pipeline.
 
 An index stores nothing but pointers — a ref and who owns it. Everything a
 reader looks at lives in the registry, so an index that never runs `enrich`
 renders a catalogue of names with *No README available* on every page. The
-scaffolded CI runs it before each build; set `enrich: false` (GitHub) or
-`GRIM_INDEXER_ENRICH: "false"` (GitLab) for a pointers-only site.
+scaffolded CI runs it before each build; set `"enrich": false` in the `ci`
+block for a pointers-only site.
 
 ## Install
 
@@ -30,10 +43,19 @@ npm install --save-dev @grimoire-rs/indexer
 ## Usage
 
 ```sh
-npx @grimoire-rs/indexer init
-npx @grimoire-rs/indexer enrich   # needs `grim` on PATH
-npx @grimoire-rs/indexer build
-npx @grimoire-rs/indexer validate
+npx @grimoire-rs/indexer init     # scaffold; writes package.json + lockfile
+```
+
+Everything after that runs through the scaffolded repo's own scripts, so it
+uses the version that repo locked:
+
+```sh
+npm run dev        # local preview
+npm run build      # index/** -> dist/
+npm run enrich     # needs `grim` on PATH
+npm run validate   # the contribution gate
+npm run ci         # re-render CI after editing index.config.json
+npm run ci:check   # fail on drift (what the verify-ci job runs)
 ```
 
 As an Astro integration:
@@ -60,9 +82,11 @@ unreachable OCI ref, unowned namespace).
 
 Two things that trial settled, both worth knowing before you scaffold:
 
-- **Requiring the gate needs the check named `validate / validate`**, not
-  `validate`. Requiring a context that never reports blocks every PR
-  forever and looks exactly like the gate rejecting your contribution.
+- **Require the check named `validate`.** It was `validate / validate`
+  while the scaffold emitted thin callers of reusable workflows; the
+  workflow is now committed in the index repo, so the context is just the
+  job key. Requiring a context that never reports blocks every PR forever
+  and looks exactly like the gate rejecting your contribution.
 - **In the combined (`--with-skills`) layout the gate does not cover your
   own CI's announce.** GitHub runs no workflows on a PR opened with
   `secrets.GITHUB_TOKEN`, so that PR arrives ungated — review it by hand.
@@ -70,8 +94,8 @@ Two things that trial settled, both worth knowing before you scaffold:
   requests" enabled, which is off by default and which also lets
   workflows approve PRs.
 
-Not yet proven live: the GitLab leg (hermetic tests only; the
-`include: remote:` URL is verified to resolve), and the cross-repository
+Not yet proven live: the GitLab leg (hermetic unit tests only - no live
+GitLab pipeline has run the rendered CI), and the cross-repository
 announce, which needs a credential beyond the CI token.
 
 Two things are frozen and safe to build on: the published URL layout
@@ -83,13 +107,22 @@ is deliberately no component-override API yet — publishing one would
 freeze a prop contract per slot, and that is not a promise worth making
 this early.
 
-> **Use `0.1.4` or later.** `0.1.0` installs without an executable — npm
+> **Use `0.1.4` or later.** `0.1.0` installs without an executable - npm
 > silently stripped its `bin` entry at publish time. `0.1.1` and `0.1.2`
 > scaffold CI that points at reusable workflows those tags do not contain,
-> so the first push to a scaffolded index fails before any job runs. An
-> index already scaffolded against `0.1.1`/`0.1.2` is fixed by bumping the
-> `@v0.1.x` refs in `.github/workflows/{pages,validate}.yml` — no
-> re-scaffold needed.
+> so the first push to a scaffolded index fails before any job runs.
+>
+> An index already scaffolded against a reusable-workflow version keeps
+> working as long as its pinned `uses:`/`include:` refs stay on an existing
+> tag - old tags are not deleted, so that resolution does not break on its
+> own. It breaks the moment something bumps the pinned ref, because `main`
+> no longer defines any reusable workflow or remote include for it to
+> resolve to: a Renovate update of an `@grimoire-rs/indexer` action ref
+> will now fail hard. Fix it before that happens by re-scaffolding the CI -
+> `npx @grimoire-rs/indexer init . --force` and commit the result, or, if
+> you would rather not touch anything else `init` writes, add a
+> `package.json` pinning this package (if the old scaffold has none) and
+> run `npm run ci` to re-render just the workflow files.
 >
 > Through `0.1.3`, `init --with-skills` wrote a `publish.toml` with no
 > `[announce]` table, so `grim publish --announce` in a combined-layout

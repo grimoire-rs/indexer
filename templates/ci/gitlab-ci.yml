@@ -1,0 +1,148 @@
+{{header}}
+# Builds this index for GitLab Pages and gates merge requests.
+
+stages:
+  - test
+  - deploy
+
+# `npm ci` installs exactly package-lock.json, so which renderer runs is a
+# reviewed fact in this repository rather than a resolution on the runner.
+default:
+  image: node:{{nodeVersion}}-alpine
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+      - .npm-gate/
+
+# Contribution gate. Exit 0 = eligible for auto-merge, non-zero = manual
+# review required, so this job's status IS the gate.
+#
+# The gate must judge the change against the COMMITTED policy, not the policy
+# the merge request proposes - otherwise a contributor allowlists their own
+# registry host in the same merge request. So the target branch is checked out
+# into a sibling worktree and passed as `--root`, with the merge-request head
+# passed as `--pr-tree` and read as data only.
+#
+# The gate installs and runs from `../.gate-base`, the target branch's worktree -
+# never from the merge request's own checkout. Otherwise the contributor
+# supplies the lockfile that decides which validator judges them, and
+# `--ignore-scripts` alone does not fix that: the package it installs is still
+# theirs to choose. `--ignore-scripts` stays anyway, one layer further in.
+#
+# RESIDUAL, and it is not fixable from this file. Two ways, both structural:
+#
+#   1. The merge request supplies its own `.gitlab-ci.yml`, so a contributor
+#      can delete this job outright.
+#   2. GitLab runs a FORK merge request's pipeline in the source project, so
+#      `origin` is the fork. `origin/<target>` is then the fork's copy of the
+#      target branch, which means `../.gate-base` - and the `index-policy.json` and
+#      `package-lock.json` read from it - are contributor-controlled for a
+#      fork merge request. The `../.gate-base` install above is therefore defence in
+#      depth for same-project branches, not a trust boundary for forks.
+#
+# Enforce it instance-side - a compliance pipeline, a required merge check, or
+# protected-branch approval rules - or treat the GitLab gate as advisory. The
+# GitHub gate has no equivalent gap: `pull_request_target` always runs the base
+# branch's copy of the workflow, against the base checkout.
+grim-indexer:validate:
+  stage: test
+  variables:
+    GIT_DEPTH: 0
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  # The job image is picked for npm, and `node:*-alpine` ships no git - but
+  # this job diffs the merge request against its target branch, so git is not
+  # optional. GitLab's runner clones with a separate helper image, so nothing
+  # else puts git in here. Install it for whichever package manager the image
+  # has.
+  #
+  # The trailing check is the load-bearing part: the gate's contract is
+  # "exit 0 = eligible for auto-merge", so a missing or failed-to-install tool
+  # must fail the job, never silently skip validation.
+  before_script:
+    - |
+      set -eu
+      if ! command -v git >/dev/null 2>&1; then
+        if command -v apk >/dev/null 2>&1; then
+          apk add --no-cache git
+        elif command -v apt-get >/dev/null 2>&1; then
+          apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+        fi
+      fi
+      command -v git >/dev/null 2>&1 || {
+        echo "grim-indexer: the gate needs git, and this image has none" >&2
+        exit 1
+      }
+  script:
+    - |
+      set -eu
+      git fetch --quiet origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      # `../.gate-base` sits outside $CI_PROJECT_DIR, which is the part GitLab
+      # cleans. A leftover from an earlier run makes `git worktree add` fail
+      # and, under `set -eu`, fails the job permanently - fail-closed, but the
+      # shape that gets a gate switched off rather than fixed.
+      #
+      # The leading dot is load-bearing. `..` is the NAMESPACE directory,
+      # shared with every sibling project on this runner, and a GitLab project
+      # path must start with a letter or a digit - so no project can be named
+      # `.gate-base` and this `rm -rf` can never reach somebody else's
+      # checkout. It was `../base` for one revision, which a group holding a
+      # project called `base` would have had wiped on every gate run.
+      rm -rf ../.gate-base
+      git worktree prune
+      git worktree add --detach ../.gate-base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      # Every changed path, with no pathspec and no diff filter: rejecting an
+      # out-of-bounds path is the gate's first job, and it ownership-checks a
+      # deletion before allowing it. Narrowing to `-- index` would let a merge
+      # request that adds a valid entry and edits this very file pass; dropping
+      # `D` would let one that deletes a stranger's entry pass.
+      #
+      # `--no-renames` is load-bearing. Git reports a rename as the DESTINATION
+      # path only, so copying a stranger's metadata.json into your own
+      # namespace and deleting the original was detected as a rename, the
+      # deletion never reached the gate, and no ownership check ever ran on the
+      # victim's namespace. With this flag both sides are listed.
+      #
+      # NEVER add `-C`. Copy detection re-collapses the pair to the
+      # destination in either flag order, which puts the hole straight back.
+      #
+      # `-z` and `--changed-from` keep these attacker-controlled strings off
+      # the command line and out of the shell's hands entirely: a path named
+      # `-h` used to make the parser print help and exit 0, which this job's
+      # contract reads as "eligible for auto-merge".
+      git diff -z --name-only --no-renames \
+        "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD > "$CI_PROJECT_DIR/changed.txt"
+      # Installed and run from the trusted target branch, never from the
+      # merge request's own lockfile. Its own cache directory, because the
+      # shared one is a path the merge request can commit into.
+      cd ../.gate-base
+      rm -rf "$CI_PROJECT_DIR/.npm-gate"
+      npm ci --cache "$CI_PROJECT_DIR/.npm-gate" --prefer-offline --ignore-scripts
+      npm run validate -- \
+        --forge gitlab --root . --pr-tree "$CI_PROJECT_DIR" \
+        --changed-from "$CI_PROJECT_DIR/changed.txt"
+{{gitlabVerifyJob}}
+# GitLab Pages serves whatever the `pages` job leaves in `public/`.
+pages:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - npm ci --cache .npm --prefer-offline --ignore-scripts
+  script:
+    - |
+      set -eu
+{{gitlabEnrichScript}}
+    # Built into `dist/`, then moved. Building straight into `public/` was a
+    # data-loss bug: the compile step clears its output directory first, so it
+    # deleted this index's own committed asset layer (logo, favicon) before
+    # the renderer ever read it. `dist/` already contains those assets by the
+    # time this runs, so the replacement is complete.
+    - npm run build
+    - rm -rf public && mv dist public
+  artifacts:
+    paths:
+      - public

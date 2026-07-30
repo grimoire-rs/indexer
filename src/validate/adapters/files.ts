@@ -45,8 +45,18 @@ export async function readIndexFile(
     return { kind: "error", reason: "path escapes the index root" };
   }
 
-  const stat = await lstat(target).catch(() => null);
-  if (stat === null) return { kind: "missing" };
+  // Only a genuinely absent path is "missing". Every other errno used to
+  // collapse into it, and "missing" now means "an owner deleted this" — so an
+  // EACCES or EIO on a file that also exists in the committed tree, which is
+  // what an ordinary *modification* looks like, would be authorized as a
+  // deletion with its ref, registry host and owner id never read. Neither
+  // template can reach that state, so this closes a fail-open on fault rather
+  // than a live exploit.
+  const stat = await lstat(target).catch((err: NodeJS.ErrnoException) => err);
+  if (stat instanceof Error) {
+    if (stat.code === "ENOENT" || stat.code === "ENOTDIR") return { kind: "missing" };
+    return { kind: "error", reason: `cannot read: ${stat.code ?? "unknown error"}` };
+  }
   if (stat.isSymbolicLink()) {
     return { kind: "error", reason: "symlinks are not accepted" };
   }

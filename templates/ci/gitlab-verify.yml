@@ -1,0 +1,16 @@
+
+# Fail closed when a generated CI file is hand-edited: this job re-renders from
+# index.config.json and diffs against what is committed. Fix drift by running
+# `npm run ci` locally and committing the result.
+grim-indexer:verify-ci:
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    # Rendering needs no build toolchain, so nothing here runs a dependency's
+    # lifecycle script.
+    - npm ci --cache .npm --prefer-offline --ignore-scripts
+  script:
+    # Exits 65 on drift; the hint names the stale path and never its contents.
+    - npm run ci:check

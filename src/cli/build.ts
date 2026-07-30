@@ -6,7 +6,8 @@
 // writes `all.json`, which the renderer then reads.
 import path from "node:path";
 
-import { CliError, EXIT, type ExitCode } from "./exit.js";
+import { EXIT, type ExitCode } from "./exit.js";
+import { resolveOutDir } from "./out_dir.js";
 
 export interface BuildFlags {
   outDir?: string;
@@ -14,18 +15,7 @@ export interface BuildFlags {
 
 export async function build(root: string, flags: BuildFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
-  const outDir = path.resolve(rootDir, flags.outDir ?? "dist");
-
-  // `compileIndex` starts by removing `outDir` outright, so an out-dir that
-  // is the repo root — or an ancestor of it — would delete the index it is
-  // about to compile.
-  if (outDir === rootDir || rootDir.startsWith(outDir + path.sep)) {
-    throw new CliError(
-      `--out-dir ${JSON.stringify(outDir)} contains the index root ${JSON.stringify(rootDir)}; ` +
-        `the build would delete it`,
-      EXIT.usage,
-    );
-  }
+  const outDir = resolveOutDir(rootDir, flags.outDir);
 
   const [{ loadConfig }, { compileIndex }, { buildSite }] = await Promise.all([
     import("../config.js"),

@@ -60,9 +60,16 @@ describe("runValidate — eligible", () => {
     expect(result).toEqual({ eligible: true, reasons: [] });
   });
 
+  // A deletion is a path that IS in the committed tree and is NOT in the
+  // contribution. The base tree has to hold it, or this is not modelling a
+  // deletion at all — see the refusal test below, which is what that gap
+  // used to be waved through as.
   it("waves through a deletion by the namespace owner", async () => {
-    const { result } = await run({ prFiles: { "index/.keep": "" } });
-    expect(result.eligible).toBe(true);
+    const { result } = await run({
+      prFiles: { "index/.keep": "" },
+      baseFiles: { [FILE]: metadata() },
+    });
+    expect(result).toEqual({ eligible: true, reasons: [] });
   });
 
   it("waves through an update that keeps the committed owner id", async () => {
@@ -180,6 +187,41 @@ describe("runValidate — hostile paths", () => {
     const { result } = await run({ options: { prTree: "/nonexistent/pr-tree" } });
     expect(result.eligible).toBe(false);
     expect(said(result.reasons)).toContain("cannot resolve index root");
+  });
+
+  // A path in NEITHER tree used to be read as "a deletion by the namespace
+  // owner" and waved through — so a changed-path entry that named an
+  // in-bounds file nobody ever wrote authorized a merge with the entry's
+  // `ref`, `owner.id` and registry host never once read. That is reachable
+  // from a shell-mangled path (`xargs` stripping quotes out of a crafted
+  // filename) or simply from a fabricated changed-path list.
+  it("refuses an in-bounds path that exists in neither tree", async () => {
+    const { result } = await run({ prFiles: { "index/.keep": "" }, baseFiles: {} });
+    expect(result.eligible).toBe(false);
+    expect(said(result.reasons)).toContain("present in neither the contribution nor this repository");
+  });
+
+  // The deletion check must key on proof that something IS committed, not on
+  // the absence of a "missing". Written `=== "missing"` it fell through to
+  // "authorized deletion" whenever the base read FAILED rather than came back
+  // empty — turning a fault into a pass, which is the inversion the whole
+  // check exists to prevent.
+  it("refuses a deletion it cannot confirm against the committed tree", async () => {
+    const { result } = await run({
+      prFiles: { "index/.keep": "" },
+      options: { root: "/nonexistent/base" },
+    });
+    expect(result.eligible).toBe(false);
+  });
+
+  // The same fault on an UPDATE. An unreadable committed entry used to look
+  // like "no committed entry", i.e. a new package — which skips the
+  // owner-id continuity check, the one thing stopping a re-registered login
+  // from inheriting the previous holder's packages.
+  it("refuses an update it cannot read the committed entry for", async () => {
+    const { result } = await run({ options: { root: "/nonexistent/base" } });
+    expect(result.eligible).toBe(false);
+    expect(said(result.reasons)).toContain("committed");
   });
 });
 

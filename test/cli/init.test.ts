@@ -12,10 +12,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run } from "../../src/cli/main.js";
 
 let dir: string;
+let logs: string[];
 
-/** `--quick --no-git` is the non-interactive path CI and these tests use. */
+/**
+ * The non-interactive path. `--no-install` is not just speed: `npm install`
+ * reaches the network and writes a lock resolved from whatever is published
+ * today, which would make every assertion below depend on the registry.
+ */
 function initArgs(target: string, ...extra: string[]): string[] {
-  return ["node", "grim-indexer", "init", target, "--quick", "--no-git", ...extra];
+  return ["node", "grim-indexer", "init", target, "--quick", "--no-git", "--no-install", ...extra];
 }
 
 function read(rel: string): string {
@@ -26,19 +31,26 @@ function exists(rel: string): boolean {
   return fs.existsSync(path.join(dir, rel));
 }
 
-/** Walk a parsed YAML document by key path. Array indices are keys too. */
-function dig(root: unknown, ...keys: string[]): unknown {
-  return keys.reduce<unknown>(
-    (node, key) => (node as Record<string, unknown> | undefined)?.[key],
-    root,
+/** What init reported for each path: `created`, `unchanged`, `skipped`, `stale`. */
+function reported(): Map<string, string> {
+  return new Map(
+    logs.map((line) => {
+      const [outcome = "", file = ""] = line.trim().split(/\s+/);
+      return [file, outcome];
+    }),
   );
 }
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "index-init-"));
-  // Keep console noise out of the reporter; the assertions read the disk.
+  logs = [];
+  // Keep console noise out of the reporter; the assertions read the disk —
+  // except the per-file outcome lines, which are the only place `skipped` and
+  // `stale` are reported at all.
   // @clack/prompts writes its boxes straight to the stream, past console.
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  });
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 });
 
@@ -56,12 +68,21 @@ describe("init --quick", () => {
       "index.config.json",
       "index-policy.json",
       ".gitignore",
+      ".gitattributes",
+      "package.json",
       "README.md",
       ".github/workflows/pages.yml",
       ".github/workflows/validate.yml",
+      ".github/workflows/verify-ci.yml",
     ]) {
       expect(exists(file), file).toBe(true);
     }
+
+    // `npm run ci:check` compares the generated CI through a renderer that
+    // emits LF. Git for Windows installs with `core.autocrlf=true`, so without
+    // this an untouched clone has CRLF on disk, every generated file reads as
+    // drift, and re-rendering cannot clear it.
+    expect(read(".gitattributes")).toMatch(/^\*\s+text=auto\s+eol=lf$/m);
 
     // `public/` is the index's own asset layer — the logo and favicon the
     // config names live there and the build copies them into `dist/`.
@@ -70,6 +91,11 @@ describe("init --quick", () => {
     const ignored = fs.readFileSync(path.join(dir, ".gitignore"), "utf8");
     expect(ignored).toContain("dist/");
     expect(ignored).not.toMatch(/^public\/$/m);
+    // The lock is what CI installs from. Ignoring it would leave `npm ci`
+    // with nothing to install and the renderer version resolved per runner —
+    // which is the whole thing the lock exists to stop.
+    expect(ignored).toMatch(/^node_modules\/$/m);
+    expect(ignored).not.toMatch(/^package-lock\.json$/m);
 
     // Default forge is github, so no GitLab CI and no skills layout.
     expect(exists(".gitlab-ci.yml")).toBe(false);
@@ -93,11 +119,52 @@ describe("init --quick", () => {
 
   // The header's "github" link. `repoUrl` has no default for good reason, so
   // scaffolding has to work it out — from the git remote if there is one,
-  // otherwise from the Pages URL the index is served from.
-  it("derives repoUrl from a Pages base URL", async () => {
-    await run(initArgs(dir, "--name", "idx", "--base-url", "https://acme.github.io/idx"));
+  // otherwise from the Pages URL the index is served from. A fresh temp dir
+  // has no remote, so the Pages fallback is the only thing that can answer,
+  // and dropping it left the header unlinked and `publish.toml` unable to
+  // announce.
+  it("derives repoUrl from a Pages base URL when there is no remote to read", async () => {
+    for (const [sub, baseUrl, repoUrl] of [
+      ["gh", "https://acme.github.io/idx", "https://github.com/acme/idx"],
+      ["gl", "https://acme.gitlab.io/idx", "https://gitlab.com/acme/idx"],
+    ]) {
+      const target = path.join(dir, sub as string);
+      expect(await run(initArgs(target, "--name", "idx", "--base-url", baseUrl as string))).toBe(0);
 
-    expect(JSON.parse(read("index.config.json")).repoUrl).toBe("https://github.com/acme/idx");
+      expect(fs.existsSync(path.join(target, ".git")), "nothing to derive from").toBe(false);
+      const config = JSON.parse(fs.readFileSync(path.join(target, "index.config.json"), "utf8"));
+      expect(config.repoUrl, baseUrl).toBe(repoUrl);
+      expect(config.site, baseUrl).toBe(baseUrl);
+    }
+  });
+
+  // The obvious thing to paste into `--repo-url` is the forge's clone box,
+  // which ends in `.git`. Used verbatim that made `site`
+  // `https://acme.github.io/idx.git` — hence `/idx.git` as Astro's `base` — on
+  // a Pages deployment that serves `/idx`, so every link on the built site
+  // pointed one path segment wrong.
+  it("normalizes a --repo-url the way git normalizes a remote", async () => {
+    await run(initArgs(dir, "--name", "idx", "--repo-url", "https://github.com/acme/idx.git"));
+
+    const config = JSON.parse(read("index.config.json"));
+    expect(config.repoUrl).toBe("https://github.com/acme/idx");
+    expect(config.site).toBe("https://acme.github.io/idx");
+    // The address this index hands its visitors to add it with — same URL,
+    // and just as wrong with a `.git` on the end.
+    expect(config.registry.index).toBe("https://acme.github.io/idx");
+  });
+
+  // `logo` and `favicon` are deliberately different keys (see `SiteConfig`): a
+  // favicon is drawn to read at 16px, a logo goes in the header and becomes
+  // the default `og:image`. The prompt asks for a brand logo, so writing the
+  // answer to `favicon` both lost the header logo and shipped a 16px slot
+  // holding a wide brand mark.
+  it("writes the brand logo to `logo`, never `favicon`", async () => {
+    await run(initArgs(dir, "--logo", "/logo.svg"));
+
+    const config = JSON.parse(read("index.config.json"));
+    expect(config.logo).toBe("/logo.svg");
+    expect("favicon" in config).toBe(false);
   });
 
   it("writes the registry-host allowlist the gate reads", async () => {
@@ -240,41 +307,59 @@ describe("init --with-skills", () => {
   });
 });
 
-describe("generated CI", () => {
-  it("parses as YAML and calls the reusable workflows by pinned ref", async () => {
-    await run(initArgs(dir, "--forge", "both"));
+// What `init` owes the CI renderer: a `ci` block that reproduces exactly the
+// files it just wrote. The scaffold's own drift guard runs on the first push,
+// so a scaffold that is not already drift-free fails CI before the repository
+// has done anything. Everything else about the generated CI is asserted in
+// `ci.test.ts`, against the renderer rather than through the wizard.
+describe("scaffolded CI", () => {
+  it("records the forge the workflows were rendered for", async () => {
+    await run(initArgs(dir, "--forge", "gitlab"));
 
-    const pages = yaml.load(read(".github/workflows/pages.yml"));
-    const validate = yaml.load(read(".github/workflows/validate.yml"));
-    const gitlab = yaml.load(read(".gitlab-ci.yml"));
-
-    expect(dig(pages, "jobs", "pages", "uses")).toMatch(
-      /^grimoire-rs\/indexer\/\.github\/workflows\/index-pages\.yml@v\d+\.\d+\.\d+$/,
-    );
-    expect(dig(validate, "jobs", "validate", "uses")).toMatch(
-      /^grimoire-rs\/indexer\/\.github\/workflows\/index-validate\.yml@v\d+\.\d+\.\d+$/,
-    );
-    expect(dig(gitlab, "include", "0", "remote")).toMatch(
-      /^https:\/\/raw\.githubusercontent\.com\/grimoire-rs\/indexer\/v\d+\.\d+\.\d+\//,
-    );
-
-    // Thin callers: no inline job logic to drift out of date.
-    expect(dig(pages, "jobs", "pages", "steps")).toBeUndefined();
-    expect(dig(validate, "jobs", "validate", "steps")).toBeUndefined();
+    const { ci } = JSON.parse(read("index.config.json"));
+    expect(ci.forge).toBe("gitlab");
+    // Which renderer runs is package-lock.json's job, not the config's. A
+    // version here would be a second copy of the same fact, free to disagree.
+    expect("indexerVersion" in ci).toBe(false);
   });
 
-  it("keeps permissions default-deny at the workflow top", async () => {
-    await run(initArgs(dir, "--forge", "github"));
+  // What init renders is decided by the `ci` block that will be ON DISK when
+  // it returns, not by its flags: `write` keeps an existing
+  // `index.config.json` unless `--force`. Rendering from the flags while the
+  // config kept its own values produced a tree whose committed CI did not
+  // match its committed config — and `ci --check`, which reads only the
+  // config, then failed on a tree init had just reported as successful.
+  it("renders the CI its config asks for, not the CI its flags asked for", async () => {
+    expect(await run(initArgs(dir))).toBe(0);
+    const config = JSON.parse(read("index.config.json"));
+    config.ci.forge = "gitlab";
+    fs.writeFileSync(path.join(dir, "index.config.json"), JSON.stringify(config, null, 2) + "\n");
 
-    for (const file of [".github/workflows/pages.yml", ".github/workflows/validate.yml"]) {
-      const workflow = yaml.load(read(file));
-      expect(dig(workflow, "permissions"), file).toEqual({});
-      // Elevation happens per job, never at the top.
-      const jobs = dig(workflow, "jobs") as Record<string, Record<string, unknown>>;
-      for (const [name, job] of Object.entries(jobs)) {
-        expect(job.permissions, `${file}: ${name}`).toBeTruthy();
-      }
+    logs = [];
+    expect(await run(initArgs(dir, "--forge", "github"))).toBe(0);
+
+    const outcome = reported();
+    expect(exists(".gitlab-ci.yml"), "the config's forge is what got rendered").toBe(true);
+    expect(JSON.parse(read("index.config.json")).ci.forge, "and the config is left alone").toBe(
+      "gitlab",
+    );
+    expect(outcome.get("index.config.json")).toBe("skipped");
+    // Reported, never deleted — removing a file from somebody's repository is
+    // their call. Silence here left an orphaned pipeline behind and the drift
+    // guard failing on the next push with no hint of where it came from.
+    for (const workflow of [
+      ".github/workflows/pages.yml",
+      ".github/workflows/validate.yml",
+      ".github/workflows/verify-ci.yml",
+    ]) {
+      expect(outcome.get(workflow), workflow).toBe("stale");
+      expect(exists(workflow), workflow).toBe(true);
+      fs.rmSync(path.join(dir, workflow));
     }
+
+    // The payoff: with the orphans gone the tree init just wrote is drift-free.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await run(["node", "grim-indexer", "ci", dir, "--check"])).toBe(0);
   });
 
   it("emits only the forge that was asked for", async () => {
@@ -282,180 +367,73 @@ describe("generated CI", () => {
 
     expect(exists(".gitlab-ci.yml")).toBe(true);
     expect(exists(".github/workflows/pages.yml")).toBe(false);
+    expect(exists(".github/workflows/verify-ci.yml")).toBe(false);
   });
-});
 
-const repo = path.join(import.meta.dirname, "..", "..");
+  // A scaffolded index is an npm project, and every command a maintainer or a
+  // CI job runs goes through its scripts. `dev` is the one a person reaches
+  // for first, and it did not exist when the scaffold told people to use npx.
+  it("is an npm project with the scripts CI and a human both run", async () => {
+    await run(initArgs(dir, "--name", "acme"));
 
-/**
- * Every place a scaffolded repo points back at this one, as
- * (repo-relative path, git ref) — from `uses:` in the GitHub callers and
- * from the `include: remote:` URL in the GitLab one.
- */
-function backRefs(text: string): Array<{ file: string; ref: string }> {
-  return [
-    ...[...text.matchAll(/^\s*-?\s*uses: grimoire-rs\/indexer\/(\S+?)@(\S+)/gm)],
-    ...[...text.matchAll(/raw\.githubusercontent\.com\/grimoire-rs\/indexer\/([^/]+)\/(\S+?)"/g)]
-      // The URL orders them ref-then-path; normalise to path-then-ref.
-      .map((m) => [m[0], m[2], m[1]] as RegExpMatchArray),
-  ].map((m) => ({ file: m[1] as string, ref: m[2] as string }));
-}
+    const manifest = JSON.parse(read("package.json"));
+    expect(manifest.private, "an index is never published to npm").toBe(true);
+    expect(manifest.devDependencies["@grimoire-rs/indexer"]).toMatch(/^\^\d+\.\d+\.\d+$/);
+    for (const script of ["dev", "build", "validate", "enrich", "ci", "ci:check"]) {
+      expect(Object.keys(manifest.scripts), script).toContain(script);
+    }
+    // CI runs the gate as `npm run validate -- <flags>`, and the CLI arms its
+    // "a 0 here authorizes a merge" guard only when the subcommand is
+    // `argv[2]`. Anything in front of it here — a flag, a wrapper — disarms
+    // that guard for every index scaffolded from this template.
+    expect(manifest.scripts.validate).toBe("grim-indexer validate");
+  });
 
-// v0.1.2 shipped scaffolds whose callers said
-// `uses: grimoire-rs/indexer/.github/workflows/index-pages.yml@v0.1.2` while
-// those workflows only existed under `templates/reusable/`. GitHub cannot
-// resolve a reusable workflow outside `.github/workflows/`, so the very
-// first push to a scaffolded index failed before any job started — with no
-// job to show a log for. Nothing checked that the emitted ref pointed at a
-// file that exists, so nothing caught it.
-describe("scaffolded callers resolve back to this repo", () => {
-  it("names a file that exists here, at this package's tag", async () => {
-    expect(await run(initArgs(dir, "--forge", "both"))).toBe(0);
-    const version = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8")).version;
+  // Everything init writes lands in somebody else's repository, gets read in
+  // CI logs, terminals, forge diff views and editors that are not all UTF-8,
+  // and gets pasted around. A stray em dash in a generated YAML comment is a
+  // rendering problem the index owner cannot fix without tripping the drift
+  // guard, so the scaffold stays ASCII - this repo's own prose does not have
+  // to, which is why the check is on the output rather than on the templates.
+  it("writes nothing but ASCII", async () => {
+    await run(initArgs(dir, "--forge", "gitlab", "--with-skills"));
 
-    const refs = [".github/workflows/pages.yml", ".github/workflows/validate.yml", ".gitlab-ci.yml"]
-      .flatMap((caller) => backRefs(read(caller)));
+    const walk = (at: string): string[] =>
+      fs.readdirSync(at, { withFileTypes: true }).flatMap((entry) => {
+        const full = path.join(at, entry.name);
+        return entry.isDirectory() ? walk(full) : [full];
+      });
 
-    expect(refs.length).toBe(3);
-    for (const { file, ref } of refs) {
-      expect(fs.existsSync(path.join(repo, file)), `${file} is referenced but not in this repo`)
-        .toBe(true);
-      expect(ref, `${file} must be pinned to this package's tag`).toBe(`v${version}`);
+    for (const file of walk(dir)) {
+      const offending = [...fs.readFileSync(file, "utf8")].filter((ch) => ch.charCodeAt(0) > 127);
+      expect(
+        [...new Set(offending)].join(""),
+        `${path.relative(dir, file)} carries non-ASCII`,
+      ).toBe("");
     }
   });
 
-  // The scaffold told users to require the status check `validate`. A thin
-  // caller reports `<caller job> / <called job>`, so that context never
-  // reported and a passing gate still sat at BLOCKED — indistinguishable
-  // from the gate rejecting the contribution. Renaming either job key
-  // silently moves the context, which is what this asserts against.
-  it("names the status check the caller actually reports", async () => {
-    await run(initArgs(dir, "--forge", "github"));
-    const caller = read(".github/workflows/validate.yml");
-    const jobKey = (text: string) => Object.keys(dig(yaml.load(text), "jobs") as object)[0];
+  // The workflows used to be thin callers of reusable workflows in
+  // grimoire-rs/indexer, which meant an index repository could not read its
+  // own pipeline, and a fix to it arrived (or did not) out of band. Nothing a
+  // scaffolded repo runs may be fetched from this one at run time any more,
+  // and no version floats: CI installs the committed lock.
+  it("points at nothing outside its own lockfile", async () => {
+    for (const [forge, files] of [
+      ["github", [".github/workflows/pages.yml", ".github/workflows/validate.yml", ".github/workflows/verify-ci.yml"]],
+      ["gitlab", [".gitlab-ci.yml"]],
+    ] as Array<[string, string[]]>) {
+      const target = path.join(dir, forge);
+      expect(await run(initArgs(target, "--forge", forge))).toBe(0);
 
-    const context = `${jobKey(caller)} / ${jobKey(
-      fs.readFileSync(path.join(repo, ".github/workflows/index-validate.yml"), "utf8"),
-    )}`;
-    expect(caller, `branch protection must be told to require \`${context}\``).toContain(
-      `\`${context}\``,
-    );
-  });
-
-  it("only reaches GitHub-resolvable paths for `uses:`", async () => {
-    await run(initArgs(dir, "--forge", "github"));
-
-    for (const caller of [".github/workflows/pages.yml", ".github/workflows/validate.yml"]) {
-      for (const { file } of backRefs(read(caller))) {
-        // GitHub does not resolve a reusable workflow in a subdirectory.
-        expect(file, caller).toMatch(/^\.github\/workflows\/[^/]+\.ya?ml$/);
+      for (const file of files) {
+        const text = fs.readFileSync(path.join(target, file), "utf8");
+        expect(text, file).not.toMatch(/uses:\s*grimoire-rs\/indexer/);
+        expect(text, file).not.toMatch(/raw\.githubusercontent\.com\/grimoire-rs/);
+        expect(text, `${file} must not fetch a floating release`).not.toContain("npx");
+        expect(text, `${file} installs the lock`).toContain("npm ci");
+        expect(yaml.load(text), `${file} parses`).toBeTruthy();
       }
     }
-  });
-});
-
-describe("shipped reusable workflows", () => {
-  it("parse as YAML and SHA-pin every action", () => {
-    for (const file of [".github/workflows/index-pages.yml", ".github/workflows/index-validate.yml"]) {
-      const text = fs.readFileSync(path.join(repo, file), "utf8");
-      const workflow = yaml.load(text);
-
-      expect(dig(workflow, "permissions"), file).toEqual({});
-      expect(dig(workflow, "on", "workflow_call"), file).toBeTruthy();
-
-      // Line-anchored: these files discuss `uses:` in their header comments.
-      const uses = [...text.matchAll(/^\s*-?\s*uses: (\S+)/gm)].map((m) => m[1] as string);
-      expect(uses.length, file).toBeGreaterThan(0);
-      for (const ref of uses) {
-        expect(ref, `${file}: ${ref}`).toMatch(/@[0-9a-f]{40}$/);
-      }
-    }
-  });
-
-  // `build` compiles `enrich/` into `all.json`, so enriching after it would
-  // produce sidecars nothing ever reads — a site that silently stays on
-  // "No README available" with a green pipeline. Order is the contract.
-  it("enriches before it builds, on both forges", () => {
-    const pages = yaml.load(
-      fs.readFileSync(path.join(repo, ".github/workflows/index-pages.yml"), "utf8"),
-    ) as { jobs: { build: { steps: Array<{ run?: string }> } } };
-    const runs = pages.jobs.build.steps.map((step) => step.run ?? "");
-    const ghEnrich = runs.findIndex((r) => /indexer@\S+" enrich/.test(r));
-    const ghBuild = runs.findIndex((r) => /indexer@\S+" build/.test(r));
-
-    expect(ghEnrich, "the pages workflow enriches").toBeGreaterThanOrEqual(0);
-    expect(ghEnrich).toBeLessThan(ghBuild);
-    // grim is what reads the registry; enriching without it is the failure
-    // this whole step exists to avoid.
-    expect(runs.slice(0, ghEnrich).join("\n")).toMatch(/releases\/[\s\S]*grimoire-/);
-    // A registry outage degrades the site; it must never block the deploy.
-    expect(runs[ghEnrich]).toMatch(/\|\|/);
-
-    const gitlab = yaml.load(
-      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
-    ) as Record<string, { script?: string[] }>;
-    const script = gitlab.pages?.script?.join("\n") ?? "";
-    const glEnrich = script.search(/indexer@\S+" enrich/);
-    const glBuild = script.search(/indexer@\S+" build/);
-
-    expect(glEnrich, "the gitlab pages job enriches").toBeGreaterThanOrEqual(0);
-    expect(glEnrich).toBeLessThan(glBuild);
-    expect(script.slice(0, glEnrich)).toMatch(/releases\/[\s\S]*grimoire-/);
-    expect(script).toMatch(/\|\|\s*echo/);
-  });
-
-  // The gate's exit code authorizes an auto-merge, so anything filtered out
-  // of the changed-path list before it is filtered out of that decision.
-  // Both jobs used to narrow the list — GitHub to `^index/` and non-removed,
-  // GitLab to `-- index` with `--diff-filter=ACMR`. Either lets a PR that
-  // adds a valid entry of its own and edits a workflow, or deletes someone
-  // else's entry, come back green.
-  it("hands the gate every changed path, unfiltered, on both forges", () => {
-    const gh = fs.readFileSync(path.join(repo, ".github/workflows/index-validate.yml"), "utf8");
-    const collect = gh.slice(gh.indexOf("Collect changed paths"), gh.indexOf("Validate contribution"));
-
-    expect(collect).toContain("changed.txt");
-    expect(collect, "no path filter").not.toMatch(/grep[^\n]*index/);
-    expect(collect, "no status filter").not.toContain("removed");
-
-    const gitlab = yaml.load(
-      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
-    ) as Record<string, { script?: string[] }>;
-    const diff = (gitlab["grim-indexer:validate"]?.script ?? [])
-      .join("\n")
-      .split("\n")
-      .find((line) => line.includes("git diff"));
-
-    expect(diff, "the gate diffs the MR").toBeDefined();
-    expect(diff, "no pathspec").not.toMatch(/--\s+index\b/);
-    expect(diff, "no diff filter").not.toContain("--diff-filter");
-  });
-
-  it("gitlab include file parses as a single YAML document", () => {
-    const gitlab = yaml.load(
-      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
-    );
-
-    expect(dig(gitlab, "stages")).toEqual(["test", "deploy"]);
-    expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["$GRIM_INDEXER_OUT_DIR"]);
-  });
-
-  // The gate ran `git` on `node:22-alpine`, which ships none: every merge
-  // request died with `git: not found`, exit 127, before validating anything.
-  // Asserted structurally — every command the job shells out to has to be
-  // reachable in its image, and `git` is the one the image does not carry.
-  it("gitlab gate makes git available before it runs git", () => {
-    const gitlab = yaml.load(
-      fs.readFileSync(path.join(repo, "templates/reusable/gitlab-index-ci.yml"), "utf8"),
-    ) as Record<string, { before_script?: string[]; script?: string[] }>;
-    const job = gitlab["grim-indexer:validate"];
-
-    expect(job?.script?.join("\n"), "the gate does diff the MR with git").toMatch(/\bgit\s+\w/);
-
-    const setup = job?.before_script?.join("\n") ?? "";
-    expect(setup, "…so something must install it first").toMatch(/\bgit\b/);
-    // And a failed install must not let the gate reach `validate` — an
-    // absent tool has to fail the job, never silently skip validation.
-    expect(setup).toMatch(/command -v git[\s\S]*exit 1/);
   });
 });

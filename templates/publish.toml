@@ -1,4 +1,4 @@
-# `grim publish` manifest — this repo holds both its own skills (under
+# `grim publish` manifest - this repo holds both its own skills (under
 # `skills/`) and the index that lists them, the combined layout
 # `grim-indexer init --with-skills` scaffolds.
 #
@@ -18,7 +18,7 @@ version = "0.1.0"
 # do not own.
 #
 # `repository` is this repo's https clone URL. `namespace` is the
-# `index/<host>/<namespace>/` your entries land under — the contribution gate
+# `index/<host>/<namespace>/` your entries land under - the contribution gate
 # refuses a namespace whose forge owner is not you. A literal `REPLACE-ME`
 # means the scaffold had nothing to derive it from: `--announce` then stops
 # with "cannot derive the index host" rather than announcing anywhere.

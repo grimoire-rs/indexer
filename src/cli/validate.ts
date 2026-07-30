@@ -25,6 +25,35 @@ export interface ValidateFlags {
   forge?: ValidateForge;
   authorLogin?: string;
   authorId?: string;
+  changedFrom?: string;
+}
+
+/**
+ * Read the changed-path list out of a file rather than off argv.
+ *
+ * This is the gate's only supported CI input, and the reason is a real
+ * exploit: the paths are attacker-controlled strings, and CI used to append
+ * them to the command line with `xargs`. A pull request that added an empty
+ * file named `-h` therefore made commander print help and short-circuit, and
+ * the gate's own contract reads exit 0 as "eligible for auto-merge". A path
+ * spelled `--policy=pr-tree/...` was worse: it pointed the committed
+ * allowlist at a file inside the contribution.
+ *
+ * Reading from a file removes the class rather than filtering it. NUL
+ * separation is used when the producer offers it (`git diff -z`), newlines
+ * otherwise (the GitHub API's `--jq` output). A path containing a literal
+ * newline splits into two entries under the newline form; both fail the path
+ * gate, so that residual is fail-closed.
+ */
+function readChangedFrom(file: string): string[] {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    throw new CliError(`--changed-from ${file}: cannot be read`, EXIT.data);
+  }
+  const separator = text.includes("\0") ? "\0" : "\n";
+  return text.split(separator).filter((entry) => entry !== "");
 }
 
 /** What `index-policy.json` contributes to `ValidateOptions`. */
@@ -45,6 +74,15 @@ function detectForge(): ValidateForge | undefined {
  * The PR/MR author, from whatever the forge exposes. GitHub carries it in
  * the event payload; GitLab's merge-request pipeline runs as the author, so
  * `GITLAB_USER_*` is the author.
+ *
+ * KNOWN GAP on GitLab: `GITLAB_USER_*` is the pipeline's *triggerer*, which
+ * is the author only for the run the push creates. A maintainer who re-runs
+ * the job becomes the identity ownership is checked against. Reading the
+ * author from the API instead is a design change, and it is only worth making
+ * if the GitLab gate is treated as a trust boundary at all — which the
+ * RESIDUAL note in the generated `.gitlab-ci.yml` says it is not, because the
+ * merge request supplies the pipeline. Pass `--author-login`/`--author-id`
+ * explicitly if you need this pinned.
  */
 function detectAuthor(forge: ValidateForge): { login: string; id: string } | undefined {
   if (forge === "gitlab") {
@@ -112,6 +150,20 @@ function readPolicy(file: string, explicit: boolean): Policy {
  *   ineligible.
  */
 export async function validate(files: string[], flags: ValidateFlags): Promise<ExitCode> {
+  const changed = flags.changedFrom ? [...files, ...readChangedFrom(flags.changedFrom)] : files;
+
+  // Defence in depth behind `--changed-from`: no path under `index/` can
+  // legitimately begin with `-`, and one that does is either a shell-mangled
+  // entry or an attempt to have the gate parse it as a flag. Refuse rather
+  // than judge it, so the failure is a usage error and never an exit 0.
+  const dashed = changed.filter((file) => file.startsWith("-"));
+  if (dashed.length > 0) {
+    throw new CliError(
+      `changed paths must not begin with "-": ${dashed.map((f) => JSON.stringify(f)).join(", ")}`,
+      EXIT.usage,
+    );
+  }
+
   const root = path.resolve(flags.root ?? ".");
   const forge = flags.forge ?? detectForge();
   if (!forge) {
@@ -147,7 +199,7 @@ export async function validate(files: string[], flags: ValidateFlags): Promise<E
     forge,
     root,
     prTree: path.resolve(flags.prTree),
-    changedFiles: files,
+    changedFiles: changed,
     author,
     ...(policy.registryHosts ? { registryHosts: policy.registryHosts } : {}),
     ...(policy.reservedNamespaces ? { reservedNamespaces: policy.reservedNamespaces } : {}),

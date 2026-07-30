@@ -1,0 +1,64 @@
+{{header}}
+# Builds this index and deploys it to GitHub Pages.
+#
+# Enable it once, in Settings -> Pages -> Source: "GitHub Actions". Until
+# that is set, this workflow runs green and deploys nothing.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Default-deny at the top; every job pays for exactly what it needs.
+permissions: {}
+
+concurrency:
+  group: grim-indexer-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "{{nodeVersion}}"
+          cache: npm
+
+      # `npm ci` installs exactly package-lock.json, so which renderer builds
+      # this site is a reviewed fact in the repository, not a resolution that
+      # happens on the runner. `--ignore-scripts` because this job runs
+      # MERGED contributor content: a `prepare` script or a lock entry that
+      # arrived through an auto-merged pull request would otherwise execute
+      # here, in the job that publishes the site.
+      - name: Install
+        run: npm ci --ignore-scripts
+{{githubEnrichSteps}}
+      - name: Build index
+        run: npm run build
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
