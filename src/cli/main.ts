@@ -144,7 +144,7 @@ export async function run(argv: string[]): Promise<number> {
     .option(
       "--force",
       "rewrite files that differ from the scaffold, discarding their contents " +
-        "(publish.toml packages, index-policy.json trust settings)",
+        "(never publish.toml or index-policy.json — those are only ever created)",
     )
     .action(async (dir: string, opts: InitCliOptions, cmd: Command) => {
       code = await init(

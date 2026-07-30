@@ -127,9 +127,10 @@ this early.
 > pinning this package (if the old scaffold has none) and running
 > `npm run ci`, which re-renders the workflow files and nothing else.
 > **Not `init --force`**: that rewrites the whole scaffold from its
-> templates, discarding declared packages in `publish.toml`, the allowlist
-> and trusted bots in `index-policy.json`, and any `uses:` pin Renovate has
-> bumped since - `npm run ci` keeps all four.
+> templates, discarding the added scripts in `package.json`, your
+> `.gitignore` rules, your `README.md`, and any `uses:` pin Renovate has
+> bumped since - `npm run ci` keeps all four. `publish.toml` and
+> `index-policy.json` are never rewritten, by `--force` or anything else.
 >
 > Through `0.1.3`, `init --with-skills` wrote a `publish.toml` with no
 > `[announce]` table, so `grim publish --announce` in a combined-layout

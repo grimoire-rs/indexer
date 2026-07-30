@@ -468,14 +468,98 @@ describe("init over an existing index", () => {
     const said = [...errors, ...logs].join("\n");
     expect(said, "no first-run script").not.toContain("Add packages under index/");
     expect(said, "nothing became ready").not.toContain("ready in");
-    expect(said, "the cost is named, not the flag alone").toContain(
-      "publish.toml — every package it declares",
+    expect(said, "the file is named along with what it holds").toContain(
+      "publish.toml — the packages this repo declares",
     );
     expect(said).not.toMatch(/Re-run with --force to overwrite them/);
     expect(said).toContain("Nothing to do");
 
     // And the packages are still there, which is the point of not suggesting it.
     expect(read("publish.toml")).toContain("[skills.code-review]");
+  });
+
+  // The narrowing itself. `npm run setup` in the index template is
+  // `init --force .`, so "--force rewrites everything that differs" meant the
+  // documented re-run path silently deleted declared packages and reset the
+  // gate's allowlist. Creation is untouched — see the next test.
+  it("never rewrites publish.toml or index-policy.json, even with --force", async () => {
+    expect(await run(initArgs(dir, "--name", "acme", "--with-skills"))).toBe(0);
+    fs.appendFileSync(
+      path.join(dir, "publish.toml"),
+      '\n[skills.code-review]\nrepository = "acme/skills/code-review"\n',
+    );
+    const policy = JSON.parse(read("index-policy.json"));
+    policy.registryHosts = ["ghcr.io", "registry.acme.example"];
+    policy.trustedBots = ["renovate[bot]"];
+    fs.writeFileSync(path.join(dir, "index-policy.json"), JSON.stringify(policy, null, 2) + "\n");
+
+    expect(
+      await run(["node", "grim-indexer", "init", dir, "--quick", "--no-install", "--force"]),
+    ).toBe(0);
+
+    expect(read("publish.toml")).toContain("[skills.code-review]");
+    const after = JSON.parse(read("index-policy.json"));
+    expect(after.registryHosts).toEqual(["ghcr.io", "registry.acme.example"]);
+    expect(after.trustedBots).toEqual(["renovate[bot]"]);
+    expect(reported().get("index-policy.json")).toBe("preserved");
+    expect(reported().get("publish.toml")).toBe("preserved");
+  });
+
+  // Preserving an existing file must not stop an absent one being written —
+  // deleting a scaffold file to get a fresh copy is the one thing `--force`
+  // is still for here.
+  it("still creates a preserved file that is missing", async () => {
+    expect(await run(initArgs(dir, "--name", "acme", "--with-skills"))).toBe(0);
+    fs.rmSync(path.join(dir, "publish.toml"));
+    fs.rmSync(path.join(dir, "index-policy.json"));
+
+    // `--with-skills` again because deleting `publish.toml` deletes the
+    // combined layout with it — its existence *is* the layout, so nothing
+    // would plan it back otherwise.
+    expect(
+      await run([
+        "node",
+        "grim-indexer",
+        "init",
+        dir,
+        "--quick",
+        "--no-install",
+        "--force",
+        "--with-skills",
+      ]),
+    ).toBe(0);
+
+    expect(exists("publish.toml")).toBe(true);
+    expect(reported().get("publish.toml")).toBe("created");
+    expect(reported().get("index-policy.json")).toBe("created");
+  });
+
+  // The registry host is answered at a prompt but committed to
+  // `index-policy.json`. Preserving that file makes the answer inert, and a
+  // silently dropped answer is the bug this whole change is about.
+  it("says so when an answered registry host cannot reach the preserved policy", async () => {
+    const errors: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    });
+
+    expect(await run(initArgs(dir, "--name", "acme"))).toBe(0);
+    const policy = JSON.parse(read("index-policy.json"));
+    policy.reservedNamespaces = ["acme"];
+    fs.writeFileSync(path.join(dir, "index-policy.json"), JSON.stringify(policy, null, 2) + "\n");
+
+    expect(
+      await run([
+        ...initArgs(dir, "--name", "acme", "--force"),
+        "--registry-host",
+        "registry.acme.example",
+      ]),
+    ).toBe(0);
+
+    const said = errors.join("\n");
+    expect(said).toContain("registry.acme.example");
+    expect(said).toContain("was not added");
+    expect(JSON.parse(read("index-policy.json")).reservedNamespaces).toEqual(["acme"]);
   });
 
   it("still derives everything on a first run", async () => {

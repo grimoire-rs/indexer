@@ -42,12 +42,30 @@ const MANIFEST_FILE = "publish.toml";
  * and reads like routine advice.
  */
 const USER_OWNED: Record<string, string> = {
-  [MANIFEST_FILE]: "every package it declares",
-  [POLICY_FILE]: "the allowlist, reserved namespaces and trusted bots the gate reads",
   "package.json": "added scripts and dependencies",
   ".gitignore": "every ignore rule added to it",
   ".gitattributes": "every attribute rule added to it",
   "README.md": "the README this index publishes",
+};
+
+/**
+ * Two files `--force` does not rewrite, at any scope, ever.
+ *
+ * Both hold data no scaffold can regenerate: the packages this repo declares,
+ * and the registry hosts, reserved namespaces and trusted bots the contribution
+ * gate bounds every entry by. Every other scaffold file is derivable from the
+ * answers plus `index.config.json`; these two are not, and losing either is
+ * silent — a rewritten policy narrows the gate's allowlist back to `ghcr.io`
+ * without failing anything, and a rewritten manifest publishes nothing on the
+ * next release because it declares nothing.
+ *
+ * The template's own `npm run setup` is `init --force .`, so this is not a
+ * rare path: it is the documented one. Creation is unaffected — an absent file
+ * is still written, so deleting one to re-scaffold it still works.
+ */
+const NEVER_OVERWRITTEN: Record<string, string> = {
+  [MANIFEST_FILE]: "the packages this repo declares",
+  [POLICY_FILE]: "the allowlist, reserved namespaces and trusted bots the gate reads",
 };
 
 /**
@@ -120,7 +138,7 @@ export interface InitFlags {
 }
 
 /** What happened to one scaffolded file. */
-export type FileOutcome = "created" | "overwritten" | "unchanged" | "skipped";
+export type FileOutcome = "created" | "overwritten" | "unchanged" | "skipped" | "preserved";
 
 export interface InitResult {
   dir: string;
@@ -892,7 +910,8 @@ function plan(
 /**
  * Write the scaffold. Re-running is safe: a file whose content already
  * matches is reported `unchanged`, and one the user has edited is left
- * alone as `skipped` unless `--force`.
+ * alone as `skipped` unless `--force`. A `NEVER_OVERWRITTEN` file that
+ * differs is reported `preserved` and left alone even with `--force`.
  */
 function write(
   dir: string,
@@ -908,6 +927,10 @@ function write(
     if (fs.existsSync(abs)) {
       if (fs.readFileSync(abs, "utf8") === file.content) {
         written.push({ path: file.path, outcome: "unchanged" });
+        continue;
+      }
+      if (file.path in NEVER_OVERWRITTEN) {
+        written.push({ path: file.path, outcome: "preserved" });
         continue;
       }
       if (!force) {
@@ -1028,6 +1051,33 @@ export async function init(dir: string, flags: InitFlags, version: string): Prom
 
   for (const file of files) {
     console.log(`  ${file.outcome.padEnd(12)}${file.path}`);
+  }
+
+  // Reported whether or not `--force` was passed, because with it the line is
+  // the only signal that the flag stopped short of two files, and without it
+  // the reader still needs to know these two are never in play.
+  const preserved = files.filter((f) => f.outcome === "preserved");
+  if (preserved.length > 0) {
+    console.error(
+      `\n${preserved.length} file(s) hold content no scaffold can regenerate and were kept as they are` +
+        `${flags.force ? " — `--force` does not rewrite these" : ""}:\n` +
+        preserved.map((f) => `  ${f.path} — ${NEVER_OVERWRITTEN[f.path]}`).join("\n") +
+        `\nEdit them directly.`,
+    );
+
+    // The registry host is answered at a prompt but committed to
+    // `index-policy.json`, so preserving that file makes the answer inert.
+    // Saying so beats a silently dropped answer — and beats merging it in,
+    // since widening the gate's allowlist is meant to be a reviewed edit.
+    const policy = preserved.some((f) => f.path === POLICY_FILE);
+    const hosts = policy ? readJson(path.join(target, POLICY_FILE)).registryHosts : undefined;
+    if (Array.isArray(hosts) && !hosts.includes(answers.registryHost)) {
+      console.error(
+        `\nThe registry host you answered (${answers.registryHost}) is not in ${POLICY_FILE}, ` +
+          `and was not added — widening the gate's allowlist is a reviewed edit.\n` +
+          `Add it to \`registryHosts\` yourself if you meant to.`,
+      );
+    }
   }
 
   const skipped = files.filter((f) => f.outcome === "skipped");
