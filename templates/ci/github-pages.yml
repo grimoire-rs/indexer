@@ -7,7 +7,7 @@ name: pages
 
 on:
   push:
-    branches: [main]
+    branches: [{{defaultBranch}}]
   workflow_dispatch:
 
 # Default-deny at the top; every job pays for exactly what it needs.

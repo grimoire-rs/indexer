@@ -40,8 +40,9 @@ const PAGES = ".github/workflows/pages.yml";
 const VALIDATE = ".github/workflows/validate.yml";
 const VERIFY = ".github/workflows/verify-ci.yml";
 const GITLAB = ".gitlab-ci.yml";
+const PUBLISH = ".github/workflows/publish.yml";
 const GITHUB_FILES = [PAGES, VALIDATE, VERIFY];
-const ALL_FILES = [...GITHUB_FILES, GITLAB];
+const ALL_FILES = [...GITHUB_FILES, PUBLISH, GITLAB];
 const FORGES = ["github", "gitlab"] as const;
 
 let dir: string;
@@ -918,6 +919,15 @@ describe("config validation", () => {
       // auto-merge and silently did not get it believes contributions land by
       // themselves, and the GitLab gate cannot be made tamper-proof.
       { forge: "gitlab", autoMerge: true },
+      { publish: "sometimes" },
+      { publish: true },
+      // `defaultBranch` lands unquoted inside a YAML flow sequence, so it is
+      // bounded to what cannot restructure the document. A `refs/heads/`
+      // prefix is not a branch name either — GitHub's `branches:` wants the
+      // short name, and the long one silently never matches.
+      { defaultBranch: "refs/heads/main" },
+      { defaultBranch: 'main"] # ' },
+      { defaultBranch: 42 },
     ]) {
       expect(() => validateCi(bad), JSON.stringify(bad)).toThrow(SiteConfigError);
     }
@@ -955,6 +965,71 @@ describe("init and ci agree", () => {
 
 // The dev server is deliberately not booted here: Astro's dev server does not
 // nest inside vitest's own Vite, which is why this repo drives it from
+// The combined layout's release pipeline: `publish.toml` says what and where,
+// `ci.publish` says when. Both forges, both triggers.
+describe("publish", () => {
+  it("renders no publish pipeline unless the index asked for one", async () => {
+    expect(exists(PUBLISH, await forgeDir({ forge: "github" }, "no-publish"))).toBe(false);
+    const gitlab = read(GITLAB, await forgeDir({ forge: "gitlab" }, "no-publish-gl"));
+    expect(dig(yaml.load(gitlab), "grim-indexer:publish")).toBeUndefined();
+    // The empty block must not leave a blank line behind — one config, one shape.
+    expect(gitlab).toMatch(/[^\n]\n$/);
+  });
+
+  it("fires on a v-tag when asked for tags", async () => {
+    const github = await forgeDir({ forge: "github", publish: "tag" }, "tag");
+    expect(dig(yaml.load(read(PUBLISH, github)), "on", "push")).toEqual({ tags: ["v*"] });
+
+    const gitlab = await forgeDir({ forge: "gitlab", publish: "tag" }, "tag-gl");
+    expect(dig(yaml.load(read(GITLAB, gitlab)), "grim-indexer:publish", "rules")).toEqual([
+      { if: "$CI_COMMIT_TAG =~ /^v/" },
+    ]);
+  });
+
+  it("fires on the trunk when asked for the default branch", async () => {
+    const github = await forgeDir(
+      { forge: "github", publish: "default-branch", defaultBranch: "trunk" },
+      "branch",
+    );
+    expect(dig(yaml.load(read(PUBLISH, github)), "on", "push")).toEqual({ branches: ["trunk"] });
+    // The same key moves every GitHub trigger, so a repository whose trunk is
+    // not `main` gets workflows that fire rather than workflows that look fine.
+    expect(dig(yaml.load(read(PAGES, github)), "on", "push")).toEqual({ branches: ["trunk"] });
+
+    const gitlab = await forgeDir({ forge: "gitlab", publish: "default-branch" }, "branch-gl");
+    expect(dig(yaml.load(read(GITLAB, gitlab)), "grim-indexer:publish", "rules")).toEqual([
+      // GitLab resolves it at run time, so `defaultBranch` never reaches here.
+      { if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH" },
+    ]);
+  });
+
+  // Publishing needs three distinct writes, and a missing one fails after the
+  // packages are already pushed — the worst place to find out.
+  it("asks for exactly the permissions publishing and announcing need", async () => {
+    const root = await forgeDir({ forge: "github", publish: "tag" }, "perms");
+    const workflow = yaml.load(read(PUBLISH, root));
+
+    expect(dig(workflow, "permissions")).toEqual({});
+    expect(dig(workflow, "jobs", "publish", "permissions")).toEqual({
+      contents: "read",
+      packages: "write",
+      "pull-requests": "write",
+    });
+    // The announce PR is pushed over git before it is opened over the API, so
+    // the token has to reach git's credential helper too.
+    expect(runScripts(workflow).join("\n")).toContain("gh auth setup-git");
+  });
+
+  it("defaults the branch to main, so an index that never set it does not move", async () => {
+    const before = await forgeDir({ forge: "github" }, "default-main");
+    const after = await forgeDir({ forge: "github", defaultBranch: "main" }, "explicit-main");
+    for (const file of GITHUB_FILES) {
+      expect(read(file, before), file).toBe(read(file, after));
+    }
+  });
+
+});
+
 // `scripts/dev.mjs --smoke` instead. What is testable without a server is
 // that the command exists and that its shared out-dir guard holds.
 describe("dev", () => {

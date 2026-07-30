@@ -26,7 +26,28 @@ import { fromTemplate } from "./templates.js";
  */
 export type Forge = "github" | "gitlab";
 
-const FORGES: readonly Forge[] = ["github", "gitlab"];
+export const FORGES: readonly Forge[] = ["github", "gitlab"];
+
+/**
+ * When the combined layout publishes its own packages.
+ *
+ * `never` is the default and the only correct answer for a plain index, which
+ * holds pointers and owns no packages to push. The other two are the two
+ * release habits: cut a tag when a version is ready, or treat every merge to
+ * the default branch as a release and let skip-existing make the re-run a
+ * no-op.
+ */
+export type PublishTrigger = "never" | "tag" | "default-branch";
+
+export const PUBLISH_TRIGGERS: readonly PublishTrigger[] = ["never", "tag", "default-branch"];
+
+/**
+ * Branch names are a permissive set — anything git accepts minus its own
+ * rules — but this one lands unquoted inside a YAML flow sequence, so it is
+ * bounded to what cannot restructure the document. Every real branch name
+ * fits; `refs/heads/` prefixes and quoting do not, which is the point.
+ */
+const BRANCH = /^[A-Za-z0-9][\w./-]*$/;
 
 /**
  * The `ci` block of `index.config.json` — everything that varies the
@@ -35,6 +56,28 @@ const FORGES: readonly Forge[] = ["github", "gitlab"];
 export interface CiConfig {
   /** Which forge's CI to render. Default `github`. */
   forge?: Forge;
+  /**
+   * The branch the pipeline treats as the trunk — what deploys Pages, and what
+   * `publish: "default-branch"` releases from. Default `main`, which is what
+   * `init` creates and what every generated GitHub workflow assumed before
+   * this key existed.
+   *
+   * GitHub has no expression for it in an `on:` trigger, so it has to be a
+   * literal; a repository whose trunk is `master` had no way to say so and
+   * silently got workflows that never fired. GitLab reads `$CI_DEFAULT_BRANCH`
+   * at run time and ignores this.
+   */
+  defaultBranch?: string;
+  /**
+   * Publish this repository's own packages from CI, and announce them into the
+   * index beside them — the combined layout that `init --with-skills`
+   * scaffolds. Default `never`: a plain index owns no packages.
+   *
+   * `tag` fires on `v*` tags, `default-branch` on every push to the trunk.
+   * Either way `grim publish` skips versions the registry already has, so a
+   * re-run over unchanged packages pushes nothing.
+   */
+  publish?: PublishTrigger;
   /** Node.js the jobs run on — `setup-node` version, and the GitLab image tag. Default `22`. */
   nodeVersion?: string;
   /**
@@ -72,11 +115,13 @@ export type ResolvedCiConfig = Required<CiConfig>;
 export function resolveCi(ci: CiConfig | undefined): ResolvedCiConfig {
   return {
     forge: ci?.forge ?? "github",
+    defaultBranch: ci?.defaultBranch ?? "main",
     nodeVersion: ci?.nodeVersion ?? "22",
     enrich: ci?.enrich ?? true,
     grimVersion: ci?.grimVersion ?? "latest",
     allowManualEdits: ci?.allowManualEdits ?? false,
     autoMerge: ci?.autoMerge ?? false,
+    publish: ci?.publish ?? "never",
   };
 }
 
@@ -108,6 +153,20 @@ export function validateCi(raw: unknown): CiConfig {
   }
   for (const key of ["enrich", "allowManualEdits", "autoMerge"]) {
     if (ci[key] !== undefined && typeof ci[key] !== "boolean") fail(`${key} must be a boolean`);
+  }
+  if (ci.publish !== undefined && !PUBLISH_TRIGGERS.includes(ci.publish as PublishTrigger)) {
+    fail(`publish must be one of ${PUBLISH_TRIGGERS.join(", ")}`);
+  }
+  if (ci.defaultBranch !== undefined) {
+    if (typeof ci.defaultBranch !== "string") fail("defaultBranch must be a string");
+    if (!BRANCH.test(ci.defaultBranch)) fail("defaultBranch must be a plain branch name");
+    // Slashes are legal in a branch name, so the charset check cannot catch
+    // this one. GitHub's `branches:` matches the short name; a full ref there
+    // is accepted by the YAML, matches nothing, and the workflow simply never
+    // fires — a silent failure worth one explicit line.
+    if (ci.defaultBranch.startsWith("refs/")) {
+      fail("defaultBranch must be the short branch name, not a full ref");
+    }
   }
   // Refused rather than ignored. Rendering GitLab CI while the config asks for
   // auto-merge would leave a repository believing contributions land by
@@ -172,6 +231,7 @@ const GITHUB_FILES = {
   pages: ".github/workflows/pages.yml",
   validate: ".github/workflows/validate.yml",
   verify: ".github/workflows/verify-ci.yml",
+  publish: ".github/workflows/publish.yml",
 } as const;
 
 const GITLAB_FILE = ".gitlab-ci.yml";
@@ -203,6 +263,7 @@ const VERIFY_PATHS = [CONFIG_FILE, "package.json", "package-lock.json", ".github
 export function renderCi(ci: ResolvedCiConfig): Map<string, string> {
   const base: Record<string, string> = {
     nodeVersion: ci.nodeVersion,
+    defaultBranch: ci.defaultBranch,
     grimVersion: ci.grimVersion,
     grimReleaseBase: grimReleaseBase(ci.grimVersion),
   };
@@ -221,6 +282,26 @@ export function renderCi(ci: ResolvedCiConfig): Map<string, string> {
     // GitHub only — `validateCi` refuses the GitLab combination outright, so
     // there is no silently-inert case to render around here.
     githubAutoMergeJob: ci.autoMerge ? block("ci/github-automerge.yml") : "",
+    // Two forges, one decision. Each spells "on a v-tag" and "on the trunk"
+    // its own way, and neither can express the other's — GitHub needs a
+    // literal branch in `on:` (hence `ci.defaultBranch`), GitLab reads
+    // `$CI_DEFAULT_BRANCH` at run time and needs no such key.
+    publishTrigger:
+      ci.publish === "tag"
+        ? '  push:\n    tags: ["v*"]'
+        : `  push:\n    branches: [${ci.defaultBranch}]`,
+    // Rendered with its own rule already substituted: `render` is single-pass,
+    // so a placeholder inside a block handed in as a value never resolves.
+    gitlabPublishJob:
+      ci.publish === "never"
+        ? ""
+        : fromTemplate("ci/gitlab-publish.yml", {
+            ...base,
+            gitlabPublishRule:
+              ci.publish === "tag"
+                ? "    - if: $CI_COMMIT_TAG =~ /^v/"
+                : "    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH",
+          }).replace(/\n$/, ""),
   };
 
   // Exactly one trailing newline, whatever the placeholders resolved to. An
@@ -234,6 +315,13 @@ export function renderCi(ci: ResolvedCiConfig): Map<string, string> {
     files.set(GITHUB_FILES.validate, file("ci/github-validate.yml"));
     if (!ci.allowManualEdits) {
       files.set(GITHUB_FILES.verify, file("ci/github-verify-ci.yml"));
+    }
+    // Its own file rather than a job in `pages.yml`: it runs on a different
+    // trigger, and an index that publishes nothing should carry no publish
+    // workflow at all — `staleCi` then reports the leftover if the key is
+    // turned back off.
+    if (ci.publish !== "never") {
+      files.set(GITHUB_FILES.publish, file("ci/github-publish.yml"));
     }
   } else {
     files.set(GITLAB_FILE, file("ci/gitlab-ci.yml"));

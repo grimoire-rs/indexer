@@ -1,0 +1,50 @@
+
+# Publishes this project's own packages, then announces them into the index
+# beside them - the combined layout `grim-indexer init --with-skills`
+# scaffolds. `publish.toml` says what gets pushed and where; the `ci.publish`
+# key in index.config.json says when.
+#
+# Registry credentials default to this project's own GitLab container registry
+# through the job token, so the common case needs no secret. Publishing
+# anywhere else is two CI/CD variables and no edit to this generated file:
+# GRIM_REGISTRY_HOST and GRIM_REGISTRY_USER, plus a masked GRIM_REGISTRY_TOKEN.
+#
+# The announce needs a token that can open a merge request: set
+# GRIM_ANNOUNCE_TOKEN (a project access token with `api` scope is enough,
+# since the index it announces into is this same project). Without it the
+# packages publish and the announce stops - `CI_JOB_TOKEN` can carry the git
+# push but cannot open the merge request.
+grim-indexer:publish:
+  stage: deploy
+  rules:
+{{gitlabPublishRule}}
+  variables:
+    REGISTRY: $CI_REGISTRY
+    REGISTRY_USER: gitlab-ci-token
+    REGISTRY_TOKEN: $CI_JOB_TOKEN
+  before_script:
+    # `node:*-alpine` ships neither curl nor git, and this job needs both: one
+    # to fetch the release, one to push the announce branch.
+    - apk add --no-cache curl git tar || apt-get update && apt-get install -y curl git tar
+    # Pinned by `ci.grimVersion`, resolved when this file was rendered, and
+    # checksum-verified before it runs.
+    - |
+      set -eu
+      base="{{grimReleaseBase}}"
+      tarball="grimoire-$(uname -m)-unknown-linux-gnu.tar.gz"
+      cd "$(mktemp -d)"
+      curl -fsSL --proto '=https' --tlsv1.2 \
+        -O "${base}/${tarball}" -O "${base}/${tarball}.sha256"
+      sha256sum -c "${tarball}.sha256"
+      tar -xzf "${tarball}" --strip-components=1 -C /usr/local/bin --wildcards '*/grim'
+      cd "$CI_PROJECT_DIR"
+      grim --version
+  script:
+    # Skip-existing is the default, so a re-run over unchanged versions is a
+    # no-op and only a bumped version pushes.
+    - |
+      set -eu
+      printf '%s' "${GRIM_REGISTRY_TOKEN:-$REGISTRY_TOKEN}" | grim login \
+        "${GRIM_REGISTRY_HOST:-$REGISTRY}" -u "${GRIM_REGISTRY_USER:-$REGISTRY_USER}" \
+        --password-stdin --allow-insecure-store
+      grim publish --announce
