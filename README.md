@@ -46,6 +46,11 @@ npm install --save-dev @grimoire-rs/indexer
 npx @grimoire-rs/indexer init     # scaffold; writes package.json + lockfile
 ```
 
+Or start from [`grimoire-rs/index-template`](https://github.com/grimoire-rs/index-template):
+"Use this template", clone, then `npm install && npm run setup` — which is
+`init` run in place, so it reads your `origin` remote and already knows the
+forge and the Pages URL.
+
 Everything after that runs through the scaffolded repo's own scripts, so it
 uses the version that repo locked:
 
