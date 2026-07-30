@@ -10,12 +10,54 @@ import path from "node:path";
 
 import * as prompts from "@clack/prompts";
 
-import { loadCiConfig, renderCi, resolveCi, staleCi, type CiConfig, type Forge } from "../ci.js";
+import {
+  FORGES,
+  loadCiConfig,
+  PUBLISH_TRIGGERS,
+  renderCi,
+  resolveCi,
+  staleCi,
+  type CiConfig,
+  type Forge,
+  type PublishTrigger,
+} from "../ci.js";
 import { CONFIG_FILE } from "../config.js";
 import { fromTemplate } from "../templates.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 
 const NAME_RE = /^[a-z0-9][a-z0-9._-]*$/;
+
+/** The committed allowlist the contribution gate reads. */
+const POLICY_FILE = "index-policy.json";
+/** Present only in the combined layout — its existence *is* the layout. */
+const MANIFEST_FILE = "publish.toml";
+
+/**
+ * Scaffold files a repository legitimately fills with its own content, and what
+ * rewriting one from the scaffold actually costs.
+ *
+ * `--force` rewrites them wholesale — no merge, no backup, no diff — so the
+ * only honest way to mention it is beside the specific thing it would discard.
+ * A blanket "re-run with --force to overwrite them" points at silent data loss
+ * and reads like routine advice.
+ */
+const USER_OWNED: Record<string, string> = {
+  [MANIFEST_FILE]: "every package it declares",
+  [POLICY_FILE]: "the allowlist, reserved namespaces and trusted bots the gate reads",
+  "package.json": "added scripts and dependencies",
+  ".gitignore": "every ignore rule added to it",
+  ".gitattributes": "every attribute rule added to it",
+  "README.md": "the README this index publishes",
+};
+
+/**
+ * A re-run that could not overwrite anything even if it wanted to: an index is
+ * already here and `--force` was not passed, so `write` leaves every differing
+ * file alone. Nothing is decidable, so nothing is asked.
+ */
+function isTopUp(dir: string, flags: InitFlags): boolean {
+  return !flags.quick && !flags.force && fs.existsSync(path.join(dir, CONFIG_FILE));
+}
 
 /**
  * What `[announce]` gets when nothing knew this repo's URL. It is not a
@@ -45,6 +87,16 @@ export interface InitAnswers {
   git: boolean;
   install: boolean;
   withSkills: boolean;
+  /**
+   * When the combined layout's own packages get published. Always `never`
+   * without `withSkills` — a plain index owns no packages to push.
+   */
+  publish: PublishTrigger;
+  /**
+   * The site's meta description. Derived from the title, unless a previous run
+   * wrote one and somebody has since rewritten it — see [`keptDescription`].
+   */
+  description: string;
   /** This repo's own https URL — the announce target. `""` when nothing could derive it. */
   repoUrl: string;
 }
@@ -62,6 +114,7 @@ export interface InitFlags {
   git?: boolean;
   install?: boolean;
   withSkills?: boolean;
+  publish?: PublishTrigger;
   repoUrl?: string;
   force?: boolean;
 }
@@ -75,6 +128,27 @@ export interface InitResult {
   gitInitialized: boolean;
   /** Whether `npm install` ran and wrote a lock. */
   installed: boolean;
+}
+
+/** What the scaffold writes when nobody has said anything better. */
+function boilerplateDescription(title: string): string {
+  return `${title}, a Grimoire package index.`;
+}
+
+/**
+ * Regenerate the description from the title, unless the one on disk was
+ * rewritten by hand.
+ *
+ * Both halves matter. Keeping every prior description would freeze the
+ * boilerplate at the first title anyone typed; keeping none would silently
+ * overwrite real copy on the next `init --force`. Comparing against what the
+ * scaffold *would have written for the prior title* separates the two exactly.
+ */
+function keptDescription(prior: PriorAnswers, title: string): string {
+  if (prior.description === undefined) return boilerplateDescription(title);
+  return prior.description === boilerplateDescription(prior.title ?? "")
+    ? boilerplateDescription(title)
+    : prior.description;
 }
 
 function slug(value: string): string {
@@ -199,6 +273,8 @@ function reportDerivation(what: {
   baseUrl: string | undefined;
   forge: Forge | undefined;
   forgeFallback: boolean;
+  /** What this index already said, and therefore what derivation did not decide. */
+  kept: { baseUrl?: string; forge?: Forge };
 }): void {
   const say = (label: string, value: string) => console.log(`  ${label.padEnd(12)}${value}`);
 
@@ -207,15 +283,17 @@ function reportDerivation(what: {
     return;
   }
   say(what.fromRemote ? "from origin" : "repository", what.remoteUrl);
-  if (what.forge) say("forge", what.forge);
-  if (what.forgeFallback) {
+  if (what.kept.forge) say("forge", `${what.kept.forge} (kept from ${CONFIG_FILE})`);
+  else if (what.forge) say("forge", what.forge);
+  else if (what.forgeFallback) {
     say("forge", "github (the host is neither github nor gitlab - pass --forge)");
   }
-  if (what.baseUrl) {
-    say("site", what.baseUrl);
-  } else {
-    say("site", "not derivable from this host - set `site` in index.config.json");
-  }
+  // "not derivable" is only true when nothing else already answered it.
+  // Printing it beside a config that names a custom domain read as a warning
+  // about a value that was never in doubt.
+  if (what.kept.baseUrl) say("site", `${what.kept.baseUrl} (kept from ${CONFIG_FILE})`);
+  else if (what.baseUrl) say("site", what.baseUrl);
+  else say("site", "not derivable from this host - set `site` in index.config.json");
 }
 
 /**
@@ -289,8 +367,88 @@ function announceNamespace(repoUrl: string): string | undefined {
  * missing. `--quick` never prompts, so CI and tests get a deterministic
  * tree from flags alone.
  */
+/**
+ * What a previous `init` already decided, read back off the files it wrote.
+ *
+ * Re-running is a supported thing to do — `npm run setup` is `init --force .`,
+ * and the whole point of a second run is to change one answer. Without this
+ * every prompt offered the first-run default instead of the value on disk, so
+ * pressing Enter through the questions you did not care about silently reset
+ * them. Every field is optional: this is a source of *defaults*, never of
+ * truth, and a missing or malformed file simply contributes nothing (the real
+ * parse happens in `loadCiConfig`, which still raises).
+ */
+interface PriorAnswers {
+  name?: string;
+  title?: string;
+  description?: string;
+  baseUrl?: string;
+  registryAlias?: string;
+  registryHost?: string;
+  logo?: string;
+  repoUrl?: string;
+  forge?: Forge;
+  publish?: PublishTrigger;
+  withSkills?: boolean;
+}
+
+function readJson(file: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as unknown;
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* absent or unreadable — there is simply no prior answer to offer */
+  }
+  return {};
+}
+
+/** A non-empty string, or nothing. `""` is not an answer worth defaulting to. */
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+function nested(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function priorAnswers(dir: string): PriorAnswers {
+  const config = readJson(path.join(dir, CONFIG_FILE));
+  const ci = nested(config.ci);
+  const registry = nested(config.registry);
+  const hosts = readJson(path.join(dir, POLICY_FILE)).registryHosts;
+  const forge = ci.forge as Forge;
+  const publish = ci.publish as PublishTrigger;
+
+  return {
+    name: text(readJson(path.join(dir, "package.json")).name),
+    title: text(config.brand),
+    description: text(config.description),
+    baseUrl: text(config.site),
+    registryAlias: text(registry.alias),
+    // The gate reads the whole list; this only offers the first back as the
+    // prompt default. A hand-widened allowlist is not narrowed by answering.
+    registryHost: Array.isArray(hosts) ? text(hosts[0]) : undefined,
+    logo: text(config.logo),
+    repoUrl: text(config.repoUrl),
+    forge: FORGES.includes(forge) ? forge : undefined,
+    publish: PUBLISH_TRIGGERS.includes(publish) ? publish : undefined,
+    // The layout is a fact about the tree, not a key in the config.
+    withSkills: fs.existsSync(path.join(dir, MANIFEST_FILE)) || undefined,
+  };
+}
+
 async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswers> {
-  const defaultName = slug(path.basename(path.resolve(dir))) || "my-index";
+  const prior = priorAnswers(dir);
+  const defaultName = prior.name ?? (slug(path.basename(path.resolve(dir))) || "my-index");
+  // Scaffolding into a clone is the common path — the git remote is where the
+  // forge and the Pages URL come from — so "initialize a git repository?" was
+  // being asked precisely when the answer could not matter: `initGit` no-ops
+  // on an existing `.git`. Decide it here instead of prompting for it.
+  const alreadyGit = fs.existsSync(path.join(dir, ".git"));
 
   // Flags always win, and any flag value is validated whether or not a
   // prompt would have caught it — `--quick` skips the prompt, not the check.
@@ -312,15 +470,36 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
   // the CI, where Pages will serve the site, and what `--announce` targets. A
   // `--repo-url` overrides it, for scaffolding before the remote exists.
   const remoteUrl = flags.repoUrl ? normalizeRepoUrl(flags.repoUrl) : gitRemoteUrl(dir);
+  // Order everywhere below: an explicit flag, then what this index already
+  // said, then what can be derived, then the first-run default. A prior answer
+  // outranks derivation because it *is* a decision — a custom domain in `site`
+  // must not be replaced by the Pages URL the remote implies.
   const derivedBaseUrl = remoteUrl ? pagesUrlFromRepo(remoteUrl) : undefined;
   const derivedForge = remoteUrl ? forgeFromRepoUrl(remoteUrl) : undefined;
 
-  if (flags.quick) {
+  // A second `init` used to ask every question and then write nothing: `write`
+  // leaves a file that differs alone unless `--force`, so all eight answers
+  // landed on files it was never going to touch. Without `--force` there is
+  // nothing here to decide, so there is nothing to ask — say what is happening
+  // and top up whatever is missing from the values already on disk.
+  const topUp = isTopUp(dir, flags);
+  if (topUp) {
+    // Deliberately no `--force` suggestion here. It is the destructive path,
+    // and the footer names its cost per file — only for the files that would
+    // actually lose something.
+    console.error(`${CONFIG_FILE} is already here — nothing is asked, and nothing is overwritten.\n`);
+  }
+
+  if (flags.quick || topUp) {
     const name = flags.name ?? defaultName;
     // Falls back to localhost rather than a guess: `--quick` is the
     // non-interactive path, and a wrong absolute URL is worse than an obvious
     // placeholder the next step tells you to replace.
-    const baseUrl = flags.baseUrl ?? derivedBaseUrl ?? "http://localhost:4321";
+    //
+    // `prior` before `derivedBaseUrl` matters most here, because `--quick`
+    // asks nothing: `npm run setup` is `init --force .`, so a re-run that
+    // preferred the derived URL would silently overwrite a custom domain.
+    const baseUrl = flags.baseUrl ?? prior.baseUrl ?? derivedBaseUrl ?? "http://localhost:4321";
     // `--quick` asks nothing, so every one of these decisions is otherwise
     // invisible — including the two that quietly did not happen: a self-hosted
     // forge has no predictable Pages URL, and an unrecognised host falls back
@@ -328,30 +507,50 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     reportDerivation({
       remoteUrl,
       fromRemote: flags.repoUrl === undefined && remoteUrl !== undefined,
-      baseUrl: flags.baseUrl === undefined ? derivedBaseUrl : undefined,
-      forge: flags.forge === undefined ? derivedForge : undefined,
-      forgeFallback: flags.forge === undefined && derivedForge === undefined,
+      // Only what actually won. A derivation reported beside a value it did
+      // not produce is worse than silence — it reads as what was written.
+      baseUrl:
+        flags.baseUrl === undefined && prior.baseUrl === undefined ? derivedBaseUrl : undefined,
+      forge: flags.forge === undefined && prior.forge === undefined ? derivedForge : undefined,
+      forgeFallback:
+        flags.forge === undefined && prior.forge === undefined && derivedForge === undefined,
+      kept: {
+        baseUrl: flags.baseUrl === undefined ? prior.baseUrl : undefined,
+        forge: flags.forge === undefined ? prior.forge : undefined,
+      },
     });
+    const withSkills = flags.withSkills ?? prior.withSkills ?? false;
     return {
       name,
-      title: flags.title ?? titleCase(name),
+      title: flags.title ?? prior.title ?? titleCase(name),
       baseUrl,
-      registryAlias: flags.registry ?? name,
-      registryHost: flags.registryHost ?? "ghcr.io",
-      logo: flags.logo ?? "",
-      forge: flags.forge ?? derivedForge ?? "github",
-      git: flags.git ?? true,
+      registryAlias: flags.registry ?? prior.registryAlias ?? name,
+      registryHost: flags.registryHost ?? prior.registryHost ?? "ghcr.io",
+      logo: flags.logo ?? prior.logo ?? "",
+      forge: flags.forge ?? prior.forge ?? derivedForge ?? "github",
+      git: alreadyGit ? false : (flags.git ?? true),
       install: flags.install ?? true,
-      withSkills: flags.withSkills ?? false,
+      withSkills,
+      // Tied to the layout, not independent of it: rendering a publish
+      // workflow into a repository with no `publish.toml` would emit CI that
+      // fails on its first run.
+      publish: withSkills ? (flags.publish ?? prior.publish ?? "tag") : "never",
+      description: keptDescription(prior, flags.title ?? prior.title ?? titleCase(name)),
       // The combined layout needs an announce target, and every layout wants
       // the header's repository link, which has no default to fall back on.
       // Empty stays empty — nothing is guessed, and a `publish.toml` with no
       // target refuses to publish.
-      repoUrl: remoteUrl ?? repoUrlFromPages(baseUrl) ?? "",
+      repoUrl: remoteUrl ?? prior.repoUrl ?? repoUrlFromPages(baseUrl) ?? "",
     };
   }
 
-  prompts.intro("grim-indexer — new package index");
+  const revisiting = prior.baseUrl !== undefined;
+  prompts.intro(`grim-indexer — ${revisiting ? "reconfigure this index" : "new package index"}`);
+  // Otherwise a re-run looks exactly like a first run, and the defaults look
+  // like guesses rather than like this index's own answers.
+  if (revisiting) {
+    prompts.log.step(`Defaults below are what ${CONFIG_FILE} already says — Enter keeps them.`);
+  }
 
   const name =
     flags.name ??
@@ -364,13 +563,14 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
       }),
     ));
 
+  const titleDefault = prior.title ?? titleCase(name);
   const title =
     flags.title ??
     (await ask(
       prompts.text({
         message: "Display title",
-        placeholder: titleCase(name),
-        defaultValue: titleCase(name),
+        placeholder: titleDefault,
+        defaultValue: titleDefault,
       }),
     ));
 
@@ -387,8 +587,8 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     (await ask(
       prompts.text({
         message: "Repository URL this index lives in",
-        placeholder: "https://github.com/you/your-index",
-        defaultValue: "",
+        placeholder: prior.repoUrl ?? "https://github.com/you/your-index",
+        defaultValue: prior.repoUrl ?? "",
         // Blank is allowed: it writes a placeholder that refuses to publish,
         // which beats forcing a URL the user does not have yet.
         validate: (value) => (value ? (badUrl(value) ?? undefined) : undefined),
@@ -401,7 +601,11 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
   // GitLab Pages domain) is a fact this command cannot observe. The message
   // names where the default came from, so accepting it is a decision rather
   // than a shrug.
-  const pagesUrl = repoUrl === remoteUrl ? derivedBaseUrl : pagesUrlFromRepo(repoUrl);
+  // A prior `site` outranks the derived Pages URL: a custom domain is exactly
+  // the case derivation cannot see, and re-deriving over it is how a second
+  // run silently moved a live index back onto `<owner>.github.io`.
+  const pagesUrl =
+    prior.baseUrl ?? (repoUrl === remoteUrl ? derivedBaseUrl : pagesUrlFromRepo(repoUrl));
   const baseUrl =
     flags.baseUrl ??
     (await ask(
@@ -415,14 +619,15 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
       }),
     ));
 
+  const aliasDefault = prior.registryAlias ?? name;
   const registryAlias =
     flags.registry ??
     (await ask(
       prompts.text({
         message: "Registry alias packages are published under",
-        placeholder: name,
-        defaultValue: name,
-        validate: (value) => badName(value || name) ?? undefined,
+        placeholder: aliasDefault,
+        defaultValue: aliasDefault,
+        validate: (value) => badName(value || aliasDefault) ?? undefined,
       }),
     ));
 
@@ -431,7 +636,8 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     (await ask(
       prompts.text({
         message: "Brand logo (site-root path like /logo.svg, or a URL; blank for none)",
-        defaultValue: "",
+        placeholder: prior.logo ?? "",
+        defaultValue: prior.logo ?? "",
         validate: (value) => badLogo(value ?? "") ?? undefined,
       }),
     ));
@@ -439,13 +645,14 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
   // Prompted, not assumed. This is the committed allowlist the contribution
   // gate bounds every entry's `ref` by, and defaulting it silently left every
   // index refusing anything not on ghcr.io - including its own packages.
+  const hostDefault = prior.registryHost ?? "ghcr.io";
   const registryHost =
     flags.registryHost ??
     (await ask(
       prompts.text({
         message: "OCI registry host packages are pulled from (the gate's allowlist)",
-        placeholder: "ghcr.io",
-        defaultValue: "ghcr.io",
+        placeholder: hostDefault,
+        defaultValue: hostDefault,
       }),
     ));
 
@@ -453,10 +660,20 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
   // common case never sees this question. One repository runs on one forge —
   // rendering both left every index carrying a pipeline it would never run.
   const detectedForge = repoUrl === remoteUrl ? derivedForge : forgeFromRepoUrl(repoUrl);
-  if (detectedForge) prompts.log.step(`CI: ${detectedForge}, from the repository host`);
+  // A recorded `ci.forge` outranks detection. Both skip the prompt, but only
+  // one of them is a decision somebody made — re-detecting over it would swap
+  // a repository's whole pipeline on a re-run without asking.
+  const settledForge = prior.forge ?? detectedForge;
+  if (settledForge) {
+    prompts.log.step(
+      prior.forge
+        ? `CI: ${prior.forge}, from ${CONFIG_FILE}`
+        : `CI: ${settledForge}, from the repository host`,
+    );
+  }
   const forge =
     flags.forge ??
-    detectedForge ??
+    settledForge ??
     (await ask(
       prompts.select<Forge>({
         message: "CI to scaffold",
@@ -468,14 +685,56 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
       }),
     ));
 
-  const git =
-    flags.git ??
-    (await ask(prompts.confirm({ message: "Initialize a git repository?", initialValue: true })));
+  const git = alreadyGit
+    ? false
+    : (flags.git ??
+      (await ask(
+        prompts.confirm({ message: "Initialize a git repository?", initialValue: true }),
+      )));
 
   // The lock is what pins the renderer this index builds and validates with,
   // and CI runs `npm ci` against it — so an index without one is an index
   // whose first push fails. Declining is still allowed; the next steps say
   // what to run.
+  // The combined layout was reachable only through `--with-skills`, so nobody
+  // who had not read the flag list knew an index can hold its own packages —
+  // which is the shape a team standing up its first index usually wants.
+  // Defaulted off, and the message says why: an announce opened by this repo's
+  // own CI token triggers no workflows on GitHub, so it arrives past the gate
+  // and wants a human. Separate repositories stay the recommendation.
+  const withSkills =
+    flags.withSkills ??
+    (await ask(
+      prompts.confirm({
+        message: "Publish your own skills from this repository too? (its announces are not gated)",
+        initialValue: prior.withSkills ?? false,
+      }),
+    ));
+
+  // Only reachable once the layout is settled — a plain index has nothing to
+  // release, so the question would have no answer that changes anything. The
+  // two options are the two release habits, and `grim publish` skips versions
+  // the registry already has either way, which is what makes the every-push
+  // option reasonable rather than reckless.
+  const publish: PublishTrigger = !withSkills
+    ? "never"
+    : (flags.publish ??
+      (await ask(
+        prompts.select<PublishTrigger>({
+          message: "Publish those packages from CI when?",
+          options: [
+            { value: "tag", label: "On a v* tag", hint: "cut a release deliberately" },
+            {
+              value: "default-branch",
+              label: "On every push to the default branch",
+              hint: "a version bump is the release",
+            },
+            { value: "never", label: "Never", hint: "publish by hand" },
+          ],
+          initialValue: (prior.publish ?? "tag") as PublishTrigger,
+        }),
+      )));
+
   const install =
     flags.install ??
     (await ask(
@@ -495,7 +754,9 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
     forge,
     git,
     install,
-    withSkills: flags.withSkills ?? false,
+    withSkills,
+    publish,
+    description: keptDescription(prior, title),
     // The Pages-URL fallback the `--quick` path has: someone who answered the
     // base URL but left the repository blank has still said where this index
     // lives, and dropping that left `repoUrl` empty — no header link, and a
@@ -527,7 +788,7 @@ function siteConfig(answers: InitAnswers): string {
   return json({
     site: answers.baseUrl,
     brand: answers.title,
-    description: `${answers.title}, a Grimoire package index.`,
+    description: answers.description,
     // `logo`, not `favicon`. They are deliberately different keys (see
     // `SiteConfig`): a favicon is drawn to read at 16px, a logo goes in the
     // header and becomes the default `og:image`. The prompt asks for a brand
@@ -539,11 +800,15 @@ function siteConfig(answers: InitAnswers): string {
     ...(answers.repoUrl ? { repoUrl: answers.repoUrl } : {}),
     registry: { alias: answers.registryAlias, index: answers.baseUrl },
     // What the committed CI is rendered from. The remaining knobs
-    // (`nodeVersion`, `enrich`, `grimVersion`, `allowManualEdits`) are left
-    // to their defaults rather than written out — `grim-indexer ci` resolves
-    // them the same way, so an absent key and its default render identically.
-    // Which renderer runs is not here at all: that is `package-lock.json`.
-    ci: { forge: answers.forge },
+    // (`nodeVersion`, `enrich`, `grimVersion`, `defaultBranch`,
+    // `allowManualEdits`) are left to their defaults rather than written out —
+    // `grim-indexer ci` resolves them the same way, so an absent key and its
+    // default render identically. Which renderer runs is not here at all:
+    // that is `package-lock.json`.
+    ci: {
+      forge: answers.forge,
+      ...(answers.publish === "never" ? {} : { publish: answers.publish }),
+    },
   });
 }
 
@@ -602,7 +867,7 @@ function plan(
   const files = [
     { path: "index/.gitkeep", content: "" },
     { path: "index.config.json", content: siteConfig(answers) },
-    { path: "index-policy.json", content: indexPolicy(answers) },
+    { path: POLICY_FILE, content: indexPolicy(answers) },
     from("gitignore", ".gitignore"),
     from("gitattributes", ".gitattributes"),
     from("package.json", "package.json"),
@@ -618,7 +883,7 @@ function plan(
 
   if (answers.withSkills) {
     files.push({ path: "skills/.gitkeep", content: "" });
-    files.push(from("publish.toml", "publish.toml"));
+    files.push(from(MANIFEST_FILE, MANIFEST_FILE));
   }
 
   return files;
@@ -749,7 +1014,12 @@ export async function init(dir: string, flags: InitFlags, version: string): Prom
     fs.existsSync(path.join(target, CONFIG_FILE)) && !(flags.force ?? false);
   const ci: CiConfig = keepsExistingConfig
     ? await loadCiConfig(target)
-    : { forge: answers.forge };
+    : {
+        forge: answers.forge,
+        // Written only when it is not the default, so a plain index's `ci`
+        // block stays the one key it has always been.
+        ...(answers.publish === "never" ? {} : { publish: answers.publish }),
+      };
 
   const files = write(target, plan(answers, version, ci), flags.force ?? false);
   const gitInitialized = answers.git ? initGit(target) : false;
@@ -762,9 +1032,22 @@ export async function init(dir: string, flags: InitFlags, version: string): Prom
 
   const skipped = files.filter((f) => f.outcome === "skipped");
   if (skipped.length > 0) {
+    // What `--force` costs, per file, and only for the files that would lose
+    // something. It rewrites from the scaffold rather than merging, so on a
+    // used index it silently discards declared packages and the contribution
+    // gate's committed policy — advice worth spelling out, not shortening.
+    const costs = skipped
+      .map((file) => [file.path, USER_OWNED[file.path]] as const)
+      .filter(([, cost]) => cost !== undefined)
+      .map(([name, cost]) => `  ${name} — ${cost}`);
+
     console.error(
       `\n${skipped.length} file(s) differ from the scaffold and were left alone. ` +
-        `Re-run with --force to overwrite them.`,
+        `They are this index's, not the scaffold's.\n` +
+        `To change settings, edit ${CONFIG_FILE}` +
+        (costs.length > 0
+          ? `.\n\n\`--force\` rewrites them from the scaffold instead, discarding:\n${costs.join("\n")}`
+          : `, then re-render the workflows with \`npm run ci\`.`),
     );
   }
 
@@ -781,6 +1064,21 @@ export async function init(dir: string, flags: InitFlags, version: string): Prom
       `\n${orphaned.length} generated file(s) are no longer rendered by ${CONFIG_FILE} — ` +
         `delete them, or \`npm run ci:check\` keeps failing`,
     );
+  }
+
+  // `nextSteps` is a first-run script — add packages, commit the lock, push.
+  // Printing it to somebody who already did all three, above an outro claiming
+  // the index is "ready", said a run had accomplished something when it had
+  // changed nothing. A re-run reports what it actually did instead, and the
+  // clack boxes are skipped because no `intro` opened a session to close.
+  if (isTopUp(target, flags)) {
+    const created = files.filter((file) => file.outcome === "created").length;
+    console.log(
+      created === 0
+        ? `\nNothing to do — this index is already scaffolded.`
+        : `\nAdded ${created} missing file(s).`,
+    );
+    return EXIT.ok;
   }
 
   prompts.note(nextSteps(result, answers), "Next steps");

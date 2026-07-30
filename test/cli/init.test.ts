@@ -11,6 +11,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { run } from "../../src/cli/main.js";
 
+/**
+ * Every `git` invocation `init` makes, in order. Passthrough, not a stub —
+ * the tests below run real `git init` / `git remote add` on temp dirs and the
+ * scaffolder reads those remotes back, so replacing the module would break
+ * the derivation tests this file is mostly about.
+ */
+const { gitCalls } = vi.hoisted(() => ({ gitCalls: [] as string[][] }));
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    execFileSync: (file: string, args: string[], options: unknown) => {
+      if (file === "git") gitCalls.push(args);
+      return (actual.execFileSync as (...a: unknown[]) => Buffer)(file, args, options);
+    },
+  };
+});
+
 let dir: string;
 let logs: string[];
 
@@ -44,6 +62,7 @@ function reported(): Map<string, string> {
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "index-init-"));
   logs = [];
+  gitCalls.length = 0;
   // Keep console noise out of the reporter; the assertions read the disk —
   // except the per-file outcome lines, which are the only place `skipped` and
   // `stale` are reported at all.
@@ -304,6 +323,196 @@ describe("init --with-skills", () => {
     expect(manifest).toContain('repository = "REPLACE-ME"');
     expect(manifest).toContain('namespace = "REPLACE-ME"');
     expect(settings(manifest)).not.toContain("grimoire-rs/index");
+  });
+
+});
+
+// Re-running is supported and expected — `npm run setup` is `init --force .`,
+// and the point of a second run is to change one answer. Every prompt and every
+// `--quick` fallback therefore defaults to the value already on disk. `--force`
+// is what makes this load-bearing rather than cosmetic: without it a second run
+// rewrote the config from first-run defaults and silently reset everything the
+// operator had not re-typed.
+describe("init over an existing index", () => {
+  /** The answers a first run recorded, deliberately none of them a default. */
+  async function scaffolded(): Promise<void> {
+    expect(
+      await run(
+        initArgs(
+          dir,
+          "--name", "acme",
+          "--title", "Acme Catalog",
+          "--base-url", "https://packages.acme.example",
+          "--registry", "acme-oci",
+          "--registry-host", "registry.acme.example",
+          "--logo", "/brand.svg",
+          "--repo-url", "https://gitlab.example.com/platform/idx",
+          "--with-skills",
+          "--publish", "default-branch",
+        ),
+      ),
+    ).toBe(0);
+  }
+
+  it("re-runs into the same answers, even with --force", async () => {
+    await scaffolded();
+    const before = read("index.config.json");
+    const policyBefore = read("index-policy.json");
+
+    // No answers at all this time — exactly what pressing Enter through every
+    // prompt amounts to, and what `npm run setup` does non-interactively.
+    expect(
+      await run(["node", "grim-indexer", "init", dir, "--quick", "--no-install", "--force"]),
+    ).toBe(0);
+
+    expect(read("index.config.json")).toBe(before);
+    expect(read("index-policy.json")).toBe(policyBefore);
+  });
+
+  it("keeps the layout and the release trigger a second run never asked about", async () => {
+    await scaffolded();
+
+    expect(
+      await run(["node", "grim-indexer", "init", dir, "--quick", "--no-install", "--force"]),
+    ).toBe(0);
+
+    // The combined layout is a fact about the tree, not a key in the config —
+    // `publish.toml` being there is what carries it across a re-run.
+    expect(exists("publish.toml")).toBe(true);
+    expect(JSON.parse(read("index.config.json")).ci).toEqual({
+      forge: "gitlab",
+      publish: "default-branch",
+    });
+    expect(exists(".gitlab-ci.yml")).toBe(true);
+  });
+
+  // A custom domain is exactly the case derivation cannot see. Re-deriving
+  // over it would move a live index back onto `<owner>.github.io`.
+  it("does not re-derive a base URL over the one already recorded", async () => {
+    const target = path.join(dir, "cloned");
+    fs.mkdirSync(target);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: target });
+    execFileSync("git", ["remote", "add", "origin", "https://github.com/acme/idx.git"], {
+      cwd: target,
+    });
+
+    expect(await run(initArgs(target, "--base-url", "https://packages.acme.example"))).toBe(0);
+    expect(
+      await run(["node", "grim-indexer", "init", target, "--quick", "--no-install", "--force"]),
+    ).toBe(0);
+
+    const config = JSON.parse(fs.readFileSync(path.join(target, "index.config.json"), "utf8"));
+    expect(config.site).toBe("https://packages.acme.example");
+    expect(config.registry.index).toBe("https://packages.acme.example");
+  });
+
+  // Both halves of one rule. Keeping every prior description would freeze the
+  // boilerplate at the first title anyone typed; keeping none would overwrite
+  // real copy on the next `init --force`.
+  it("regenerates a boilerplate description but never a written one", async () => {
+    expect(await run(initArgs(dir, "--name", "acme", "--title", "Acme"))).toBe(0);
+    expect(JSON.parse(read("index.config.json")).description).toBe(
+      "Acme, a Grimoire package index.",
+    );
+
+    // Untouched: follows the new title.
+    expect(await run(initArgs(dir, "--name", "acme", "--title", "Acme Two", "--force"))).toBe(0);
+    expect(JSON.parse(read("index.config.json")).description).toBe(
+      "Acme Two, a Grimoire package index.",
+    );
+
+    const config = JSON.parse(read("index.config.json"));
+    config.description = "Skills the platform team actually maintains.";
+    fs.writeFileSync(path.join(dir, "index.config.json"), JSON.stringify(config, null, 2) + "\n");
+
+    expect(await run(initArgs(dir, "--name", "acme", "--title", "Acme Three", "--force"))).toBe(0);
+    const after = JSON.parse(read("index.config.json"));
+    expect(after.description).toBe("Skills the platform team actually maintains.");
+    expect(after.brand, "the title still moves").toBe("Acme Three");
+  });
+
+  // Without `--force`, `write` leaves every differing file alone — so the
+  // wizard's eight questions landed on files it was never going to touch, and
+  // the run ended by reporting `skipped`. There is nothing to decide here, so
+  // there is nothing to ask: no `--quick` below, and the run still completes.
+  it("asks nothing on a re-run that cannot overwrite, and tops up what is missing", async () => {
+    expect(await run(initArgs(dir, "--name", "acme", "--title", "Acme"))).toBe(0);
+    const config = read("index.config.json");
+    fs.rmSync(path.join(dir, ".github/workflows/verify-ci.yml"));
+
+    expect(await run(["node", "grim-indexer", "init", dir, "--no-git", "--no-install"])).toBe(0);
+
+    expect(exists(".github/workflows/verify-ci.yml"), "the missing file came back").toBe(true);
+    expect(read("index.config.json"), "and nothing else moved").toBe(config);
+    expect(reported().get("index.config.json")).toBe("unchanged");
+  });
+
+  // A re-run that changed nothing used to end on the first-run script ("add
+  // packages", "commit package-lock.json") above an outro reading `ready`, and
+  // a blanket "re-run with --force to overwrite them" — which on a used index
+  // discards declared packages and the gate's committed policy.
+  it("reports what it did, and never recommends --force without its cost", async () => {
+    const errors: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    });
+
+    expect(await run(initArgs(dir, "--name", "acme", "--with-skills"))).toBe(0);
+    fs.appendFileSync(
+      path.join(dir, "publish.toml"),
+      '\n[skills.code-review]\nrepository = "acme/skills/code-review"\n',
+    );
+
+    expect(await run(["node", "grim-indexer", "init", dir, "--no-git", "--no-install"])).toBe(0);
+
+    const said = [...errors, ...logs].join("\n");
+    expect(said, "no first-run script").not.toContain("Add packages under index/");
+    expect(said, "nothing became ready").not.toContain("ready in");
+    expect(said, "the cost is named, not the flag alone").toContain(
+      "publish.toml — every package it declares",
+    );
+    expect(said).not.toMatch(/Re-run with --force to overwrite them/);
+    expect(said).toContain("Nothing to do");
+
+    // And the packages are still there, which is the point of not suggesting it.
+    expect(read("publish.toml")).toContain("[skills.code-review]");
+  });
+
+  it("still derives everything on a first run", async () => {
+    expect(await run(initArgs(dir, "--name", "fresh"))).toBe(0);
+
+    const config = JSON.parse(read("index.config.json"));
+    expect(config.registry.alias).toBe("fresh");
+    expect(config.brand).toBe("Fresh");
+    expect(JSON.parse(read("index-policy.json")).registryHosts).toEqual(["ghcr.io"]);
+  });
+});
+
+describe("init and git", () => {
+  // Scaffolding into a clone is the *common* path — the git remote is where
+  // the forge and the Pages URL are derived from — and that is exactly when
+  // "Initialize a git repository?" fired, for an answer that could not matter.
+  // An existing `.git` now decides it, which is the same branch the prompt is
+  // behind: in a clone the question is not asked at all.
+  it("never initializes git over a repository that already exists", async () => {
+    execFileSync("git", ["init", "-q", "-b", "trunk"], { cwd: dir });
+    gitCalls.length = 0;
+
+    expect(await run(["node", "grim-indexer", "init", dir, "--quick", "--no-install"])).toBe(0);
+
+    expect(exists("index.config.json")).toBe(true);
+    expect(gitCalls.filter((args) => args[0] === "init")).toEqual([]);
+    // The repository it found is untouched, default branch included.
+    expect(read(".git/HEAD").trim()).toBe("ref: refs/heads/trunk");
+  });
+
+  it("still initializes git when there is no repository", async () => {
+    const target = path.join(dir, "fresh");
+
+    expect(await run(["node", "grim-indexer", "init", target, "--quick", "--no-install"])).toBe(0);
+
+    expect(fs.existsSync(path.join(target, ".git"))).toBe(true);
+    expect(gitCalls.filter((args) => args[0] === "init")).toHaveLength(1);
   });
 });
 
