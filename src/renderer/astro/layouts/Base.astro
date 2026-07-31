@@ -167,6 +167,18 @@ function repoLabel(url: string): string {
             config.footerNote ? ` · ${config.footerNote}` : ""
           }
         </p>
+        {/* Whatever this index has to link — a privacy notice, an imprint, a
+            code of conduct. Absent by default, so a footer without them looks
+            exactly as it did before. */}
+        {
+          config.footerLinks.length > 0 && (
+            <p class="footer-links">
+              {config.footerLinks.map((link) => (
+                <a href={link.href}>{link.label}</a>
+              ))}
+            </p>
+          )
+        }
         {/* Opt-out, not opt-in: an index runner who does not want to say
             where the software came from sets `attribution: false`, and this
             disappears. Nothing else on the page changes.
@@ -787,6 +799,14 @@ function repoLabel(url: string): string {
         }
         .attribution span[aria-hidden] {
           color: var(--accent);
+        }
+        /* Sits between the raw-data line and the attribution, which keeps its
+           `margin-inline-start: auto` and so stays pinned to the end. */
+        .footer-links {
+          margin: 0;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem 1rem;
         }
 
         /* Copy toast. Fixed and centred at the bottom: a card's three copy
