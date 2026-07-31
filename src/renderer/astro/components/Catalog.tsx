@@ -187,14 +187,21 @@ export default function Catalog({
   packages: CatalogPackage[];
   vscodeExtension: string | null;
 }) {
-  // Seeded from `?q=…` on the very first render, not from an effect: a
-  // keyword chip on a package page links here, and filtering one render late
-  // means painting the full catalog and then collapsing it. The server has
-  // no `location`, so it renders the unfiltered list — which is what a
-  // crawler and a `?q=`-less visitor should both get.
-  const [query, setQuery] = useState(() =>
-    typeof location === "undefined" ? "" : (new URLSearchParams(location.search).get("q") ?? ""),
-  );
+  // Empty on the first render, ALWAYS — `?q=…` is applied a beat later, in
+  // the layout effect below. This is not a style preference, it is the one
+  // rule this island has to obey.
+  //
+  // Preact does not diff props while hydrating; its own source says so, and
+  // only re-applies props whose value is a function. Text children *are*
+  // diffed. So when the first client render disagrees with the server's, you
+  // get cards whose text is right and whose every attribute belongs to
+  // whichever package the server put at that position: one package's logo
+  // over another's name, and a link that opens the wrong page. Nothing
+  // throws. This used to seed from `location` here, and did exactly that.
+  const [query, setQuery] = useState("");
+  // Whether the URL's query has been applied. Gates the reveal below, so the
+  // catalog is never unhidden while it still shows the unfiltered list.
+  const [seeded, setSeeded] = useState(false);
   const [kind, setKind] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("name");
   // Deprecated packages are hidden until asked for: a retired package is
@@ -240,18 +247,28 @@ export default function Catalog({
     });
   };
 
-  // Base.astro hides the catalog before first paint when the URL carries a
-  // query. Reveal it once this render — the filtered one — has hit the DOM.
-  // A layout effect, so the reveal lands in the same frame as the content.
+  // Apply `?q=…`, now that hydration has matched the server's markup and
+  // Preact owns the tree. A layout effect rather than a plain one: the
+  // resulting render must land before the browser paints, or a `?q=` visitor
+  // sees the whole catalog flash past on the way to their results.
   useLayoutEffect(() => {
-    // Hydration attaches handlers but does not diff props against the server
-    // markup, so the box the server rendered empty stays empty even though
-    // this render filtered on `query`. Written straight to the DOM, which is
-    // what the vnode already claims.
+    setQuery(new URLSearchParams(location.search).get("q") ?? "");
+    setSeeded(true);
+  }, []);
+
+  // Base.astro hides the catalog before first paint when the URL carries a
+  // query. Reveal it only once the filtered render is in the DOM — keyed on
+  // `seeded`, so the unfiltered first render is never the one revealed.
+  useLayoutEffect(() => {
+    if (!seeded) return;
+    // The input's `value` prop was skipped during hydration for the same
+    // reason every other prop was, and the render that applied the query is
+    // a normal diff — but write it anyway: this effect is also what runs on
+    // a `?q=`-less load, where no second render is queued at all.
     const input = searchRef.current;
     if (input && input.value !== query) input.value = query;
     delete document.documentElement.dataset.query;
-  }, []);
+  }, [seeded]);
 
   // `/` jumps to the search box, the convention every package registry
   // shares. Bound on the document so it works wherever the reader is.
