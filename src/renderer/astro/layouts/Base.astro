@@ -68,9 +68,10 @@ function repoLabel(url: string): string {
       // package page) means the catalog the server rendered — every package,
       // empty search box — is the wrong one. Flag it so CSS holds the
       // catalog back rather than showing the full list and collapsing it a
-      // moment later. The island drops the flag on its first render, which
-      // is already the filtered one; the timeout is the failsafe for an
-      // island that never hydrates, where a flash beats a blank page.
+      // moment later. The island drops the flag once it has applied the
+      // query — which is the render after hydration, never the hydrating one
+      // itself; the timeout is the failsafe for an island that never
+      // hydrates, where a flash beats a blank page.
       if (new URLSearchParams(location.search).get("q")) {
         document.documentElement.dataset.query = "";
         setTimeout(() => delete document.documentElement.dataset.query, 3000);
@@ -864,8 +865,10 @@ function repoLabel(url: string): string {
            search box, so painting it and then collapsing to the match is a
            flash of the wrong answer. `visibility` rather than `display` —
            the space stays reserved, so the footer does not jump either. The
-           attribute is set before first paint and dropped by the island's
-           first render, which is already the filtered one. */
+           attribute is set before first paint and dropped once the island
+           has applied the query — the render after hydration, because
+           hydrating against markup that disagrees with the server silently
+           mismatches every attribute (see Catalog.tsx). */
         :root[data-query] .catalog {
           visibility: hidden;
         }
