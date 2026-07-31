@@ -23,5 +23,6 @@
     "alias": "acme",
     "index": "https://index.example.test"
   },
-  "footerNote": "fixture footer note"
+  "footerNote": "fixture footer note",
+  "footerLinks": [{ "label": "privacy", "href": "https://acme.example.test/privacy" }]
 }

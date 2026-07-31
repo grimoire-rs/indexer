@@ -35,6 +35,7 @@ const config: SiteConfig = {
   vscodeExtension: "acme.acme-vscode",
   registry: { alias: "acme", index: "https://index.example.test" },
   footerNote: "fixture footer note",
+  footerLinks: [{ label: "privacy", href: "https://acme.example.test/privacy" }],
   customCss: "theme.css",
 };
 
@@ -558,6 +559,24 @@ describe("config reaches the rendered HTML", () => {
       expect(off.indexHtml).toContain("fixture footer note");
     } finally {
       await fs.rm(off.root, { recursive: true, force: true });
+    }
+  }, 300_000);
+
+  // The thing most indexes need in a footer is a link, not a sentence, and
+  // `footerNote` is text. A privacy notice or an imprint had no home before
+  // this without forking the layout.
+  it("renders the index's own footer links, and none by default", async () => {
+    expect(indexHtml).toMatch(
+      /<a href="https:\/\/acme\.example\.test\/privacy"[^>]*>privacy<\/a>/,
+    );
+
+    const bare = await render("https://index.example.test", { footerLinks: [] });
+    try {
+      expect(bare.indexHtml).not.toContain("acme.example.test/privacy");
+      // …and the rest of the footer is untouched.
+      expect(bare.indexHtml).toContain("fixture footer note");
+    } finally {
+      await fs.rm(bare.root, { recursive: true, force: true });
     }
   }, 300_000);
 

@@ -80,6 +80,17 @@ export interface SiteConfig {
    */
   footerNote?: string | null;
   /**
+   * Extra footer links, rendered after the raw-data line as a plain row.
+   *
+   * Exists because `footerNote` is text, and the thing an index most often
+   * has to put in a footer is not a sentence but a link: a privacy notice, an
+   * imprint, a code of conduct. Whether any of those are legally required
+   * depends on where the index runner lives and what the index is for, so the
+   * renderer takes no position and ships none by default — it just stops the
+   * answer being "fork the layout".
+   */
+  footerLinks?: Array<{ label: string; href: string }>;
+  /**
    * "Built with ♥ using Grimoire" in the footer, linking to grimoire.rs.
    * `false` removes it — an index runner is not obliged to advertise the
    * software, so this is opt-out rather than something to fork the
@@ -133,6 +144,7 @@ export const DEFAULT_CONFIG: ResolvedSiteConfig = {
   // old default: "pointers, not payloads", which explains the architecture
   // to someone who did not ask, and the em dash holding it on.
   footerNote: "index metadata is CC0 · packages live on OCI registries",
+  footerLinks: [],
   attribution: true,
   customCss: null,
 };
@@ -182,6 +194,27 @@ function validate(raw: unknown): SiteConfig {
 
   if (cfg.attribution !== undefined && typeof cfg.attribution !== "boolean") {
     fail("attribution must be a boolean");
+  }
+
+  if (cfg.footerLinks !== undefined) {
+    if (!Array.isArray(cfg.footerLinks)) fail("footerLinks must be an array");
+    for (const [i, entry] of cfg.footerLinks.entries()) {
+      const at = `footerLinks[${i}]`;
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        fail(`${at} must be an object with label and href`);
+      }
+      const { label, href } = entry as Record<string, unknown>;
+      if (typeof label !== "string" || label.trim() === "") {
+        fail(`${at}.label must be a non-empty string`);
+      }
+      // Same rule the other URL keys get. A relative href would resolve
+      // against whichever page the footer happens to be on — `/p/<ns>/<pkg>/`
+      // is two levels deep — so it is refused rather than silently 404ing
+      // from half the site.
+      if (typeof href !== "string" || !/^https?:\/\//i.test(href)) {
+        fail(`${at}.href must be an http(s) URL`);
+      }
+    }
   }
 
   // Lands in `src`. A site-root path is the normal case; an absolute URL is

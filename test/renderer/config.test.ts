@@ -50,8 +50,30 @@ describe("loadConfig", () => {
     ["an install row missing `command`", '{"install":[{"os":"Linux"}]}'],
     ["a registry with no index", '{"registry":{"alias":"acme"}}'],
     ["a registry alias with a slash", '{"registry":{"alias":"a/b","index":"https://a.test"}}'],
+    ["a non-array footerLinks", '{"footerLinks":{"label":"privacy"}}'],
+    ["a footer link that is not an object", '{"footerLinks":["privacy"]}'],
+    ["a footer link with no label", '{"footerLinks":[{"href":"https://a.test/p"}]}'],
+    ["a footer link with a blank label", '{"footerLinks":[{"label":" ","href":"https://a.test"}]}'],
+    // Relative would resolve against `/p/<ns>/<pkg>/` on package pages.
+    ["a relative footer link", '{"footerLinks":[{"label":"privacy","href":"/privacy"}]}'],
+    // Same reason `docsUrl` refuses it: this href lands in an anchor.
+    [
+      "a javascript: footer link",
+      '{"footerLinks":[{"label":"privacy","href":"javascript:alert(1)"}]}',
+    ],
   ])("rejects %s", async (_case, contents) => {
     await expect(loadConfig(await rootWith(contents))).rejects.toBeInstanceOf(SiteConfigError);
+  });
+
+  it("accepts footer links, and defaults to none", async () => {
+    expect(resolveConfig({}).footerLinks).toEqual([]);
+
+    const root = await rootWith(
+      '{"footerLinks":[{"label":"privacy","href":"https://acme.test/privacy"}]}',
+    );
+    expect((await loadConfig(root)).footerLinks).toEqual([
+      { label: "privacy", href: "https://acme.test/privacy" },
+    ]);
   });
 
   it("accepts null for every disable-able field", async () => {
