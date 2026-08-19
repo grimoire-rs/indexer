@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 // Lucide (ISC) draws the UI; brand marks come from `@mdi/js`, which Lucide
 // deliberately does not carry. No SVG on this site is hand-written.
-import { Check, FolderRoot, Globe, Image, ImageOff } from "lucide-preact";
+import { ArrowBigUp, Check, FolderRoot, Globe, Image, ImageOff } from "lucide-preact";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { withBase } from "../lib/base.js";
@@ -16,16 +16,68 @@ function kindOrder(kind: string): number {
   return i === -1 ? KNOWN_KINDS.length : i;
 }
 
-type Sort = "name" | "updated";
+export type Sort = "name" | "updated" | "rating";
+
+type Key = (a: CatalogPackage, b: CatalogPackage) => number;
+
+/**
+ * Bigger first, with `null` as its own bucket underneath every number.
+ *
+ * The shared shape of the two ranked keys, and the reason both are written
+ * this way: "missing" is not a low value, it is the absence of one. Folding
+ * it into a number — 0 upvotes, epoch 0 — orders those rows against real
+ * data by accident, and ties them all with each other.
+ */
+function descending(a: number | null, b: number | null): number {
+  if (a === null || b === null) return Number(a === null) - Number(b === null);
+  return b - a;
+}
+
+/** `created` as epoch ms; null when absent, empty or not a date at all. */
+function updatedAt(p: CatalogPackage): number | null {
+  const ms = p.created ? new Date(p.created).getTime() : NaN;
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Ascending, case-insensitive. The full ref breaks the last tie in every
+ * mode, and it is unique, so no two rows ever compare equal — a browse order
+ * that is not total is a browse order that reshuffles on rebuild.
+ */
+const byName: Key = (a, b) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }) || a.ref.localeCompare(b.ref);
+
+/**
+ * Newest first. No usable `created` is *unknown*, not epoch 0: dating an
+ * undated package to 1970 sorts it below real packages by accident rather
+ * than by rule, so it goes into a bucket of its own at the bottom.
+ */
+const byUpdated: Key = (a, b) => descending(updatedAt(a), updatedAt(b));
+
+/**
+ * Most upvotes first. Unrated is its own bucket at the bottom, never a zero:
+ * a fresh index is all-unrated, and zeroes would leave every one of those
+ * rows comparing equal with nothing left to break the tie.
+ */
+const byRating: Key = (a, b) => descending(a.rating?.up ?? null, b.rating?.up ?? null);
+
+/** Each mode as a chain of keys, most significant first. */
+const CHAINS: Record<Sort, Key[]> = {
+  name: [byName],
+  updated: [byUpdated, byName],
+  rating: [byRating, byUpdated, byName],
+};
 
 // Deprecated packages sink to the bottom regardless of sort mode; the
 // chosen sort only orders within the two groups.
-function compare(a: CatalogPackage, b: CatalogPackage, sort: Sort): number {
+export function compare(a: CatalogPackage, b: CatalogPackage, sort: Sort): number {
   const dep = Number(!!a.deprecated) - Number(!!b.deprecated);
   if (dep !== 0) return dep;
-  if (sort === "name") return a.name.localeCompare(b.name);
-  if (!a.created || !b.created) return (a.created ? 0 : 1) - (b.created ? 0 : 1);
-  return new Date(b.created).getTime() - new Date(a.created).getTime();
+  for (const key of CHAINS[sort]) {
+    const d = key(a, b);
+    if (d !== 0) return d;
+  }
+  return 0;
 }
 
 // The two install scopes previously wore the VS Code extension's own
@@ -449,8 +501,10 @@ export default function Catalog({
   );
 
   // A catalog with nothing deprecated gets no toggle — a control that can
-  // only ever be a no-op is worse than its absence.
+  // only ever be a no-op is worse than its absence. An index that publishes
+  // no ratings gets no rating chip for the same reason.
   const hasDeprecated = packages.some((p) => p.deprecated);
+  const hasRatings = packages.some((p) => p.rating);
 
   // Chips leave the Tab order only while there is a grid to arrow up from.
   const chipTabIndex = shown.length === 0 ? 0 : -1;
@@ -493,6 +547,17 @@ export default function Catalog({
           >
             updated
           </button>
+          {hasRatings && (
+            <button
+              type="button"
+              class={sort === "rating" ? "chip active" : "chip"}
+              tabIndex={chipTabIndex}
+              onKeyDown={onChipKeyDown}
+              onClick={() => setSort("rating")}
+            >
+              rating
+            </button>
+          )}
         </div>
         {/* Divides sort from filter — two different questions sharing a row.
             Decorative only: each group already carries its own aria-label,
@@ -574,10 +639,23 @@ export default function Catalog({
                 )}
               </div>
               <p class="namespace">{p.namespace}</p>
-              {(p.version || p.license || p.created) && (
+              {(p.version || p.license || p.created || p.rating) && (
                 <div class="meta-row">
                   {p.version && <span class="pill version">v{p.version}</span>}
                   {p.license && <span class="pill license">{p.license}</span>}
+                  {/* A count and nothing more. The page is prerendered once
+                      for everyone, so it cannot know whether *you* voted —
+                      showing "not voted" to someone who has would be worse
+                      than showing nothing. */}
+                  {p.rating && (
+                    <span
+                      class="pill rating"
+                      title={`${p.rating.up} upvote${p.rating.up === 1 ? "" : "s"}`}
+                    >
+                      <ArrowBigUp size={13} aria-hidden="true" />
+                      {p.rating.up}
+                    </span>
+                  )}
                   {p.created && timeAgo(p.created) && (
                     <time class="updated" datetime={p.created} title={p.created}>
                       updated {timeAgo(p.created)}

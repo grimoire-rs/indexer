@@ -1,0 +1,17 @@
+[
+ {
+  "description": "A test skill.",
+  "summary": "Enriched summary",
+  "version": "1.2.3",
+  "logo": "/logos/github.com/acme/foo.svg",
+  "schema": 1,
+  "name": "foo",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/skills/foo",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ }
+]

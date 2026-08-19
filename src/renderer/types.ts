@@ -28,6 +28,14 @@ export interface CatalogPackage extends IndexRecord {
   replacedBy?: string;
   tags?: string[];
   logo?: string;
+  /**
+   * Upvotes joined from the `stats.json` sidecar at build time. Absent means
+   * **unrated**, and never zero: an index that publishes no sidecar, a ref the
+   * sidecar omits, and a ref carrying other stats but no `rating` are the same
+   * absence, and none of them is an error. The site is anonymous — it is built
+   * once for everyone — so this is a count and never a "you voted" state.
+   */
+  rating?: { up: number };
 }
 
 /**
