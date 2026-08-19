@@ -1,0 +1,22 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-08-18T09:30:00Z",
+  "providers": {
+    "rating": "github",
+    "recency": "registry"
+  },
+  "entries": {
+    "ghcr.io/acme/code-review": {
+      "rating": {
+        "up": 12,
+        "target": "DIC_kwDOAbc123",
+        "url": "https://github.com/acme/index/discussions/42",
+        "weighted": 9.5
+      },
+      "recency": {
+        "days": 3
+      }
+    }
+  },
+  "signature": "not-a-v1-key"
+}
