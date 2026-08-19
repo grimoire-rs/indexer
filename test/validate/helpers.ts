@@ -17,6 +17,9 @@ export interface Call {
   url: string;
   headers: Record<string, string>;
   redirect?: RequestInit["redirect"];
+  /** Both undefined for a plain GET — a POST asserts on what it actually sent. */
+  method?: string;
+  body?: string;
 }
 
 const BODYLESS = new Set([204, 205, 304]);
@@ -36,6 +39,8 @@ export function stubFetch(
       url,
       headers: { ...((init?.headers as Record<string, string>) ?? {}) },
       redirect: init?.redirect,
+      method: init?.method,
+      body: typeof init?.body === "string" ? init.body : undefined,
     });
     const route = handler(url);
     if (!route) return Promise.resolve(new Response("", { status: 404 }));
