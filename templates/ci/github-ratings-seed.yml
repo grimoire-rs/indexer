@@ -21,26 +21,42 @@
       # base, anything else fails the job.
       - name: Seed from the published sidecar
         env:
-          # One source. The seed URL is `site` from index.config.json, baked in
-          # at render time - the same value `grim-indexer ratings` read when it
-          # tallied. The Pages URL below is a cross-check and never a second
-          # source: while it was the source, this guard checked one URL and the
-          # tally fetched the other, and a 404 there is a legal empty seed - so
-          # a disagreement published a sidecar built from nothing, at exit 0.
-          SITE_URL: '{{site}}'
           PAGES_URL: ${{ steps.pages.outputs.base_url }}
         run: |
           set -euo pipefail
 
-          # Absent is not a disagreement: a fork, or a deploy that is not
-          # Pages, has no such URL, and the configured site stands alone. A
-          # trailing slash and the scheme are not one either, so neither is
-          # compared. A real disagreement fails the job here, ahead of the
-          # freshness check below - the tally read `site` too, so a fresh
-          # artifact is no evidence that this URL is the right one.
+          # One source. The seed URL is `site` from index.config.json, read
+          # out of the checkout here - the same key, the same file and the
+          # same run as the tally that produced the artifact above. Not baked
+          # in at render time on purpose: a workflow rendered before `site`
+          # was last edited would seed from one URL while the tally read the
+          # other, which is the divergence this step exists to close.
+          SITE_URL=$(node -p 'JSON.parse(require("fs").readFileSync("index.config.json","utf8")).site ?? ""')
           rstrip() { u=$1; while [ "${u%/}" != "$u" ]; do u=${u%/}; done; printf '%s' "$u"; }
           SITE_URL=$(rstrip "$SITE_URL")
-          if [ -n "${PAGES_URL:-}" ] && [ "$(rstrip "${PAGES_URL#*://}")" != "${SITE_URL#*://}" ]; then
+          case "$SITE_URL" in
+            https://*) ;;
+            # Not defaulted: the built-in default names the first-party index,
+            # and seeding from someone else's published stats would merge
+            # their ratings into this one's sidecar. TLS because the fetched
+            # document decides every published rating - `--proto '=https'`
+            # below would refuse it anyway, in curl's words instead of these.
+            *) echo "::error::index.config.json needs an explicit https \`site\` - the seed is read from <site>/stats.json (got '$SITE_URL')"; exit 1 ;;
+          esac
+
+          # The Pages URL is a cross-check, never a second source: while it was
+          # the source, this step fetched one URL and the tally fetched the
+          # other, and a 404 there is a legal empty seed - so a disagreement
+          # published a sidecar built from nothing, at exit 0.
+          #
+          # Absent is not a disagreement: a fork, or a deploy that is not
+          # Pages, has no such URL, and `site` stands alone. Neither is a
+          # trailing slash, the scheme, or host case - hostnames are
+          # case-insensitive where the path is not. A real disagreement fails
+          # ahead of the freshness check below: the tally read `site` too, so
+          # a fresh artifact is no evidence that this URL is the right one.
+          lower() { u=${1#*://}; h=${u%%/*}; printf '%s%s' "${h,,}" "${u#"$h"}"; }
+          if [ -n "${PAGES_URL:-}" ] && [ "$(lower "$(rstrip "$PAGES_URL")")" != "$(lower "$SITE_URL")" ]; then
             echo "::error::index.config.json publishes to $SITE_URL but this pipeline deploys $PAGES_URL - the seed would be read from one and the sidecar published to the other"
             exit 1
           fi

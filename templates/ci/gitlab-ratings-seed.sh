@@ -13,26 +13,35 @@
       # and branched on: 404 is an empty seed, a 2xx that parses is the merge
       # base, anything else fails the job.
       #
-      # One source. The seed URL is `site` from index.config.json, baked in at
-      # render time - the same value `grim-indexer ratings` read when it
-      # tallied. `CI_PAGES_URL` is a cross-check and never a second source:
-      # while it was the source, this guard checked one URL and the tally
-      # fetched the other, and a 404 there is a legal empty seed - so a
-      # disagreement published a sidecar built from nothing, at exit 0.
+      # One source. The seed URL is `site` from index.config.json, read out of
+      # the checkout here - the same key, the same file and the same run as
+      # the tally that produced the artifact this job was handed. Not baked in
+      # at render time on purpose: a pipeline rendered before `site` was last
+      # edited would seed from one URL while the tally read the other, which
+      # is the divergence this step exists to close.
       #
-      # Absent is not a disagreement: a local run, a fork, or a deploy that is
-      # not Pages has no such URL, and the configured site stands alone. A
-      # trailing slash and the scheme are not one either, so neither is
-      # compared. A real disagreement fails the job ahead of the freshness
-      # check - the tally read `site` too, so a fresh artifact is no evidence
-      # that this URL is the right one.
-      SITE_URL='{{site}}'
+      # Deliberately NOT cross-checked against `CI_PAGES_URL`. That variable
+      # is always a subdomain of `CI_PAGES_DOMAIN` and never reflects a custom
+      # domain, and unique domains (16.7+) and `path_prefix` (17.9+) move it
+      # again - so it disagrees with a correct `site` as the normal case, and
+      # comparing them would fail every such deploy. The GitHub arm keeps its
+      # cross-check because `steps.pages.outputs.base_url` really is a
+      # statement about where the site deploys.
+      SITE_URL=$(node -p 'JSON.parse(require("fs").readFileSync("index.config.json","utf8")).site ?? ""')
       rstrip() { u=$1; while [ "${u%/}" != "$u" ]; do u=${u%/}; done; printf '%s' "$u"; }
       SITE_URL=$(rstrip "$SITE_URL")
-      if [ -n "${CI_PAGES_URL:-}" ] && [ "$(rstrip "${CI_PAGES_URL#*://}")" != "${SITE_URL#*://}" ]; then
-        echo "grim-indexer: index.config.json publishes to $SITE_URL but this pipeline deploys $CI_PAGES_URL - the seed would be read from one and the sidecar published to the other" >&2
-        exit 1
-      fi
+      case "$SITE_URL" in
+        https://*) ;;
+        # Not defaulted: the built-in default names the first-party index, and
+        # seeding from someone else's published stats would merge their
+        # ratings into this one's sidecar. TLS because the fetched document
+        # decides every published rating - `--proto '=https'` below would
+        # refuse it anyway, in curl's words instead of these.
+        *)
+          echo "grim-indexer: index.config.json needs an explicit https \`site\` - the seed is read from <site>/stats.json (got '$SITE_URL')" >&2
+          exit 1
+          ;;
+      esac
 
       # `node:*-alpine` ships no curl, and the runner's clone helper is a
       # separate image, so nothing else puts one here. Install it for whichever
