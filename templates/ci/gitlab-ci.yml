@@ -129,13 +129,13 @@ grim-indexer:validate:
 pages:
   stage: deploy
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH{{gitlabRatingsPagesRule}}
   before_script:
     - npm ci --cache .npm --prefer-offline --ignore-scripts
   script:
     - |
       set -eu
-{{gitlabEnrichScript}}
+{{gitlabEnrichScript}}{{gitlabRatingsSeedScript}}
     # Built into `dist/`, then moved. Building straight into `public/` was a
     # data-loss bug: the compile step clears its output directory first, so it
     # deleted this index's own committed asset layer (logo, favicon) before
@@ -146,4 +146,4 @@ pages:
   artifacts:
     paths:
       - public
-{{gitlabPublishJob}}
+{{gitlabRatingsJob}}{{gitlabPublishJob}}

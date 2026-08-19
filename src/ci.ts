@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { CliError, EXIT } from "./cli/exit.js";
 import { CONFIG_FILE, SiteConfigError } from "./config.js";
+import type { RatingsConfig } from "./ratings/config.js";
 import { fromTemplate } from "./templates.js";
 
 /**
@@ -257,10 +258,21 @@ function grimReleaseBase(grimVersion: string): string {
 const VERIFY_PATHS = [CONFIG_FILE, "package.json", "package-lock.json", ".github/workflows/**"];
 
 /**
+ * How often a scheduled run re-tallies. Off the hour deliberately — GitHub
+ * asks for it, and every index that picked `0 * * * *` would queue against the
+ * same minute.
+ */
+const RATINGS_CRON = "23 * * * *";
+
+/**
  * Render the complete CI file set. Nothing touches disk — the caller writes
  * it or diffs it against what is committed.
+ *
+ * `ratings` absent means the `ratings` block is absent from
+ * `index.config.json`, and every file renders exactly as it did before the
+ * feature existed — no job, no schedule, no seed step.
  */
-export function renderCi(ci: ResolvedCiConfig): Map<string, string> {
+export function renderCi(ci: ResolvedCiConfig, ratings?: RatingsConfig): Map<string, string> {
   const base: Record<string, string> = {
     nodeVersion: ci.nodeVersion,
     defaultBranch: ci.defaultBranch,
@@ -279,6 +291,27 @@ export function renderCi(ci: ResolvedCiConfig): Map<string, string> {
     gitlabEnrichScript: ci.enrich ? block("ci/gitlab-enrich.sh") : "",
     verifyPaths: VERIFY_PATHS.map((entry) => `      - ${entry}`).join("\n"),
     gitlabVerifyJob: ci.allowManualEdits ? "" : block("ci/gitlab-verify.yml"),
+    // Ratings, on both forges: a tally job, a schedule to re-run it on, and
+    // the seed step that carries the published sidecar forward when the tally
+    // did not run or did not finish. Nothing here is rendered when the block
+    // is absent, so an index that never turns ratings on keeps the pipeline it
+    // already committed, byte for byte.
+    //
+    // The build/pages job must depend on the tally and run anyway: R-2 says a
+    // failed tally may never empty a published rating set, and the only way to
+    // keep the previous one is to deploy without a fresh one.
+    githubRatingsJob: ratings ? block("ci/github-ratings.yml") : "",
+    githubRatingsSeedSteps: ratings ? block("ci/github-ratings-seed.yml") : "",
+    githubRatingsSchedule: ratings ? `\n  schedule:\n    - cron: "${RATINGS_CRON}"` : "",
+    githubRatingsBuildKeys: ratings ? "\n    needs: ratings\n    if: always()" : "",
+    gitlabRatingsJob: ratings ? block("ci/gitlab-ratings.yml") : "",
+    gitlabRatingsSeedScript: ratings ? block("ci/gitlab-ratings-seed.sh") : "",
+    // One `rules:` entry, so a scheduled pipeline deploys the tally it just
+    // ran. Deliberately no `needs:` — the tally is in an earlier stage, so
+    // `pages` already receives its artifact, and adding `needs:` would move
+    // `pages` off stage ordering and let it deploy past a failed `verify-ci`.
+    // `allow_failure` on the tally job is what lets a failed one through.
+    gitlabRatingsPagesRule: ratings ? '\n    - if: $CI_PIPELINE_SOURCE == "schedule"' : "",
     // GitHub only — `validateCi` refuses the GitLab combination outright, so
     // there is no silently-inert case to render around here.
     githubAutoMergeJob: ci.autoMerge ? block("ci/github-automerge.yml") : "",

@@ -1,0 +1,51 @@
+
+  # Tallies the forge's own upvote counters into `.stats.json` - the sidecar
+  # `build` joins onto the catalog and the deploy publishes beside all.json.
+  #
+  # Its own job, ahead of `build`, because `build` has to run even when this
+  # one fails. A tally that cannot reach the forge must never empty a published
+  # rating set (R-2), and the only way to keep the previous one is to deploy
+  # without a fresh tally - see the seed step in `build`.
+  #
+  # Turn ratings off by deleting the `ratings` block from index.config.json and
+  # re-rendering. That stops the tally, but the last one stays published:
+  # deleting `stats.json` from the deploy is the other half of the rollback.
+  ratings:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The only write anything in this pipeline is granted, and it is what a
+      # vote is: threads live on the forge, nothing is committed here.
+      discussions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "{{nodeVersion}}"
+          cache: npm
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      # `npx --no` refuses to fetch anything `npm ci` did not install, so the
+      # renderer that tallies is the one package-lock.json pins - the same
+      # reviewed-fact rule every other job here follows. Spelled as `npx`
+      # rather than an npm script so an index scaffolded before ratings existed
+      # turns them on by re-rendering CI, with no package.json edit.
+      - name: Tally ratings
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --no grim-indexer ratings
+
+      # `error` rather than the default warning: a run that reported success
+      # and wrote nothing is a bug, and the failure mode it would otherwise
+      # produce - `build` silently falling back to the seed - looks exactly
+      # like a healthy carry-forward.
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: grim-stats
+          path: .stats.json
+          if-no-files-found: error

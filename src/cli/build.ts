@@ -3,7 +3,9 @@
 
 // `grim-indexer build` — compile `index/**` into `dist/`, then render the
 // site over it. Order is load-bearing: `compileIndex` clears `outDir` and
-// writes `all.json`, which the renderer then reads.
+// writes `all.json`, which the renderer then reads. Anything else the deploy
+// has to carry — the ratings sidecar `buildSite` publishes from the index
+// root — therefore lands in `outDir` downstream of the clear, never before.
 import path from "node:path";
 
 import { EXIT, type ExitCode } from "./exit.js";
