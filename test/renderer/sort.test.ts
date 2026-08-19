@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
@@ -6,10 +7,21 @@
 // unchanged sequence. Every mode therefore ends on the full ref, which is
 // unique, and every "missing" value is its own bucket at the bottom rather
 // than a zero or an epoch that happens to sort low.
+//
+// jsdom (not the default "node" environment): the "deprecated visibility"
+// block below mounts the real `Catalog` island — F-4/D-2 is a filter that
+// lives in the component's `shown` computation, not in `compare()`, so
+// proving it needs a DOM to click the toggle in, the same way
+// `hydrate.test.tsx` does. This file stays `.ts` (not `.tsx`), so the
+// element is built with `h()` rather than JSX syntax.
+import { h, render } from "preact";
 import { describe, expect, it } from "vitest";
 
-import { compare, type Sort } from "../../src/renderer/astro/components/Catalog.tsx";
+import Catalog, { compare, type Sort } from "../../src/renderer/astro/components/Catalog.tsx";
 import type { CatalogPackage } from "../../src/renderer/types.js";
+
+// Normally injected by Vite `define` at build time; `withBase` reads it.
+(globalThis as Record<string, unknown>).__GRIMOIRE_BASE__ = "/";
 
 type Row = {
   name: string;
@@ -124,7 +136,15 @@ describe("rating", () => {
 describe("every mode", () => {
   const modes: Sort[] = ["name", "updated", "rating"];
 
-  it("sinks deprecated packages to the bottom, and orders within the group", () => {
+  // D-2 rewrote what "deprecated ordering" means: the default browse no
+  // longer contains deprecated rows at all (see "deprecated visibility"
+  // below) — `compare()` never runs on a mix of the two groups there. It
+  // still runs on one when the site's toggle (the site's `--show-deprecated`)
+  // is on, and *that* mixed list still needs deprecated rows held together
+  // at the bottom rather than interleaved by date/rating — the old
+  // assertion, kept because the ordering rule it proves is unchanged, only
+  // its scope (toggle-on, not default) is.
+  it("sinks deprecated packages to the bottom when shown together via the toggle", () => {
     const rows = [
       { name: "dead-b", deprecated: "2026-01-01", rating: { up: 99 } },
       { name: "live", rating: { up: 1 } },
@@ -151,6 +171,63 @@ describe("every mode", () => {
           expect(compare(a, b, sort), `${sort}: ${a.ref} vs ${b.ref}`).not.toBe(0);
         }
       }
+    }
+  });
+});
+
+// F-4/D-2: grim hides deprecated artifacts from its default result set
+// unless `--show-deprecated` (the TUI: `h`); the site used to disagree and
+// only sink them to the bottom. The site now adopts grim's rule — hidden by
+// default, a toggle restores them — so the two surfaces show the same set
+// for the same index. grim itself is unchanged; its shipped default is
+// frozen by Principle 9, this only rewrites the *site's* default.
+describe("deprecated visibility", () => {
+  const modes: Sort[] = ["name", "updated", "rating"];
+
+  // `rating` on "live" is what makes the rating sort chip render at all
+  // (`hasRatings` gates it) — needed to drive that mode through the real UI
+  // control rather than by calling `compare()` directly.
+  const ROWS = [
+    { name: "live", rating: { up: 3 } },
+    { name: "dead", deprecated: "2026-01-01" },
+  ].map(pkg) as unknown as CatalogPackage[];
+
+  function mount(): HTMLElement {
+    const host = document.createElement("div");
+    render(h(Catalog, { packages: ROWS, vscodeExtension: null }), host);
+    return host;
+  }
+
+  function cardNames(host: HTMLElement): string[] {
+    return [...host.querySelectorAll("li.card h2 a")].map((a) => a.textContent?.trim() ?? "");
+  }
+
+  /** The sort/filter row's chips — matched on their leading text, so the
+   * kind chips' trailing `<small>count</small>` never collides. */
+  function chip(host: HTMLElement, label: string): HTMLElement | undefined {
+    return [...host.querySelectorAll<HTMLElement>("button.chip")].find(
+      (b) => b.textContent?.trim().split(/\s/)[0] === label,
+    );
+  }
+
+  async function click(el: HTMLElement | undefined) {
+    el?.click();
+    // Preact flushes a hook-driven re-render in a microtask; give it a turn
+    // before reading the DOM, same as `hydrate.test.tsx` does for its
+    // effect-driven state changes.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it("hides a deprecated entry by default in every sort mode, and reveals it with the toggle", async () => {
+    for (const sort of modes) {
+      const host = mount();
+      if (sort !== "name") await click(chip(host, sort));
+      expect(cardNames(host), `${sort}: default`).toEqual(["live"]);
+
+      // Toggled on, "dead" reappears — still sunk to the bottom by
+      // `compare()` (see "every mode" above), regardless of sort mode.
+      await click(chip(host, "deprecated"));
+      expect(cardNames(host), `${sort}: toggle on`).toEqual(["live", "dead"]);
     }
   });
 });
