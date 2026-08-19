@@ -21,15 +21,36 @@
       # base, anything else fails the job.
       - name: Seed from the published sidecar
         env:
-          SITE_URL: ${{ steps.pages.outputs.base_url }}
+          # One source. The seed URL is `site` from index.config.json, baked in
+          # at render time - the same value `grim-indexer ratings` read when it
+          # tallied. The Pages URL below is a cross-check and never a second
+          # source: while it was the source, this guard checked one URL and the
+          # tally fetched the other, and a 404 there is a legal empty seed - so
+          # a disagreement published a sidecar built from nothing, at exit 0.
+          SITE_URL: '{{site}}'
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
         run: |
           set -euo pipefail
+
+          # Absent is not a disagreement: a fork, or a deploy that is not
+          # Pages, has no such URL, and the configured site stands alone. A
+          # trailing slash and the scheme are not one either, so neither is
+          # compared. A real disagreement fails the job here, ahead of the
+          # freshness check below - the tally read `site` too, so a fresh
+          # artifact is no evidence that this URL is the right one.
+          rstrip() { u=$1; while [ "${u%/}" != "$u" ]; do u=${u%/}; done; printf '%s' "$u"; }
+          SITE_URL=$(rstrip "$SITE_URL")
+          if [ -n "${PAGES_URL:-}" ] && [ "$(rstrip "${PAGES_URL#*://}")" != "${SITE_URL#*://}" ]; then
+            echo "::error::index.config.json publishes to $SITE_URL but this pipeline deploys $PAGES_URL - the seed would be read from one and the sidecar published to the other"
+            exit 1
+          fi
+
           if [ -f .stats.json ]; then
             echo "using the tally this run produced"
             exit 0
           fi
           code=$(curl -sS --proto '=https' --tlsv1.2 --max-time 30 \
-            -o .stats.json.seed -w '%{http_code}' "${SITE_URL%/}/stats.json") || {
+            -o .stats.json.seed -w '%{http_code}' "$SITE_URL/stats.json") || {
             echo "::error::could not read the published stats.json - refusing to deploy a site that would empty every published rating"
             exit 1
           }

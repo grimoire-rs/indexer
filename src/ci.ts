@@ -51,6 +51,15 @@ export const PUBLISH_TRIGGERS: readonly PublishTrigger[] = ["never", "tag", "def
 const BRANCH = /^[A-Za-z0-9][\w./-]*$/;
 
 /**
+ * `site` lands in a generated `env:` value and in a shell word, so it is
+ * bounded the way `defaultBranch` and the version keys are. The repository
+ * owner writes this file, so it is a paste guard rather than a trust boundary
+ * - but a value carrying a quote, a `$` or a backslash would rewrite the YAML
+ * or the command around it, and `config.ts` only checks the scheme.
+ */
+const SITE = /^https?:\/\/[\w.~%:/?#@!&()*+,;=-]+$/;
+
+/**
  * The `ci` block of `index.config.json` — everything that varies the
  * generated pipeline. Every key is optional; [`resolveCi`] fills the gaps.
  */
@@ -270,14 +279,35 @@ const RATINGS_CRON = "23 * * * *";
  *
  * `ratings` absent means the `ratings` block is absent from
  * `index.config.json`, and every file renders exactly as it did before the
- * feature existed — no job, no schedule, no seed step.
+ * feature existed — no job, no schedule, no seed step. `site` is then unread,
+ * which is why it is optional: only the seed step needs it.
  */
-export function renderCi(ci: ResolvedCiConfig, ratings?: RatingsConfig): Map<string, string> {
+export function renderCi(
+  ci: ResolvedCiConfig,
+  ratings?: RatingsConfig,
+  site?: string,
+): Map<string, string> {
+  // The seed step reads the published sidecar from `<site>/stats.json`, the
+  // same URL `grim-indexer ratings` seeds from — one source, resolved here
+  // rather than left to a platform variable the tally never sees. Not
+  // defaulted, for the reason the verb refuses at run time: `DEFAULT_CONFIG`
+  // names the first-party index, and seeding from someone else's published
+  // stats would merge their ratings into this one's sidecar.
+  if (ratings && (site === undefined || site === "")) {
+    throw new SiteConfigError(
+      `${CONFIG_FILE}: ratings needs an explicit \`site\` — the generated seed step reads \`<site>/stats.json\``,
+    );
+  }
+  if (site !== undefined && site !== "" && !SITE.test(site)) {
+    throw new SiteConfigError(`${CONFIG_FILE}: site must be a plain http(s) URL to render CI from`);
+  }
+
   const base: Record<string, string> = {
     nodeVersion: ci.nodeVersion,
     defaultBranch: ci.defaultBranch,
     grimVersion: ci.grimVersion,
     grimReleaseBase: grimReleaseBase(ci.grimVersion),
+    site: site ?? "",
   };
   // Rendered first: `render` is single-pass, so a block handed in as a value
   // must already have its own placeholders resolved. The trailing newline is

