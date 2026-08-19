@@ -441,6 +441,13 @@ describe("`site` is validated once, at load (F-6)", () => {
     await expect(load(site)).resolves.toBe(site);
   });
 
+  // A scaffolder that can write a value the next command refuses to load is
+  // the same split policy, one layer up.
+  it("is the rule `init --base-url` enforces too", async () => {
+    expect(await run(["node", "grim-indexer", "init", dir, "--quick", "--base-url", "https://a.example/x?v=1"])).toBe(65);
+    expect(fs.existsSync(path.join(dir, "index.config.json"))).toBe(false);
+  });
+
   // The seed step enforces TLS too, but it runs in the deploy job — on both
   // forges the tally has by then created and locked threads on the forge. The
   // verb refuses first, before any of that.

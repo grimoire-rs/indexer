@@ -21,7 +21,7 @@ import {
   type Forge,
   type PublishTrigger,
 } from "../ci.js";
-import { CONFIG_FILE } from "../config.js";
+import { CONFIG_FILE, validateSite } from "../config.js";
 import { fromTemplate } from "../templates.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 
@@ -197,6 +197,20 @@ function badUrl(value: string): string | null {
     return "must be an http(s) URL";
   }
   return null;
+}
+
+/**
+ * The base URL, which is written as `site`. Borrowed from `config.ts` rather
+ * than restated: a scaffolder that can write a value the very next command
+ * refuses to load is two acceptance policies for one key.
+ */
+function badSiteUrl(value: string): string | null {
+  try {
+    validateSite(value);
+    return null;
+  } catch (err) {
+    return (err as Error).message;
+  }
 }
 
 function badName(value: string): string | null {
@@ -473,7 +487,7 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
   for (const [flag, value, check] of [
     ["--name", flags.name, badName],
     ["--registry", flags.registry, badName],
-    ["--base-url", flags.baseUrl, badUrl],
+    ["--base-url", flags.baseUrl, badSiteUrl],
     ["--repo-url", flags.repoUrl, badUrl],
     ["--logo", flags.logo, badLogo],
   ] as const) {
@@ -633,7 +647,7 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
           : "Base URL the index is served from",
         placeholder: pagesUrl ?? "https://index.example.com",
         defaultValue: pagesUrl ?? "",
-        validate: (value) => badUrl(value || (pagesUrl ?? "")) ?? undefined,
+        validate: (value) => badSiteUrl(value || (pagesUrl ?? "")) ?? undefined,
       }),
     ));
 

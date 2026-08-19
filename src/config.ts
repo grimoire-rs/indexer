@@ -197,8 +197,7 @@ function optionalUrl(raw: Record<string, unknown>, key: string): void {
  * anything. `grim-indexer ratings` requires https before it writes to the
  * forge, which is the earliest point that requirement exists.
  */
-function validateSite(raw: Record<string, unknown>): void {
-  const value = raw.site;
+export function validateSite(value: unknown): void {
   if (value === undefined) return;
   if (typeof value !== "string") fail("site must be a string");
   // WHATWG `new URL` strips embedded tabs and newlines, so a control character
@@ -235,7 +234,7 @@ function validate(raw: unknown): SiteConfig {
   for (const key of ["docsUrl", "installDocsUrl", "repoUrl"]) {
     optionalUrl(cfg, key);
   }
-  validateSite(cfg);
+  validateSite(cfg.site);
 
   if (cfg.attribution !== undefined && typeof cfg.attribution !== "boolean") {
     fail("attribution must be a boolean");
