@@ -179,6 +179,49 @@ function optionalUrl(raw: Record<string, unknown>, key: string): void {
   }
 }
 
+/**
+ * `site` is the strictest of the URL keys, deliberately: it is the only one that
+ * is *fetched* as well as published. `<site>/stats.json` is the ratings seed —
+ * read by `grim-indexer ratings`, and from the same checkout by the generated
+ * deploy job — and whatever that fetch returns is the merge base for every
+ * published rating. One policy, here, at load: the verbs, the renderer and the
+ * generated shell must not disagree about the same key.
+ *
+ * No userinfo, because `https://real.example@evil.example/` reads as the real
+ * host and fetches from the other. No query or fragment, because
+ * `<site>/stats.json` appends to them and quietly fetches something else.
+ * Lowercase scheme, because the generated guard matches that literal prefix.
+ *
+ * TLS is *not* required here: `init --quick` writes `http://localhost:4321` as
+ * its deliberate placeholder, and a site with no ratings never fetches
+ * anything. `grim-indexer ratings` requires https before it writes to the
+ * forge, which is the earliest point that requirement exists.
+ */
+export function validateSite(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value !== "string") fail("site must be a string");
+  // WHATWG `new URL` strips embedded tabs and newlines, so a control character
+  // survives into the raw value every consumer uses while the parsed URL looks
+  // clean — and a newline in a generated `::error::` line is a workflow command.
+  // No `i` flag: one spelling, so the generated shell can match the literal
+  // prefix and `grim-indexer ratings` can compare without a case fold.
+  if (!/^https?:\/\//.test(value) || /\s/.test(value)) {
+    fail("site must be an http(s) URL — lowercase scheme, no whitespace");
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    fail("site must be an absolute URL, e.g. https://index.example.com");
+  }
+  if (url.username !== "" || url.password !== "") {
+    fail("site must not carry userinfo — https://user@host reads as one host and fetches another");
+  }
+  if (url.search !== "" || url.hash !== "") {
+    fail("site must be a bare base URL — no query, no fragment");
+  }
+}
+
 function validate(raw: unknown): SiteConfig {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     fail("must contain a JSON object");
@@ -188,9 +231,10 @@ function validate(raw: unknown): SiteConfig {
   for (const key of ["brand", "brandMark", "description", "tagline", "favicon", "footerNote", "customCss"]) {
     optionalString(cfg, key);
   }
-  for (const key of ["site", "docsUrl", "installDocsUrl", "repoUrl"]) {
+  for (const key of ["docsUrl", "installDocsUrl", "repoUrl"]) {
     optionalUrl(cfg, key);
   }
+  validateSite(cfg.site);
 
   if (cfg.attribution !== undefined && typeof cfg.attribution !== "boolean") {
     fail("attribution must be a boolean");

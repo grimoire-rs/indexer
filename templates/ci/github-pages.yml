@@ -42,8 +42,9 @@ jobs:
         run: npm ci --ignore-scripts
 
       # Ahead of the build, not after it: it only resolves this repository's
-      # Pages URL and sets outputs, and steps that run before the build - the
-      # ratings seed - need that URL to read what is currently published.
+      # Pages URL and sets outputs, and a step that runs before the build - the
+      # ratings seed - cross-checks `site` against that URL before it reads the
+      # published sidecar.
       - id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 {{githubEnrichSteps}}{{githubRatingsSeedSteps}}
