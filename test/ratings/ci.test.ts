@@ -17,6 +17,7 @@ import yaml from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderCi, resolveCi } from "../../src/ci.js";
+import { loadConfig } from "../../src/config.js";
 import { run } from "../../src/cli/main.js";
 import { STATS_FILE } from "../../src/ratings/seed.js";
 import type { RatingsConfig } from "../../src/ratings/config.js";
@@ -244,68 +245,68 @@ describe("the seed step — R-2 in shell (C-010)", () => {
   });
 });
 
+/**
+ * The seed shell the deploy actually runs, plus the environment the runner
+ * would have exported for it — minus the `${{ }}` expressions, which are
+ * the runner's to resolve and this test's to supply.
+ *
+ * `enrich: false` because GitLab renders the enrichment and the seed into
+ * one `script:` entry, and the enrichment reaches the network.
+ */
+function seedShell(forge: "github" | "gitlab"): { script: string; env: Record<string, string> } {
+  const files = renderCi(resolveCi({ forge, enrich: false }), RATINGS);
+  const doc = yaml.load(files.get(forge === "github" ? PAGES : GITLAB) as string) as Record<
+    string,
+    unknown
+  >;
+  if (forge === "gitlab") {
+    // One `script:` entry of several — the rest of the deploy is npm.
+    const block = (jobs(doc).pages.script ?? []).find((entry) => entry.includes("http_code"));
+    return { script: block ?? "", env: {} };
+  }
+  const step = (jobs(doc).build.steps ?? []).find((entry) =>
+    (entry.run ?? "").includes("http_code"),
+  );
+  const env = Object.fromEntries(
+    Object.entries(step?.env ?? {}).filter(([, value]) => !value.includes("${{")),
+  );
+  return { script: step?.run ?? "", env };
+}
+
+/**
+ * Run that shell for real, against a checkout carrying `site`. A tally
+ * artifact is already in place, so it short-circuits before the network —
+ * what is under test runs first, and asserting on a regex would prove the
+ * guard is spelled rather than that it fires.
+ */
+function runSeed(
+  forge: "github" | "gitlab",
+  platformUrl?: string,
+  site: string | undefined = SITE,
+): { code: number; output: string } {
+  const { script, env } = seedShell(forge);
+  fs.writeFileSync(path.join(dir, STATS_FILE), "{}\n");
+  fs.writeFileSync(
+    path.join(dir, "index.config.json"),
+    JSON.stringify(site === undefined ? {} : { site }, null, 2) + "\n",
+  );
+  const platform = forge === "github" ? "PAGES_URL" : "CI_PAGES_URL";
+  const result = spawnSync(forge === "github" ? "bash" : "sh", ["-c", script], {
+    cwd: dir,
+    encoding: "utf8",
+    env: {
+      // No inherited environment: the script is under test, not this
+      // machine's shell profile.
+      HOME: dir,
+      PATH: process.env.PATH ?? "",
+      ...env,
+      ...(platformUrl === undefined ? {} : { [platform]: platformUrl }),
+    },
+  });
+return { code: result.status ?? -1, output: `${result.stdout}${result.stderr}` };
+}
+
 describe("the seed URL has one source (F-6)", () => {
-  /**
-   * The seed shell the deploy actually runs, plus the environment the runner
-   * would have exported for it — minus the `${{ }}` expressions, which are
-   * the runner's to resolve and this test's to supply.
-   *
-   * `enrich: false` because GitLab renders the enrichment and the seed into
-   * one `script:` entry, and the enrichment reaches the network.
-   */
-  function seedShell(forge: "github" | "gitlab"): { script: string; env: Record<string, string> } {
-    const files = renderCi(resolveCi({ forge, enrich: false }), RATINGS);
-    const doc = yaml.load(files.get(forge === "github" ? PAGES : GITLAB) as string) as Record<
-      string,
-      unknown
-    >;
-    if (forge === "gitlab") {
-      // One `script:` entry of several — the rest of the deploy is npm.
-      const block = (jobs(doc).pages.script ?? []).find((entry) => entry.includes("http_code"));
-      return { script: block ?? "", env: {} };
-    }
-    const step = (jobs(doc).build.steps ?? []).find((entry) =>
-      (entry.run ?? "").includes("http_code"),
-    );
-    const env = Object.fromEntries(
-      Object.entries(step?.env ?? {}).filter(([, value]) => !value.includes("${{")),
-    );
-    return { script: step?.run ?? "", env };
-  }
-
-  /**
-   * Run that shell for real, against a checkout carrying `site`. A tally
-   * artifact is already in place, so it short-circuits before the network —
-   * what is under test runs first, and asserting on a regex would prove the
-   * guard is spelled rather than that it fires.
-   */
-  function runSeed(
-    forge: "github" | "gitlab",
-    platformUrl?: string,
-    site: string | undefined = SITE,
-  ): { code: number; output: string } {
-    const { script, env } = seedShell(forge);
-    fs.writeFileSync(path.join(dir, STATS_FILE), "{}\n");
-    fs.writeFileSync(
-      path.join(dir, "index.config.json"),
-      JSON.stringify(site === undefined ? {} : { site }, null, 2) + "\n",
-    );
-    const platform = forge === "github" ? "PAGES_URL" : "CI_PAGES_URL";
-    const result = spawnSync(forge === "github" ? "bash" : "sh", ["-c", script], {
-      cwd: dir,
-      encoding: "utf8",
-      env: {
-        // No inherited environment: the script is under test, not this
-        // machine's shell profile.
-        HOME: dir,
-        PATH: process.env.PATH ?? "",
-        ...env,
-        ...(platformUrl === undefined ? {} : { [platform]: platformUrl }),
-      },
-    });
-    return { code: result.status ?? -1, output: `${result.stdout}${result.stderr}` };
-  }
-
   // The seed URL is read from the checkout, not baked into the workflow: the
   // tally reads `index.config.json` on every run, so a value frozen at render
   // time diverges again the moment `site` is edited without a re-render.
@@ -400,6 +401,71 @@ describe("the seed URL has one source (F-6)", () => {
       .join("\n");
 
     expect(executable).not.toContain("CI_PAGES_URL");
+  });
+});
+
+// One acceptance policy for `site`, at load, where `ci`, `ratings` and the
+// renderer all see the same answer. The generated seed step's own `case` guard
+// is belt-and-braces for the same rule — while the two were spelled separately,
+// a value config accepted was refused on the runner, in the deploy job, after
+// the tally had already written to the forge.
+describe("`site` is validated once, at load (F-6)", () => {
+  async function load(site: unknown): Promise<string | undefined> {
+    fs.writeFileSync(path.join(dir, "index.config.json"), JSON.stringify({ site }));
+    return (await loadConfig(dir)).site;
+  }
+
+  it.each([
+    ["HTTPS://a.example/x", "the generated guard matches the lowercase prefix"],
+    ["HtTpS://a.example/x", "same"],
+    ["https://real.example@evil.example/x", "userinfo: reads as one host, fetches another"],
+    ["https://a.example/x?v=1", "`<site>/stats.json` would append to the query"],
+    ["https://a.example/x#y", "curl drops the fragment and fetches the site's own HTML"],
+    ["https://a.example/x\n::add-mask::secret", "a newline is a workflow command in an ::error:: line"],
+    [null, "not a string, and `resolveConfig` keeps null rather than defaulting it"],
+  ])("refuses %j", async (site) => {
+    await expect(load(site)).rejects.toThrow(/site/);
+  });
+
+  it.each([
+    "https://a.example",
+    "https://a.example/x",
+    "https://a.example/x/",
+    // IDN: curl resolves it, so refusing it would be a charset opinion rather
+    // than a constraint the fetch needs.
+    "https://ex\u00e4mple.test/x",
+    // `init --quick` writes exactly this when no Pages URL is derivable, and
+    // an index that never enables ratings never fetches anything.
+    "http://localhost:4321",
+  ])("accepts %s", async (site) => {
+    await expect(load(site)).resolves.toBe(site);
+  });
+
+  // The seed step enforces TLS too, but it runs in the deploy job — on both
+  // forges the tally has by then created and locked threads on the forge. The
+  // verb refuses first, before any of that.
+  it("refuses a non-https site before the tally touches the forge", async () => {
+    fs.writeFileSync(
+      path.join(dir, "index.config.json"),
+      JSON.stringify({ site: "http://localhost:4321", ratings: RATINGS }),
+    );
+
+    // A usable policy file, so the run would otherwise get as far as the forge.
+    fs.writeFileSync(
+      path.join(dir, "index-policy.json"),
+      JSON.stringify({ trustedBots: [{ login: "bot", id: "1" }] }),
+    );
+
+    expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(65);
+    // The message, not just the code: without this the run still exits 65,
+    // one step later, for a missing forge variable instead of the real cause.
+    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(/https/);
+  });
+
+  // The seed step must not be the first thing to notice: on both forges it runs
+  // after the tally has created and locked threads on the forge.
+  it.each(["github", "gitlab"] as const)("is the same rule the seed step keeps — %s", (forge) => {
+    expect(seedShell(forge).script).toContain("https://*)");
   });
 });
 

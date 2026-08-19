@@ -108,12 +108,15 @@ export async function ratings(root: string): Promise<ExitCode> {
 
   const { loadConfig } = await import("../config.js");
   const site = (await loadConfig(rootDir)).site;
-  if (site === undefined || site === "") {
+  if (site === undefined || !site.startsWith("https://")) {
     // Not defaulted. `DEFAULT_CONFIG.site` names the first-party index, and
     // seeding from *someone else's* published stats would merge their ratings
-    // into this one's sidecar.
+    // into this one's sidecar. https because the seed decides every published
+    // rating — and refused *here*, before a single thread is created, because
+    // the generated deploy job enforces the same rule far too late to help:
+    // by then the tally has already written to the forge.
     throw new CliError(
-      "ratings: index.config.json needs an explicit `site` — the seed is read from `<site>/stats.json`",
+      "ratings: index.config.json needs an explicit https `site` — the seed is read from `<site>/stats.json`",
       EXIT.data,
     );
   }
