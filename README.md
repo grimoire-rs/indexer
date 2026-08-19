@@ -75,6 +75,121 @@ export default defineConfig({
 });
 ```
 
+## The `stats.json` sidecar
+
+An index may publish `stats.json` beside `all.json`. It carries per-artifact
+signals that are not part of a package's own metadata — today one, `rating`,
+the upvote count on the forge thread that owns that artifact. It is the read
+contract every client shares: `grim`, this renderer, and the VS Code
+extension all read the same file, and none of them writes it.
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-18T09:30:00Z",
+  "providers": { "rating": "github" },
+  "entries": {
+    "ghcr.io/acme/code-review": {
+      "rating": {
+        "up": 12,
+        "target": "DIC_kwDOAbc123",
+        "url": "https://github.com/acme/index/discussions/42"
+      }
+    }
+  }
+}
+```
+
+| Key | Type | Meaning |
+|---|---|---|
+| `schema_version` | int | Monotonic. Currently `1`. |
+| `generated_at` | string | RFC 3339, UTC. |
+| `providers` | object | Which backend produced each signal, keyed by stat name. `providers.rating` is `"github"` or `"gitlab"`. |
+| `entries` | object | Keyed by artifact ref, **exactly as that ref appears in `all.json`**. |
+| `entries[ref]` | object | One key per signal. |
+| `entries[ref].rating.up` | int | Upvotes. A ref with zero is omitted, never written as `0`. |
+| `entries[ref].rating.target` | string | The forge's own id for the thread. **Opaque.** |
+| `entries[ref].rating.url` | string | Where a human goes to vote. **Opaque.** |
+
+`target` and `url` are opaque: no client parses one and no client constructs
+one. They differ per forge and may change shape without a `schema_version`
+bump, which is exactly what "opaque" buys.
+
+**`entries[ref]` is a bag of stats, not a record.** A ref may carry
+`downloads` and no `rating`, or the reverse. A second signal arrives as a
+sibling key with a sibling entry in `providers`; that is additive and needs no
+version bump.
+
+### Absent is first-class
+
+Five distinct levels of absence. None of them is an error, a warning above
+`debug`, or a failed build:
+
+| Absent | Means |
+|---|---|
+| The file (404) | This index publishes no stats |
+| `entries` | Nothing is rated yet |
+| A ref within `entries` | That artifact has no stats at all |
+| `rating` on a ref that is present | Unrated — and any other stat on that ref is unaffected |
+| `rating` on a rendered catalog entry | Unrated. No consumer may assume the field is there |
+
+### Reading a document you do not fully understand
+
+A client that understands version *N* accepts any document declaring `≤ N`,
+ignoring fields it does not know. A document declaring `> N` may degrade to
+"no rating", but must never be a parse error. So fields are added and never
+repurposed, and `schema_version` rises only when an existing field changes
+meaning.
+
+`test/ratings/fixtures/` holds one document per rule above — the minimal valid
+v1, unknown fields at two levels, an unrecognised `providers.rating` value, the
+absence levels, and a document from the future. They are the reference
+documents for every client's parser tests, in this repository and outside it.
+
+### Producing it
+
+Add a `ratings` block to `index.config.json` and re-render CI (`npm run ci`).
+The block is optional; without it nothing is tallied and no sidecar is written.
+
+```jsonc
+"ratings": {
+  "provider": "github",   // "github" | "gitlab"
+  "container": "Ratings", // GitHub: Discussions category. GitLab: work item type.
+  "createBudget": 400,    // threads created per run; default 400
+  "lockThreads": true     // default TRUE - votes count, replies are refused
+}
+```
+
+`provider` and `container` are required; the other two have the defaults shown.
+Unknown keys are ignored. There is deliberately **no `botIds` key** — the
+author allowlist is `index-policy.json`'s `trustedBots[].id`, and a second copy
+of the same ids in a second file is a consistency hazard rather than a
+convenience.
+
+`lockThreads` defaults to `true` on purpose. It is the low-moderation default —
+an operator gets a rating signal without also running a comment forum they have
+to moderate — and it independently hardens the marker rule, because a locked
+thread cannot receive the forged-marker reply that rule exists to reject.
+
+Re-rendering with the block present adds one job to the generated pipeline
+(`ratings` on GitHub, `grim-indexer:ratings` on GitLab), an hourly schedule, and
+a seed step in the deploy. The seed step is what keeps a failed tally from
+emptying a published rating set: it reads the currently published `stats.json`
+and carries it forward per stat key, and it fails the job rather than treating
+an unreadable seed as an empty one.
+
+### Turning it off
+
+Two steps, and the first alone is not enough:
+
+1. Remove the `ratings` block and re-render CI. That stops the tally.
+2. **Delete the published `stats.json` from the deploy.** Until it is gone the
+   last tally keeps being served, frozen, forever.
+
+After both, clients read a 404 and every artifact shows as unrated on its next
+refresh. The sidecar is never committed — it is a build input the deploy
+publishes — so there is no history to unwind.
+
 ## Status
 
 Pre-1.0. The end-to-end loop was proven against live GitHub repositories

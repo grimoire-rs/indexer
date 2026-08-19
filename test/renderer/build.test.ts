@@ -104,6 +104,7 @@ async function render(site: string, overrides: SiteConfig = {}): Promise<Built> 
 const EMITTED_FILES = [
   "index.html",
   "all.json",
+  "stats.json",
   "p/github.com/acme/code-review/index.html",
   "p/github.com/acme/starter-pack/index.html",
   "p/github.com/acme/old-helper/index.html",
@@ -171,6 +172,34 @@ describe("frozen URLs", () => {
     expect(indexHtml).toContain('href="/p/github.com/acme/code-review/"');
   });
 
+  // C-016. `compileIndex` writes `all.json` and is not modified by the
+  // ratings feature; the render must leave its bytes alone too — key order,
+  // spacing and trailing newline included, since every client parses the
+  // file it is handed and mirrors copy it verbatim.
+  it("republishes all.json byte-for-byte, ratings or no ratings", async () => {
+    const rendered = await fs.readFile(path.join(site.outDir, "all.json"));
+    // The fixture copy is what `render` moved into `outDir` before the build
+    // — the "before" side of before-and-after.
+    const compiled = await fs.readFile(path.join(FIXTURE, "all.json"));
+    expect(rendered.toString("utf8")).toBe(compiled.toString("utf8"));
+    expect(rendered.equals(compiled)).toBe(true);
+    // The sidecar rides beside it rather than inside it.
+    expect(rendered.toString("utf8")).not.toContain("rating");
+  });
+
+  // The sidecar has to survive the same emptying of `outDir` that `all.json`
+  // does — it is published from `outDir`'s turn as the last `public/` layer,
+  // so a copy ordered after `stage` would leave a 404 at a frozen URL.
+  it("publishes stats.json beside all.json, unchanged", async () => {
+    const published = JSON.parse(await readOut("stats.json"));
+    const source = JSON.parse(await fs.readFile(path.join(FIXTURE, ".stats.json"), "utf8"));
+    expect(published).toEqual(source);
+    // Fields no consumer here reads still ride through — that is what makes
+    // the schema additive rather than a shape this renderer defines.
+    expect(published.schema_version).toBe(1);
+    expect(published.entries["registry.example/team/bare"]).toEqual({ downloads: { total: 91 } });
+  });
+
   it("keeps /all.json and the data tree Astro would otherwise empty", async () => {
     const all = JSON.parse(await readOut("all.json")) as { name: string }[];
     expect(all.map((p) => p.name)).toEqual([
@@ -184,6 +213,45 @@ describe("frozen URLs", () => {
     await expect(readOut("index/github.com/acme/code-review/metadata.json")).resolves.toContain(
       "code-review",
     );
+  });
+});
+
+// C-015 / S-001. The join happens once, at build time, against the sidecar
+// the ratings job left in the index root — the page never fetches anything.
+describe("ratings", () => {
+  it("joins the sidecar onto the cards by ref", () => {
+    expect(indexHtml).toContain('title="47 upvotes"'); // starter-pack
+    expect(indexHtml).toContain('title="12 upvotes"'); // code-review
+    expect(indexHtml).toContain('title="1 upvote"'); // rust-style, singular
+  });
+
+  // Every level of absence in one page: a ref the sidecar omits
+  // (`test-writer`), a ref it carries with stats but no `rating` (`bare`),
+  // and a rating for a ref that is not in the catalog at all (`acme/gone`).
+  // None of them is an error, and none of them renders a zero.
+  it("leaves everything else unrated, and invents no card for an unknown ref", () => {
+    expect(indexHtml.match(/class="pill rating"/g)).toHaveLength(3);
+    expect(indexHtml).not.toContain("acme/gone");
+    expect(indexHtml).not.toContain("0 upvotes");
+  });
+
+  // Anonymous by construction: one prerendered page for every visitor, so
+  // there is no "you voted" state it could be right about.
+  it("renders a count and no vote affordance", () => {
+    expect(indexHtml).not.toContain("upvoteCount");
+    expect(indexHtml).not.toContain("viewerHasUpvoted");
+    // The forge's own thread id is a producer detail; it stays in the
+    // sidecar rather than being inlined into every page's props.
+    expect(indexHtml).not.toContain("DIC_kwDO");
+  });
+
+  it("offers rating as a third sort chip", () => {
+    const chips = indexHtml.match(/<div class="chips" role="group" aria-label="Sort by">[\s\S]*?<\/div>/)![0]!;
+    expect([...chips.matchAll(/>([a-z]+)<\/button>/g)].map((m) => m[1])).toEqual([
+      "name",
+      "updated",
+      "rating",
+    ]);
   });
 });
 

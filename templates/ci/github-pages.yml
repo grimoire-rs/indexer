@@ -7,7 +7,7 @@ name: pages
 
 on:
   push:
-    branches: [{{defaultBranch}}]
+    branches: [{{defaultBranch}}]{{githubRatingsSchedule}}
   workflow_dispatch:
 
 # Default-deny at the top; every job pays for exactly what it needs.
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest{{githubRatingsBuildKeys}}
     permissions:
       contents: read
     steps:
@@ -40,11 +40,16 @@ jobs:
       # here, in the job that publishes the site.
       - name: Install
         run: npm ci --ignore-scripts
-{{githubEnrichSteps}}
+
+      # Ahead of the build, not after it: it only resolves this repository's
+      # Pages URL and sets outputs, and a step that runs before the build - the
+      # ratings seed - cross-checks `site` against that URL before it reads the
+      # published sidecar.
+      - id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+{{githubEnrichSteps}}{{githubRatingsSeedSteps}}
       - name: Build index
         run: npm run build
-
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
@@ -62,3 +67,4 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+{{githubRatingsJob}}

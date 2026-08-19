@@ -15,6 +15,7 @@ import { dev } from "./dev.js";
 import { enrich, type EnrichFlags } from "./enrich.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 import { init } from "./init.js";
+import { ratings } from "./ratings.js";
 import { validate, type ValidateFlags } from "./validate.js";
 
 interface InitCliOptions {
@@ -196,6 +197,14 @@ export async function run(argv: string[]): Promise<number> {
     .option("--grim <path>", "grim binary to read the registry with", "grim")
     .action(async (root: string, opts: EnrichFlags) => {
       code = await enrich(root, opts);
+    });
+
+  program
+    .command("ratings")
+    .argument("[root]", "index repo root", ".")
+    .description("tally the forge's upvote counters into .stats.json (needs the `ratings` block)")
+    .action(async (root: string) => {
+      code = await ratings(root);
     });
 
   program

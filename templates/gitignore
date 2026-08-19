@@ -8,6 +8,14 @@ dist/
 # Renderer scratch dir - removed on a clean build, left behind by a killed one.
 .index-*/
 
+# The ratings sidecar. CI seeds it from the live site, the tally merges over
+# it, and the deploy publishes it as `stats.json` - it is a build input, never
+# a source of truth. Deliberately not committed: it is regenerated from the
+# forge every run, so a committed copy is only ever a stale one, and it would
+# keep being published after the `ratings` block was removed, defeating the
+# rollback.
+.stats.json
+
 node_modules/
 .npm/
 

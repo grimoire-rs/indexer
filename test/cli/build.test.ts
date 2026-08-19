@@ -74,6 +74,29 @@ describe("build", () => {
     expect(fs.existsSync(path.join(dir, "dist", "index.html"))).toBe(true);
   }, 120_000);
 
+  // The ordering hazard of the whole feature, end to end: the ratings job
+  // writes `.stats.json` into the repo root, and `compileIndex` then deletes
+  // `dist/` wholesale. Publishing anywhere upstream of that — or downstream
+  // of Astro emptying `dist/` a second time — leaves a 404 at a frozen URL,
+  // and nothing else about the build would look wrong.
+  it("publishes a root .stats.json as dist/stats.json", async () => {
+    addPackage("acme", "hello");
+    const stats = {
+      schema_version: 1,
+      generated_at: "2026-08-18T09:30:00Z",
+      providers: { rating: "github" },
+      entries: { "ghcr.io/acme/skills/hello:1.0.0": { rating: { up: 4, target: "t", url: "u" } } },
+    };
+    fs.writeFileSync(path.join(dir, ".stats.json"), JSON.stringify(stats));
+
+    expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "dist", "stats.json"), "utf8"))).toEqual(stats);
+    // `all.json` is the compiler's, and the sidecar never leaks into it.
+    const all = fs.readFileSync(path.join(dir, "dist", "all.json"), "utf8");
+    expect(all).not.toContain("rating");
+  }, 120_000);
+
   // The state every user is in the moment `init` finishes. If this breaks,
   // the scaffold's own first build fails out of the box.
   it("builds a freshly scaffolded repo that has no packages yet", async () => {
@@ -81,6 +104,9 @@ describe("build", () => {
 
     expect(JSON.parse(fs.readFileSync(path.join(dir, "dist", "all.json"), "utf8"))).toEqual([]);
     expect(fs.existsSync(path.join(dir, "dist", "index.html"))).toBe(true);
+    // No ratings job, no sidecar, and a clean 404 rather than a stale or
+    // empty `stats.json` — the shape every index that never opts in ships.
+    expect(fs.existsSync(path.join(dir, "dist", "stats.json"))).toBe(false);
   }, 120_000);
 
   it("exits 65 on a malformed metadata.json", async () => {

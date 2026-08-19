@@ -97,6 +97,53 @@ async function readPackages(outDir: string): Promise<CatalogPackage[]> {
   return (parsed as CatalogPackage[]).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * The ratings job leaves its output here, in the index root; the render
+ * publishes it as `stats.json` beside `all.json`. Two names on purpose: the
+ * scratch copy is gitignored (it is regenerated, never committed) and the
+ * published one is the frozen URL every client reads.
+ */
+const STATS_SCRATCH = ".stats.json";
+const STATS_PUBLISHED = "stats.json";
+
+/**
+ * `.stats.json`, as far as the site cares. Everything else in the document —
+ * `schema_version`, `providers`, other per-ref stats, keys added later — is
+ * read by nobody here and republished untouched, which is what keeps the
+ * schema additive.
+ */
+interface StatsFile {
+  entries?: Record<string, { rating?: { up?: number } } | undefined>;
+}
+
+/**
+ * Read `<root>/.stats.json`. Absent is the normal case — most indexes run no
+ * ratings job — and so is unreadable or malformed: the sidecar is a signal,
+ * never an input the site depends on, so nothing here may fail a build over
+ * it. A document that does not parse is also not republished.
+ */
+async function readStats(root: string): Promise<StatsFile | null> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await fs.readFile(path.join(root, STATS_SCRATCH), "utf8"));
+  } catch {
+    return null;
+  }
+  return typeof parsed === "object" && parsed !== null ? (parsed as StatsFile) : null;
+}
+
+/** Join ratings onto packages by ref. A ref the sidecar omits stays unrated. */
+function withRatings(packages: CatalogPackage[], stats: StatsFile | null): CatalogPackage[] {
+  const entries = stats?.entries;
+  if (!entries) return packages;
+  return packages.map((p) => {
+    // A ref present but carrying only other stats, and a `rating` whose `up`
+    // is not a number, are both unrated — same as not being listed at all.
+    const up = entries[p.ref]?.rating?.up;
+    return typeof up === "number" ? { ...p, rating: { up } } : p;
+  });
+}
+
 async function exists(target: string): Promise<boolean> {
   return fs.access(target).then(
     () => true,
@@ -242,7 +289,8 @@ async function stage(
  */
 async function resolveInputs(opts: BuildSiteOptions) {
   const config = resolveConfig(opts.config);
-  const packages = await readPackages(opts.outDir);
+  const stats = await readStats(opts.root);
+  const packages = withRatings(await readPackages(opts.outDir), stats);
   const css = await readCustomCss(opts.root, config.customCss);
 
   // A site on GitHub/GitLab *project* Pages lives under a path segment, and
@@ -250,7 +298,7 @@ async function resolveInputs(opts: BuildSiteOptions) {
   // `base` — which covers everything Astro emits itself — and the same value
   // reaches the hand-written URLs through `astro/lib/base.ts`. Domain-rooted
   // sites yield "/", Astro's own default, so nothing about them moves.
-  return { config, packages, css, base: new URL(config.site).pathname };
+  return { config, packages, css, stats, base: new URL(config.site).pathname };
 }
 
 /**
@@ -295,6 +343,17 @@ function inlineConfig(
 /** Render the catalog site from `<outDir>/all.json` into `outDir`. */
 export async function buildSite(opts: BuildSiteOptions): Promise<void> {
   const inputs = await resolveInputs(opts);
+  // Before `stage`, and that is the whole trick: `outDir` is its last
+  // `public/` layer, which is the only reason a file sitting there survives
+  // Astro emptying `outDir` — the same route `all.json` already takes.
+  // Upstream of here, `compileIndex` has already `rmSync`'d `outDir`, so
+  // publishing any earlier writes into a directory about to be deleted.
+  if (inputs.stats) {
+    await fs.writeFile(
+      path.join(opts.outDir, STATS_PUBLISHED),
+      `${JSON.stringify(inputs.stats)}\n`,
+    );
+  }
   const staged = await stage(opts.root, opts.outDir);
   const astro = inlineConfig(opts, staged, inputs);
 

@@ -47,14 +47,25 @@ async function readCapped(
   return Buffer.concat(chunks).toString("utf8");
 }
 
+/** Everything past a plain GET. Omitted leaves `fetch`'s own defaults. */
+export interface RequestOptions {
+  method?: string;
+  body?: string;
+}
+
 export async function request(
   url: string,
   headers: Record<string, string> = {},
+  options: RequestOptions = {},
 ): Promise<HttpResponse> {
   const none: HttpResponse = { status: 0, body: "", header: () => "" };
   try {
     const response = await fetch(url, {
       headers: { "User-Agent": USER_AGENT, ...headers },
+      // Both `undefined` for a two-argument call, which is what `fetch` sees
+      // when neither is passed — the existing GET call sites are untouched.
+      method: options.method,
+      body: options.body,
       // ponytail: redirects are refused, not followed. If a real registry ever
       // needs one, re-run the host policy on the Location and follow one hop.
       redirect: "manual",

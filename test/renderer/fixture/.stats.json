@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-18T09:30:00Z",
+  "providers": { "rating": "github" },
+  "entries": {
+    "ghcr.io/acme/starter-pack": {
+      "rating": {
+        "up": 47,
+        "target": "DIC_kwDOAbc456",
+        "url": "https://github.com/acme/index/discussions/7"
+      }
+    },
+    "ghcr.io/acme/code-review": {
+      "rating": {
+        "up": 12,
+        "target": "DIC_kwDOAbc123",
+        "url": "https://github.com/acme/index/discussions/42"
+      }
+    },
+    "ghcr.io/acme/rust-style": {
+      "rating": {
+        "up": 1,
+        "target": "DIC_kwDOAbc789",
+        "url": "https://github.com/acme/index/discussions/9"
+      }
+    },
+    "registry.example/team/bare": {
+      "downloads": { "total": 91 }
+    },
+    "ghcr.io/acme/gone": {
+      "rating": {
+        "up": 3,
+        "target": "DIC_kwDOAbc999",
+        "url": "https://github.com/acme/index/discussions/1"
+      }
+    }
+  }
+}

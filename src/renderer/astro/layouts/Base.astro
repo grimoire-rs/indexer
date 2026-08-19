@@ -1181,6 +1181,13 @@ function repoLabel(url: string): string {
         .pill.version {
           font-family: ui-monospace, "SFMono-Regular", monospace;
         }
+        /* The only pill carrying a glyph — inline would baseline the arrow
+           low against the digits beside it. */
+        .pill.rating {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.15rem;
+        }
         .updated {
           font-size: 0.78rem;
           color: var(--muted);
