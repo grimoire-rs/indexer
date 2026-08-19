@@ -68,11 +68,12 @@ const CHAINS: Record<Sort, Key[]> = {
   rating: [byRating, byUpdated, byName],
 };
 
-// Deprecated packages sink to the bottom regardless of sort mode; the
-// chosen sort only orders within the two groups.
+// Deprecated packages get no special ordering here — they are filtered out
+// of the default browse entirely (see `shown` below) and interleave like
+// any other row when the toggle brings them back. grim's own browse order
+// (`browse_sort.rs`) has no deprecated key either; keeping this comparator
+// silent on deprecation is what keeps the two in sync.
 export function compare(a: CatalogPackage, b: CatalogPackage, sort: Sort): number {
-  const dep = Number(!!a.deprecated) - Number(!!b.deprecated);
-  if (dep !== 0) return dep;
   for (const key of CHAINS[sort]) {
     const d = key(a, b);
     if (d !== 0) return d;

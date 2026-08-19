@@ -15,7 +15,7 @@
 // `hydrate.test.tsx` does. This file stays `.ts` (not `.tsx`), so the
 // element is built with `h()` rather than JSX syntax.
 import { h, render } from "preact";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import Catalog, { compare, type Sort } from "../../src/renderer/astro/components/Catalog.tsx";
 import type { CatalogPackage } from "../../src/renderer/types.js";
@@ -136,23 +136,23 @@ describe("rating", () => {
 describe("every mode", () => {
   const modes: Sort[] = ["name", "updated", "rating"];
 
-  // D-2 rewrote what "deprecated ordering" means: the default browse no
-  // longer contains deprecated rows at all (see "deprecated visibility"
-  // below) — `compare()` never runs on a mix of the two groups there. It
-  // still runs on one when the site's toggle (the site's `--show-deprecated`)
-  // is on, and *that* mixed list still needs deprecated rows held together
-  // at the bottom rather than interleaved by date/rating — the old
-  // assertion, kept because the ordering rule it proves is unchanged, only
-  // its scope (toggle-on, not default) is.
-  it("sinks deprecated packages to the bottom when shown together via the toggle", () => {
+  // rev_df_f Warn-2: `compare()` used to pin every deprecated row to the
+  // bottom regardless of sort mode. Dropped: grim's own browse order
+  // (`browse_sort.rs`) carries no deprecated key at all, so on the one path
+  // where both surfaces actually show deprecated rows together — the
+  // site's toggle on, grim's `--show-deprecated` or the TUI's `h` — the old
+  // tiebreak made them disagree, which was F-4's real, still-open claim.
+  // This proves a deprecated row lands wherever its name/date/rating would
+  // put it, never forced to any fixed position.
+  it("interleaves a deprecated row with live ones — no special-case ordering", () => {
     const rows = [
-      { name: "dead-b", deprecated: "2026-01-01", rating: { up: 99 } },
-      { name: "live", rating: { up: 1 } },
-      { name: "dead-a", deprecated: "2026-01-01", rating: { up: 99 } },
+      { name: "dead", deprecated: "2026-01-01", rating: { up: 9 }, created: "2026-05-01T00:00:00Z" },
+      { name: "alpha", rating: { up: 5 }, created: "2026-01-01T00:00:00Z" },
+      { name: "zulu", rating: { up: 1 }, created: "2026-09-01T00:00:00Z" },
     ];
-    for (const sort of modes) {
-      expect(order(rows, sort), sort).toEqual(["live", "dead-a", "dead-b"]);
-    }
+    expect(order(rows, "name"), "name").toEqual(["alpha", "dead", "zulu"]);
+    expect(order(rows, "updated"), "updated").toEqual(["zulu", "dead", "alpha"]);
+    expect(order(rows, "rating"), "rating").toEqual(["dead", "alpha", "zulu"]);
   });
 
   // Totality: distinct rows never compare equal, so the sort is stable
@@ -176,24 +176,49 @@ describe("every mode", () => {
 });
 
 // F-4/D-2: grim hides deprecated artifacts from its default result set
-// unless `--show-deprecated` (the TUI: `h`); the site used to disagree and
-// only sink them to the bottom. The site now adopts grim's rule — hidden by
-// default, a toggle restores them — so the two surfaces show the same set
-// for the same index. grim itself is unchanged; its shipped default is
-// frozen by Principle 9, this only rewrites the *site's* default.
+// unless `--show-deprecated` (the TUI: `h`). The site has always matched
+// that — hide-by-default landed in `d074b71` (2026-07-29), before this
+// ratings branch existed — but nothing proved it at the component level:
+// sort.test.ts only ever exercised `compare()`'s ordering, never the
+// `shown` filter that does the actual hiding. This block is that missing
+// assertion, not a behavior change; the residual real gap (Warn-2 above)
+// was the dead tiebreak, not this filter.
 describe("deprecated visibility", () => {
   const modes: Sort[] = ["name", "updated", "rating"];
 
-  // `rating` on "live" is what makes the rating sort chip render at all
-  // (`hasRatings` gates it) — needed to drive that mode through the real UI
-  // control rather than by calling `compare()` directly.
+  // Same three rows as "interleaves a deprecated row…" above, so the
+  // default (dead filtered out) and toggle-on (dead interleaved) orders
+  // per mode can be read straight off that test's already-verified math.
+  // Distinct name/date/rating per row is what makes the three modes
+  // actually differ (rev_df_f Warn-1) — two rows alone made every mode
+  // produce the same output by construction.
   const ROWS = [
-    { name: "live", rating: { up: 3 } },
-    { name: "dead", deprecated: "2026-01-01" },
+    { name: "dead", deprecated: "2026-01-01", rating: { up: 9 }, created: "2026-05-01T00:00:00Z" },
+    { name: "alpha", rating: { up: 5 }, created: "2026-01-01T00:00:00Z" },
+    { name: "zulu", rating: { up: 1 }, created: "2026-09-01T00:00:00Z" },
   ].map(pkg) as unknown as CatalogPackage[];
+
+  const DEFAULT_ORDER: Record<Sort, string[]> = {
+    name: ["alpha", "zulu"],
+    updated: ["zulu", "alpha"],
+    rating: ["alpha", "zulu"],
+  };
+  const TOGGLE_ON_ORDER: Record<Sort, string[]> = {
+    name: ["alpha", "dead", "zulu"],
+    updated: ["zulu", "dead", "alpha"],
+    rating: ["dead", "alpha", "zulu"],
+  };
+
+  // rev_df_f Suggest-2: appended + torn down, matching hydrate.test.tsx —
+  // Catalog registers a document-level `/`-shortcut keydown handler, which
+  // would otherwise accumulate across the three mounts this test makes.
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
 
   function mount(): HTMLElement {
     const host = document.createElement("div");
+    document.body.append(host);
     render(h(Catalog, { packages: ROWS, vscodeExtension: null }), host);
     return host;
   }
@@ -218,16 +243,21 @@ describe("deprecated visibility", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
-  it("hides a deprecated entry by default in every sort mode, and reveals it with the toggle", async () => {
+  it("hides a deprecated entry by default in every sort mode, and interleaves it once the toggle brings it back", async () => {
     for (const sort of modes) {
       const host = mount();
       if (sort !== "name") await click(chip(host, sort));
-      expect(cardNames(host), `${sort}: default`).toEqual(["live"]);
+      // rev_df_f Warn-1: without this, a missing/dead chip (`el?.click()`
+      // no-ops silently) leaves `sort` on its default "name" and the loop
+      // can't tell — this failed against two mutations (rating chip
+      // removed; both non-name chips rewired to `setSort("name")`) that
+      // the bare card-content assertions below did not catch.
+      expect(chip(host, sort)?.className, sort).toContain("active");
 
-      // Toggled on, "dead" reappears — still sunk to the bottom by
-      // `compare()` (see "every mode" above), regardless of sort mode.
+      expect(cardNames(host), `${sort}: default`).toEqual(DEFAULT_ORDER[sort]);
+
       await click(chip(host, "deprecated"));
-      expect(cardNames(host), `${sort}: toggle on`).toEqual(["live", "dead"]);
+      expect(cardNames(host), `${sort}: toggle on`).toEqual(TOGGLE_ON_ORDER[sort]);
     }
   });
 });
