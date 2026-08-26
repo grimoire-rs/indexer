@@ -12,8 +12,10 @@ servers, and bundles available in one or more OCI registries.
 - `grim-indexer dev` — serve the index locally, through the same renderer
   `build` uses. The review loop for an entry or a branding change.
 - `grim-indexer enrich` — refresh `enrich/**` from the registry: READMEs,
-  changelogs, logos, versions and tag lists. The only step that goes
-  online, and the only one that needs `grim` on `PATH`.
+  changelogs, logos, versions, tag lists, and the curated annotations grim
+  reports (`revision`, `authors`, `vendor`, `url`, `documentation`,
+  `compatibility` and the repository's `support` channels). The only step
+  that goes online, and the only one that needs `grim` on `PATH`.
 - `grim-indexer build` — render `index/**` into a static site.
 - `grim-indexer validate` — CI gate for contribution PRs/MRs against an
   index repo.
@@ -78,23 +80,25 @@ export default defineConfig({
 ## The `stats.json` sidecar
 
 An index may publish `stats.json` beside `all.json`. It carries per-artifact
-signals that are not part of a package's own metadata — today one, `rating`,
-the upvote count on the forge thread that owns that artifact. It is the read
-contract every client shares: `grim`, this renderer, and the VS Code
-extension all read the same file, and none of them writes it.
+signals that are not part of a package's own metadata — today two: `rating`,
+the upvote count on the forge thread that owns that artifact, and `updated`,
+when that artifact last moved. It is the read contract every client shares:
+`grim`, this renderer, and the VS Code extension all read the same file, and
+none of them writes it.
 
 ```json
 {
   "schema_version": 1,
   "generated_at": "2026-08-18T09:30:00Z",
-  "providers": { "rating": "github" },
+  "providers": { "rating": "github", "updated": "indexer" },
   "entries": {
     "ghcr.io/acme/code-review": {
       "rating": {
         "up": 12,
         "target": "DIC_kwDOAbc123",
         "url": "https://github.com/acme/index/discussions/42"
-      }
+      },
+      "updated": { "at": "2026-07-01T10:00:00+00:00" }
     }
   }
 }
@@ -110,15 +114,21 @@ extension all read the same file, and none of them writes it.
 | `entries[ref].rating.up` | int | Upvotes. A ref with zero is omitted, never written as `0`. |
 | `entries[ref].rating.target` | string | The forge's own id for the thread. **Opaque.** |
 | `entries[ref].rating.url` | string | Where a human goes to vote. **Opaque.** |
+| `entries[ref].updated.at` | string | RFC 3339. When the artifact last moved. |
 
 `target` and `url` are opaque: no client parses one and no client constructs
 one. They differ per forge and may change shape without a `schema_version`
 bump, which is exactly what "opaque" buys.
 
-**`entries[ref]` is a bag of stats, not a record.** A ref may carry
-`downloads` and no `rating`, or the reverse. A second signal arrives as a
-sibling key with a sibling entry in `providers`; that is additive and needs no
-version bump.
+**`entries[ref]` is a bag of stats, not a record.** A ref may carry `updated`
+and no `rating`, or the reverse. A further signal arrives as a sibling key
+with a sibling entry in `providers`; that is additive and needs no version
+bump.
+
+Some fixtures under `test/ratings/fixtures/` carry a `downloads` key. It is
+there as an *unknown* key — the thing a reader must carry forward without
+understanding — and is **not a specification**. No producer writes it, its
+shape is not fixed, and a client must not code against it.
 
 ### Absent is first-class
 
@@ -148,8 +158,16 @@ documents for every client's parser tests, in this repository and outside it.
 
 ### Producing it
 
-Add a `ratings` block to `index.config.json` and re-render CI (`npm run ci`).
-The block is optional; without it nothing is tallied and no sidecar is written.
+`updated` needs no configuration and no forge. `enrich` already runs `describe`
+per package, so it writes the date into the sidecar — the artifact's own
+`created` (a commit date, so a re-publish of the same commit keeps the same
+answer) or, for an artifact published outside a repository, the first build
+that saw its current digest. `build` joins that onto the document it
+publishes. An index that runs `enrich` gets it whether or not it wants
+ratings.
+
+`rating` is opt-in. Add a `ratings` block to `index.config.json` and re-render
+CI (`npm run ci`). The block is optional; without it nothing is tallied.
 
 ```jsonc
 "ratings": {
@@ -187,8 +205,10 @@ Two steps, and the first alone is not enough:
    last tally keeps being served, frozen, forever.
 
 After both, clients read a 404 and every artifact shows as unrated on its next
-refresh. The sidecar is never committed — it is a build input the deploy
-publishes — so there is no history to unwind.
+refresh — unless the index still runs `enrich`, in which case the next build
+republishes a `stats.json` carrying `updated` and nothing else. The sidecar is
+never committed — it is a build input the deploy publishes — so there is no
+history to unwind either way.
 
 ## Status
 
