@@ -73,6 +73,58 @@ export function spawnGrim(bin = "grim"): GrimRunner {
 }
 
 /**
+ * The curated fields copied straight across from `describe`, in the order
+ * they are written to disk. Every one is optional on the wire: a grim older
+ * than the annotation work reports the first five and nothing after them,
+ * and `compatibility` is null for every kind but a skill. Absent is absent —
+ * no placeholder is written for a field the registry did not report.
+ */
+const META_KEYS = [
+  "title",
+  "summary",
+  "version",
+  "license",
+  "created",
+  "revision",
+  "authors",
+  "vendor",
+  "url",
+  "documentation",
+  "compatibility",
+];
+
+/**
+ * The support channels, in the order `describe` reports them.
+ *
+ * They come off the *description companion's* manifest rather than the
+ * version's, because a maintainer contact belongs to the repository and
+ * changes over time. That has no effect on how they are refreshed here:
+ * `describe` runs on every pass and is never skipped, so a support link
+ * edited without republishing any artifact still lands on the next enrich —
+ * it is only the companion *download* and the contents fetch that a digest
+ * skips.
+ */
+const SUPPORT_CHANNELS = ["issues", "chat", "contact", "security"];
+
+/**
+ * The `support` block, or nothing.
+ *
+ * A repository publishing no companion reports four nulls, and four nulls
+ * are the *absence* of a support block rather than an empty one — writing
+ * them would put a key in every sidecar in the index for the sake of the
+ * repositories that have nothing to say.
+ */
+function mapSupport(raw: unknown): Record<string, unknown> | undefined {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const reported = raw as Record<string, unknown>;
+  const support: Record<string, unknown> = {};
+  for (const channel of SUPPORT_CHANNELS) {
+    if (reported[channel] != null) support[channel] = reported[channel];
+  }
+  return Object.keys(support).length > 0 ? support : undefined;
+}
+
+/**
  * grim's snake_case `describe` payload -> the camelCase fields the renderer
  * reads. Key insertion order is the on-disk order, and these sidecars are
  * committed — keep it stable so a refresh that changed nothing diffs as
@@ -80,9 +132,11 @@ export function spawnGrim(bin = "grim"): GrimRunner {
  */
 function mapMeta(desc: Record<string, unknown>): Record<string, unknown> {
   const data: Record<string, unknown> = {};
-  for (const key of ["title", "summary", "version", "license", "created"]) {
+  for (const key of META_KEYS) {
     if (desc[key] != null) data[key] = desc[key];
   }
+  const support = mapSupport(desc.support);
+  if (support) data.support = support;
   data.keywords = desc.keywords ?? [];
   data.tags = desc.tags ?? [];
   data.deprecated = desc.deprecated ?? null; // string | null, always present
@@ -249,6 +303,26 @@ async function enrichOne(
     if (digest) data.contentDigest = digest;
     data.hasContents = written;
   }
+
+  // Recency is an indexer-side join, not something grim publishes: `describe`
+  // runs here per package on every pass, so nothing upstream has to carry a
+  // second date. The artifact's own `created` is it whenever there is one —
+  // it is the commit date, so a re-publish of the same commit keeps the same
+  // answer. An artifact published outside a repository (or with `--no-git`)
+  // has none, and then recency is when *this index* first saw the current
+  // digest. The digest bookkeeping above is the only state that can answer
+  // "first", so the stamp rides with it and is re-taken only when the
+  // artifact actually moved — a fresh stamp every run would churn a
+  // committed file and date every package to the last enrich.
+  const moved = digest !== null && digest !== existing.contentDigest;
+  data.updated =
+    typeof data.created === "string"
+      ? data.created
+      : !moved && typeof existing.updated === "string"
+        ? existing.updated
+        // RFC 3339 UTC to the second. Milliseconds in a committed file are
+        // noise nobody reads and a wider diff when the stamp does move.
+        : new Date().toISOString().replace(/\.\d+Z$/, "Z");
 
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 1) + "\n");

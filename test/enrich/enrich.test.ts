@@ -92,6 +92,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -121,6 +122,8 @@ describe("enrichIndex", () => {
       logo: "/logos/github.com/acme/foo.svg",
       contentDigest: "sha256:art",
       hasContents: true,
+      // An artifact with a `created` is dated by it, never by the clock.
+      updated: "2026-07-01T00:00:00+02:00",
     });
 
     const out = path.join(dir, "enrich/github.com/acme/foo");
@@ -142,6 +145,101 @@ describe("enrichIndex", () => {
     expect(data).not.toHaveProperty("license");
     expect(data.replacedBy).toBe("acme/bar");
     expect(data.deprecated).toBe("use acme/bar");
+  });
+
+  it("copies every annotation field grim reports, and no placeholder for one it does not", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const { run } = fakeGrim({
+      describe: {
+        revision: "3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39",
+        authors: "Acme Platform Team",
+        vendor: "Acme, Inc.",
+        url: "https://acme.example/foo",
+        documentation: "https://docs.acme.example/foo",
+        compatibility: "claude-code",
+        support: {
+          issues: "https://github.com/acme/foo/issues",
+          // A repository that opened an issue tracker and nothing else. The
+          // three it did not set are null on the wire.
+          chat: null,
+          contact: null,
+          security: null,
+        },
+      },
+    });
+
+    await enrichIndex({ root: dir, run });
+
+    const data = sidecar("github.com/acme", "foo");
+    expect(data).toMatchObject({
+      revision: "3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39",
+      authors: "Acme Platform Team",
+      vendor: "Acme, Inc.",
+      url: "https://acme.example/foo",
+      documentation: "https://docs.acme.example/foo",
+      compatibility: "claude-code",
+      support: { issues: "https://github.com/acme/foo/issues" },
+    });
+    // Absent, not null: a channel nobody set has no key, so a reader that
+    // checks `support.chat` gets `undefined` either way and never has to
+    // tell "unset" from "set to nothing".
+    expect(Object.keys(data.support as object)).toEqual(["issues"]);
+  });
+
+  it("writes no support block at all for a repository publishing no companion", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const { run } = fakeGrim({
+      describe: {
+        // What `describe` reports for a repository with no companion, and
+        // for every kind that is not a skill.
+        support: { issues: null, chat: null, contact: null, security: null },
+        compatibility: null,
+      },
+    });
+
+    await enrichIndex({ root: dir, run });
+
+    const data = sidecar("github.com/acme", "foo");
+    expect(data).not.toHaveProperty("support");
+    expect(data).not.toHaveProperty("compatibility");
+  });
+
+  it("keeps working against a grim too old to report any of them", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    // The pre-annotation payload: none of the seven keys exist on the wire
+    // at all, which is not the same as being null.
+    await enrichIndex({ root: dir, run: fakeGrim().run });
+
+    const data = sidecar("github.com/acme", "foo");
+    for (const key of ["revision", "authors", "vendor", "url", "documentation", "support"]) {
+      expect(data).not.toHaveProperty(key);
+    }
+    expect(data.title).toBe("Foo");
+  });
+
+  it("stamps an undated artifact once and keeps that stamp until the digest moves", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-01T09:00:00Z"));
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+
+    // Published outside a repository, or with `--no-git`: no commit date to
+    // date it by, so the index dates it by when it first saw this digest.
+    await enrichIndex({ root: dir, run: fakeGrim({ describe: { created: null } }).run });
+    expect(sidecar("github.com/acme", "foo").updated).toBe("2026-08-01T09:00:00Z");
+
+    // A month later, same artifact. A fresh stamp here would date every
+    // undated package in the index to the last enrich run and churn a
+    // committed file on every pass.
+    vi.setSystemTime(new Date("2026-09-01T09:00:00Z"));
+    await enrichIndex({ root: dir, run: fakeGrim({ describe: { created: null } }).run });
+    expect(sidecar("github.com/acme", "foo").updated).toBe("2026-08-01T09:00:00Z");
+
+    // The artifact actually moved. That is the one thing that re-dates it.
+    await enrichIndex({
+      root: dir,
+      run: fakeGrim({ describe: { created: null, digest: "sha256:two" } }).run,
+    });
+    expect(sidecar("github.com/acme", "foo").updated).toBe("2026-09-01T09:00:00Z");
   });
 
   it("skips the download when the companion digest has not moved", async () => {
