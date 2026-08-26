@@ -5,7 +5,7 @@ import { ArrowBigUp, Check, FolderRoot, Globe, Image, ImageOff } from "lucide-pr
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { withBase } from "../lib/base.js";
-import { timeAgo, vscodeUrl, type CatalogPackage } from "../lib/catalog.js";
+import { lastUpdated, timeAgo, vscodeUrl, type CatalogPackage } from "../lib/catalog.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
@@ -33,9 +33,10 @@ function descending(a: number | null, b: number | null): number {
   return b - a;
 }
 
-/** `created` as epoch ms; null when absent, empty or not a date at all. */
+/** `updated` as epoch ms; null when absent, empty or not a date at all. */
 function updatedAt(p: CatalogPackage): number | null {
-  const ms = p.created ? new Date(p.created).getTime() : NaN;
+  const at = lastUpdated(p);
+  const ms = at ? new Date(at).getTime() : NaN;
   return Number.isFinite(ms) ? ms : null;
 }
 
@@ -48,9 +49,9 @@ const byName: Key = (a, b) =>
   a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }) || a.ref.localeCompare(b.ref);
 
 /**
- * Newest first. No usable `created` is *unknown*, not epoch 0: dating an
- * undated package to 1970 sorts it below real packages by accident rather
- * than by rule, so it goes into a bucket of its own at the bottom.
+ * Newest first. No usable date is *unknown*, not epoch 0: dating an undated
+ * package to 1970 sorts it below real packages by accident rather than by
+ * rule, so it goes into a bucket of its own at the bottom.
  */
 const byUpdated: Key = (a, b) => descending(updatedAt(a), updatedAt(b));
 
@@ -640,7 +641,7 @@ export default function Catalog({
                 )}
               </div>
               <p class="namespace">{p.namespace}</p>
-              {(p.version || p.license || p.created || p.rating) && (
+              {(p.version || p.license || lastUpdated(p) || p.rating) && (
                 <div class="meta-row">
                   {p.version && <span class="pill version">v{p.version}</span>}
                   {p.license && <span class="pill license">{p.license}</span>}
@@ -657,11 +658,18 @@ export default function Catalog({
                       {p.rating.up}
                     </span>
                   )}
-                  {p.created && timeAgo(p.created) && (
-                    <time class="updated" datetime={p.created} title={p.created}>
-                      updated {timeAgo(p.created)}
-                    </time>
-                  )}
+                  {/* The date the sidecar derived, not the artifact's own
+                      `created`: a package republished from the same commit
+                      keeps its date, and one with no commit date at all gets
+                      the day this index first saw its current digest. */}
+                  {(() => {
+                    const at = lastUpdated(p);
+                    return at && timeAgo(at) ? (
+                      <time class="updated" datetime={at} title={at}>
+                        updated {timeAgo(at)}
+                      </time>
+                    ) : null;
+                  })()}
                 </div>
               )}
               {p.deprecated && (

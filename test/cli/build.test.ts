@@ -34,6 +34,13 @@ function addPackage(namespace: string, name: string): void {
   );
 }
 
+/** The sidecar `enrich` would have left, as far as the recency signal cares. */
+function addSidecar(namespace: string, name: string, updated: string): void {
+  const out = path.join(dir, "enrich", namespace, name);
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, "data.json"), JSON.stringify({ updated }));
+}
+
 beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "index-build-"));
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -91,10 +98,30 @@ describe("build", () => {
 
     expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
 
-    expect(JSON.parse(fs.readFileSync(path.join(dir, "dist", "stats.json"), "utf8"))).toEqual(stats);
+    const published = JSON.parse(fs.readFileSync(path.join(dir, "dist", "stats.json"), "utf8"));
+    // The build adds its own key and leaves the rest of the document as the
+    // ratings job stamped it — header, provider and rating all untouched.
+    expect(published).toEqual({ ...stats, providers: { ...stats.providers, updated: "indexer" } });
     // `all.json` is the compiler's, and the sidecar never leaks into it.
     const all = fs.readFileSync(path.join(dir, "dist", "all.json"), "utf8");
     expect(all).not.toContain("rating");
+  }, 120_000);
+
+  // Recency needs no ratings job, no forge and no network: `enrich` already
+  // wrote the date into the sidecar, so the build has only to publish it.
+  it("publishes a stats.json of dates alone for an index running no ratings job", async () => {
+    addPackage("acme", "hello");
+    addSidecar("acme", "hello", "2026-07-01T10:00:00+00:00");
+
+    expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+    const published = JSON.parse(fs.readFileSync(path.join(dir, "dist", "stats.json"), "utf8"));
+    expect(published.providers).toEqual({ updated: "indexer" });
+    expect(published.entries).toEqual({
+      "ghcr.io/acme/skills/hello:1.0.0": { updated: { at: "2026-07-01T10:00:00+00:00" } },
+    });
+    expect(published.schema_version).toBe(1);
+    expect(published.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   }, 120_000);
 
   // The state every user is in the moment `init` finishes. If this breaks,
@@ -104,8 +131,9 @@ describe("build", () => {
 
     expect(JSON.parse(fs.readFileSync(path.join(dir, "dist", "all.json"), "utf8"))).toEqual([]);
     expect(fs.existsSync(path.join(dir, "dist", "index.html"))).toBe(true);
-    // No ratings job, no sidecar, and a clean 404 rather than a stale or
-    // empty `stats.json` — the shape every index that never opts in ships.
+    // No ratings job, no sidecar and nothing to date, so a clean 404 rather
+    // than a stale or empty `stats.json` — the shape a scaffolded index
+    // ships on its very first build, before `enrich` has ever run.
     expect(fs.existsSync(path.join(dir, "dist", "stats.json"))).toBe(false);
   }, 120_000);
 

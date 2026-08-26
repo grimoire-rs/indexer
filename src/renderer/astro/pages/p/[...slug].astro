@@ -2,7 +2,22 @@
 // Frozen public URL: /p/<namespace>/<name>/. grim resolves against it, the
 // VS Code deep link points at it, and search engines index it — the route
 // shape is a contract, not an implementation detail.
-import { ChevronRight, FolderRoot, Globe, Image, ImageOff, Scale, User } from "lucide-preact";
+import {
+  BookOpen,
+  Bug,
+  ChevronRight,
+  FolderRoot,
+  Globe,
+  History,
+  House,
+  Image,
+  ImageOff,
+  Mail,
+  MessageCircle,
+  Scale,
+  ShieldAlert,
+  User,
+} from "lucide-preact";
 import Base from "../../layouts/Base.astro";
 import VersionMenu from "../../components/VersionMenu.astro";
 import CommandField from "../../components/CommandField.astro";
@@ -19,7 +34,10 @@ import { withBase } from "../../lib/base";
 import { SHIKI_THEMES } from "../../lib/code";
 import {
   compareVersions,
+  externalUrl,
+  lastUpdated,
   resolveMemberRef,
+  timeAgo,
   versionCascade,
   vscodeUrl,
   type CatalogPackage,
@@ -110,6 +128,40 @@ const scopeChoices = [
   { name: "Global", command: `grim add --global ${pkg.ref}`, Icon: Globe },
   { name: "Project", command: addCommand, Icon: FolderRoot },
 ];
+
+// Every outbound string on this page was handed to the index by a registry
+// it does not control, so each one goes through the scheme allowlist before
+// it becomes an href — the repository link included, which predates the rest
+// of them and took the same string unchecked.
+const repository = externalUrl(pkg.repository);
+const homepage = externalUrl(pkg.url);
+const documentation = externalUrl(pkg.documentation);
+
+// Who publishes this, as one line under the summary. `vendor` is derived
+// from the repository namespace when the publisher set none, so it is often
+// the same string as `authors` — a set, not a join, keeps it from being
+// printed twice.
+const byline = [...new Set([pkg.authors, pkg.vendor].filter(Boolean))].join(" · ");
+
+// "Get help" belongs to the *repository*, not this version: it is read off
+// the description companion, so a maintainer moves a link without any
+// artifact digest moving. Built here and rendered only when a channel is
+// actually set — most repositories publish none, and a block of four dead
+// rows is worse than no block.
+const supportChannels = [
+  { label: "Issue tracker", href: externalUrl(pkg.support?.issues), Icon: Bug },
+  { label: "Chat", href: externalUrl(pkg.support?.chat), Icon: MessageCircle },
+  { label: "Contact", href: externalUrl(pkg.support?.contact), Icon: Mail },
+  { label: "Report a vulnerability", href: externalUrl(pkg.support?.security), Icon: ShieldAlert },
+].filter((channel): channel is { label: string; href: string; Icon: typeof Bug } =>
+  channel.href !== null,
+);
+
+// A commit SHA is not something to read, it is something to check against a
+// checkout. It rides as the tooltip on the date it explains rather than
+// taking a row of its own and putting 40 hex characters in the rail.
+const updated = lastUpdated(pkg);
+const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : updated;
 ---
 
 <Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo}>
@@ -138,8 +190,13 @@ const scopeChoices = [
       <div class="detail-head-text">
         <h1>
           {pkg.name} <span class={`badge kind-${pkg.kind}`}>{pkg.kind}</span>
+          {/* Skills only — every other kind reports null, and grim's own
+              surfaces show it beside the kind for the same reason: it
+              qualifies what the thing is, not what it says about itself. */}
+          {pkg.compatibility && <span class="badge compat">{pkg.compatibility}</span>}
         </h1>
         {description && <p class="summary">{description}</p>}
+        {byline && <p class="byline">by {byline}</p>}
       </div>
     </header>
 
@@ -304,15 +361,41 @@ const scopeChoices = [
                 <dd>{pkg.license}</dd>
               </>
             )}
-            {pkg.repository && (
+            {repository && (
               <>
                 <dt>
                   <BrandMark path={repoMark} size={15} />
                   Repository
                 </dt>
                 <dd>
-                  <a href={pkg.repository} target="_blank" rel="noopener noreferrer">
+                  <a href={repository} target="_blank" rel="noopener noreferrer">
                     source
+                  </a>
+                </dd>
+              </>
+            )}
+            {homepage && (
+              <>
+                <dt>
+                  <House size={15} aria-hidden="true" />
+                  Homepage
+                </dt>
+                <dd>
+                  <a href={homepage} target="_blank" rel="noopener noreferrer">
+                    website
+                  </a>
+                </dd>
+              </>
+            )}
+            {documentation && (
+              <>
+                <dt>
+                  <BookOpen size={15} aria-hidden="true" />
+                  Docs
+                </dt>
+                <dd>
+                  <a href={documentation} target="_blank" rel="noopener noreferrer">
+                    documentation
                   </a>
                 </dd>
               </>
@@ -334,6 +417,19 @@ const scopeChoices = [
                 </dd>
               </>
             )}
+            {updated && (
+              <>
+                <dt>
+                  <History size={15} aria-hidden="true" />
+                  Updated
+                </dt>
+                <dd>
+                  <time datetime={updated} title={updatedTitle}>
+                    {timeAgo(updated) || updated}
+                  </time>
+                </dd>
+              </>
+            )}
           </dl>
           {pkg.keywords && pkg.keywords.length > 0 && (
             <ul class="keywords">
@@ -352,6 +448,22 @@ const scopeChoices = [
             </ul>
           )}
         </section>
+
+        {supportChannels.length > 0 && (
+          <section class="support">
+            <h2>Get help</h2>
+            <ul>
+              {supportChannels.map(({ label, href, Icon }) => (
+                <li>
+                  <Icon size={15} aria-hidden="true" />
+                  <a href={href} target="_blank" rel="noopener noreferrer">
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </aside>
     </div>
   </div>
@@ -437,6 +549,37 @@ const scopeChoices = [
   }
   .summary {
     margin: 0.3rem 0 0;
+    color: var(--muted);
+  }
+  .byline {
+    margin: 0.35rem 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  /* The kind badge names a closed set of five and shouts accordingly. A
+     compatibility hint is a free string off the registry — upper-casing it
+     would misspell whatever the publisher actually wrote. */
+  .badge.compat {
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: ui-monospace, "SFMono-Regular", monospace;
+  }
+  .support ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .support li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+  }
+  .support li :global(svg) {
+    flex-shrink: 0;
     color: var(--muted);
   }
   .deprecated-banner {

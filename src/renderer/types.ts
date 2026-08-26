@@ -28,6 +28,37 @@ export interface CatalogPackage extends IndexRecord {
   replacedBy?: string;
   tags?: string[];
   logo?: string;
+  /** Publishing commit SHA, `-dirty` suffixed from a dirty tree. Never shown raw. */
+  revision?: string;
+  /** Maintainer. Only present when the artifact was authored or published with git. */
+  authors?: string;
+  /** Distributing organization; grim derives it from the repo namespace when unset. */
+  vendor?: string;
+  /** Project home page. */
+  url?: string;
+  /** Documentation URL. */
+  documentation?: string;
+  /** A skill's editor/runtime hint. Absent for every other kind. */
+  compatibility?: string;
+  /**
+   * Where to get help, from the description companion's manifest. Every
+   * channel is optional and the object itself is absent for a repository
+   * publishing no companion — the "Get help" block renders only when at
+   * least one channel is set, which for most repositories is never.
+   */
+  support?: {
+    issues?: string;
+    chat?: string;
+    contact?: string;
+    security?: string;
+  };
+  /**
+   * When this artifact last moved, as an RFC 3339 timestamp — its own
+   * `created` (a commit date, stable per digest) when it has one, and
+   * otherwise the first build that saw the current digest. Written by
+   * `enrich`, joined into the published `stats.json` at build time.
+   */
+  updated?: string;
   /**
    * Upvotes joined from the `stats.json` sidecar at build time. Absent means
    * **unrated**, and never zero: an index that publishes no sidecar, a ref the

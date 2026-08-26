@@ -10,6 +10,15 @@ import { fileURLToPath } from "node:url";
 import { build, dev } from "astro";
 import preact from "@astrojs/preact";
 import { resolveConfig, type SiteConfig } from "../config.js";
+// The per-key merge, shared with the ratings producer rather than restated:
+// both write the same file and both have to leave the other's key alone.
+import {
+  mergeStats,
+  SCHEMA_VERSION,
+  type StatEntries,
+  type StatsDocument,
+  type StatsSeed,
+} from "../ratings/seed.js";
 import type { CatalogPackage } from "./types.js";
 import { SHIKI_THEMES } from "./astro/lib/code.js";
 
@@ -106,13 +115,21 @@ async function readPackages(outDir: string): Promise<CatalogPackage[]> {
 const STATS_SCRATCH = ".stats.json";
 const STATS_PUBLISHED = "stats.json";
 
+/** The stat key this build produces, and the name it publishes it under. */
+const UPDATED_KEY = "updated";
+const UPDATED_PROVIDER = "indexer";
+
 /**
- * `.stats.json`, as far as the site cares. Everything else in the document —
- * `schema_version`, `providers`, other per-ref stats, keys added later — is
- * read by nobody here and republished untouched, which is what keeps the
+ * `.stats.json`, as far as the site cares: the ratings it joins onto cards,
+ * and the two document-level fields it carries over rather than re-deriving.
+ * Everything else — other per-ref stats, other providers, keys added later —
+ * is read by nobody here and republished untouched, which is what keeps the
  * schema additive.
  */
 interface StatsFile {
+  schema_version?: unknown;
+  generated_at?: unknown;
+  providers?: Record<string, unknown>;
   entries?: Record<string, { rating?: { up?: number } } | undefined>;
 }
 
@@ -142,6 +159,56 @@ function withRatings(packages: CatalogPackage[], stats: StatsFile | null): Catal
     const up = entries[p.ref]?.rating?.up;
     return typeof up === "number" ? { ...p, rating: { up } } : p;
   });
+}
+
+/**
+ * The document to publish: whatever the ratings job left, plus this build's
+ * own `updated` key.
+ *
+ * Recency is the one stat the index derives from itself. `enrich` already
+ * calls `describe` per package and writes the answer into the sidecar, so
+ * every ref carries it by the time `all.json` is compiled — which makes this
+ * a local join with no network and no seed to fetch. It runs on every build,
+ * including one that never ran a ratings job at all.
+ *
+ * `mergeStats` is the same per-key merge the ratings producer uses, and for
+ * the same reason: a run owns its own key and carries every other one
+ * forward untouched, so a build cannot empty a published rating and a
+ * ratings run cannot empty a published date.
+ *
+ * `schema_version` and `generated_at` are carried over rather than
+ * re-stamped. The ratings job stamped this document, and re-stamping it here
+ * would make the published bytes differ on every rebuild of an unchanged
+ * index — a fresh stamp is taken only when there was no document to carry.
+ */
+function publishedStats(
+  packages: CatalogPackage[],
+  stats: StatsFile | null,
+): StatsDocument | null {
+  const fresh: Record<string, unknown> = {};
+  for (const p of packages) {
+    if (typeof p.updated === "string" && p.updated !== "") fresh[p.ref] = { at: p.updated };
+  }
+  // Nothing published and nothing to publish. An index whose packages all
+  // predate the `updated` field keeps behaving exactly as it did.
+  if (!stats && Object.keys(fresh).length === 0) return null;
+
+  const seed: StatsSeed = {
+    providers: (stats?.providers ?? {}) as Record<string, string>,
+    entries: (stats?.entries ?? {}) as StatEntries,
+  };
+  const merged = mergeStats(seed, UPDATED_KEY, UPDATED_PROVIDER, fresh);
+  return {
+    schema_version:
+      typeof stats?.schema_version === "number" ? stats.schema_version : SCHEMA_VERSION,
+    // RFC 3339 UTC to the second — the shape `statsDocument` writes and every
+    // fixture pins.
+    generated_at:
+      typeof stats?.generated_at === "string"
+        ? stats.generated_at
+        : new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+    ...merged,
+  };
 }
 
 async function exists(target: string): Promise<boolean> {
@@ -289,8 +356,11 @@ async function stage(
  */
 async function resolveInputs(opts: BuildSiteOptions) {
   const config = resolveConfig(opts.config);
-  const stats = await readStats(opts.root);
-  const packages = withRatings(await readPackages(opts.outDir), stats);
+  const sidecar = await readStats(opts.root);
+  const packages = withRatings(await readPackages(opts.outDir), sidecar);
+  // Downstream of the join, because the `updated` it publishes is read off
+  // the packages themselves.
+  const stats = publishedStats(packages, sidecar);
   const css = await readCustomCss(opts.root, config.customCss);
 
   // A site on GitHub/GitLab *project* Pages lives under a path segment, and

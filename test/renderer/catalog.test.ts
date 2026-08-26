@@ -9,9 +9,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   addRegistryUrl,
+  externalUrl,
+  lastUpdated,
   resolveMemberRef,
   vscodeUrl,
 } from "../../src/renderer/astro/lib/catalog.js";
+import type { CatalogPackage } from "../../src/renderer/types.js";
 
 const EXT = "grimoire-rs.grimoire-vscode";
 
@@ -89,5 +92,71 @@ describe("resolveMemberRef", () => {
       "localhost:5000/acme/skills/y",
     );
     expect(resolveMemberRef(BUNDLE, "localhost:5000/acme/y")).toBe("localhost:5000/acme/y");
+  });
+});
+
+// The registry hands the index these strings; the index puts them in an
+// `href`. Escaping does not make that safe — `javascript:` is a well-formed
+// attribute value that runs on click — so the scheme is what decides.
+describe("externalUrl", () => {
+  it("passes an ordinary link through exactly as the registry spelled it", () => {
+    expect(externalUrl("https://acme.example/foo")).toBe("https://acme.example/foo");
+    // Not `URL.href`: normalising would republish a link the publisher did
+    // not write, trailing slash and all.
+    expect(externalUrl("https://acme.example")).toBe("https://acme.example");
+    expect(externalUrl("http://acme.example/foo")).toBe("http://acme.example/foo");
+    expect(externalUrl("  https://acme.example/foo  ")).toBe("https://acme.example/foo");
+  });
+
+  it("reads a bare address as the mailto it obviously is", () => {
+    expect(externalUrl("support@acme.example")).toBe("mailto:support@acme.example");
+    expect(externalUrl("mailto:support@acme.example")).toBe("mailto:support@acme.example");
+  });
+
+  it("refuses every scheme a package page has no business carrying", () => {
+    for (const hostile of [
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      "  javascript:alert(1)",
+      "data:text/html;base64,PHNjcmlwdD4=",
+      "vbscript:msgbox(1)",
+      "file:///etc/passwd",
+      // A relative path is not an outbound link; it would resolve against
+      // this site and point at a page that does not exist.
+      "/etc/passwd",
+      "acme.example/foo",
+    ]) {
+      expect(externalUrl(hostile), hostile).toBeNull();
+    }
+  });
+
+  it("treats anything that is not a non-empty string as no link", () => {
+    expect(externalUrl(undefined)).toBeNull();
+    expect(externalUrl(null)).toBeNull();
+    expect(externalUrl("")).toBeNull();
+    expect(externalUrl("   ")).toBeNull();
+    expect(externalUrl(42)).toBeNull();
+    expect(externalUrl({ href: "https://acme.example" })).toBeNull();
+  });
+});
+
+describe("lastUpdated", () => {
+  const pkg = (fields: Partial<CatalogPackage>) => fields as CatalogPackage;
+
+  it("prefers the date enrich derived over the artifact's own", () => {
+    // They agree for every artifact that carries a `created`; they disagree
+    // for one that does not, where `updated` is the only date there is.
+    expect(
+      lastUpdated(pkg({ created: "2026-01-01T00:00:00Z", updated: "2026-08-02T11:15:00Z" })),
+    ).toBe("2026-08-02T11:15:00Z");
+    expect(lastUpdated(pkg({ updated: "2026-08-02T11:15:00Z" }))).toBe("2026-08-02T11:15:00Z");
+  });
+
+  it("falls back to created for a sidecar written before updated existed", () => {
+    expect(lastUpdated(pkg({ created: "2026-01-01T00:00:00Z" }))).toBe("2026-01-01T00:00:00Z");
+  });
+
+  it("is undefined when the package carries no date at all", () => {
+    expect(lastUpdated(pkg({}))).toBeUndefined();
   });
 });

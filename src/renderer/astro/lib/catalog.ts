@@ -5,7 +5,22 @@
 // client bundle. The build-time payload lives in `./data.ts`; the package
 // data itself is compiled by `src/data/` into `<outDir>/all.json`, so
 // nothing here walks the index tree.
+import type { CatalogPackage } from "../../types.js";
+
 export type { CatalogPackage } from "../../types.js";
+
+/**
+ * When a package last moved, for sorting and for the "updated" stamp.
+ *
+ * `updated` is what `enrich` derived — the artifact's own `created` when it
+ * has one, and the first build that saw the current digest when it does not.
+ * The fallback to `created` is for a sidecar written before that field
+ * existed: those records still date correctly instead of dropping into the
+ * unknown bucket on the first build after an upgrade.
+ */
+export function lastUpdated(p: CatalogPackage): string | undefined {
+  return p.updated ?? p.created;
+}
 
 // Publishing 0.10.0 also moves the rolling tags 0.10, 0 and latest, so the
 // full tag list is mostly history. Return just the current release's chain
@@ -61,6 +76,40 @@ export function timeAgo(iso: string): string {
     duration /= amount;
   }
   return RTF.format(Math.round(duration), "years");
+}
+
+/** A bare address, which `support.contact` is far more likely to hold than a URL. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** The only schemes a link on this site may carry. */
+const LINK_SCHEMES = ["https:", "http:", "mailto:"];
+
+/**
+ * One registry-supplied string as an outbound href, or null.
+ *
+ * Every URL on a package page — its repository, its home page, its docs, its
+ * four support channels — is a string the index was handed by a registry it
+ * does not control, and an `href` is not made safe by escaping: `javascript:`
+ * is a perfectly well-formed attribute value that runs on click. Only the
+ * three schemes a link here can legitimately use survive; everything else
+ * renders as no link at all rather than as a live one.
+ *
+ * The raw string is returned rather than `URL.href`, so a link that was
+ * already fine is published exactly as the registry spelled it.
+ */
+export function externalUrl(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (value === "") return null;
+  try {
+    return LINK_SCHEMES.includes(new URL(value).protocol) ? value : null;
+  } catch {
+    // Not a URL at all. `mailto:` is only added to something that carries no
+    // scheme of its own — testing for an address first would read the
+    // `mailto:alice@acme.example` a publisher already wrote as a bare
+    // address and prefix it a second time.
+    return EMAIL.test(value) ? `mailto:${value}` : null;
+  }
 }
 
 /** `vscode://<publisher.extension>/open?repo=<ref>`, or null when disabled. */

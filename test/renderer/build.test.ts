@@ -190,14 +190,48 @@ describe("frozen URLs", () => {
   // The sidecar has to survive the same emptying of `outDir` that `all.json`
   // does — it is published from `outDir`'s turn as the last `public/` layer,
   // so a copy ordered after `stage` would leave a 404 at a frozen URL.
-  it("publishes stats.json beside all.json, unchanged", async () => {
+  it("publishes stats.json beside all.json, carrying every key it did not write", async () => {
     const published = JSON.parse(await readOut("stats.json"));
     const source = JSON.parse(await fs.readFile(path.join(FIXTURE, ".stats.json"), "utf8"));
-    expect(published).toEqual(source);
+
+    // The build adds its own `updated` key and touches nothing else. The
+    // document header included: re-stamping `generated_at` here would make
+    // a rebuild of an unchanged index publish different bytes every time.
+    expect(published.schema_version).toBe(source.schema_version);
+    expect(published.generated_at).toBe(source.generated_at);
+    expect(published.providers.rating).toBe(source.providers.rating);
+
+    // Every rating survives the build's pass over the same file — the two
+    // producers own one key each and neither may empty the other's.
+    for (const [ref, stats] of Object.entries(source.entries) as [string, { rating?: unknown }][]) {
+      if (stats.rating) expect(published.entries[ref].rating, ref).toEqual(stats.rating);
+    }
     // Fields no consumer here reads still ride through — that is what makes
     // the schema additive rather than a shape this renderer defines.
-    expect(published.schema_version).toBe(1);
-    expect(published.entries["registry.example/team/bare"]).toEqual({ downloads: { total: 91 } });
+    expect(published.entries["registry.example/team/bare"].downloads).toEqual({ total: 91 });
+  });
+
+  // Recency is the one stat the index derives from itself: grim publishes no
+  // recency data, and `enrich` already calls `describe` per package, so this
+  // is a local join with nothing to fetch.
+  it("writes the updated signal from the index's own records", async () => {
+    const published = JSON.parse(await readOut("stats.json"));
+
+    expect(published.providers.updated).toBe("indexer");
+    // Dated by the artifact's own commit date, beside the rating the ratings
+    // job wrote for the same ref.
+    expect(published.entries["ghcr.io/acme/code-review"]).toMatchObject({
+      updated: { at: "2026-07-01T10:00:00+00:00" },
+      rating: { up: 12 },
+    });
+    // No commit date to go by: the stamp `enrich` took the first time it saw
+    // the current digest, which is the only date this artifact has.
+    expect(published.entries["ghcr.io/acme/old-helper"].updated).toEqual({
+      at: "2026-08-02T11:15:00Z",
+    });
+    // A ref with no date at all gets no key, never a null — same rule the
+    // ratings producer follows for an unrated ref.
+    expect(published.entries["registry.example/team/bare"]).not.toHaveProperty("updated");
   });
 
   it("keeps /all.json and the data tree Astro would otherwise empty", async () => {
@@ -252,6 +286,88 @@ describe("ratings", () => {
       "updated",
       "rating",
     ]);
+  });
+});
+
+// grim derives build provenance by default and reports five more curated
+// fields plus a repository-level `support` object. The index is a phone book,
+// so none of it reaches `all.json` as a pointer field: it arrives through the
+// enrich sidecar and is rendered on the detail page.
+describe("annotation fields", () => {
+  it("renders every curated field on the fully populated record", () => {
+    // A skill's editor hint, beside the kind it qualifies. Not upper-cased —
+    // it is a free string off the registry, not one of five known kinds.
+    expect(detailHtml).toMatch(/class="badge compat[^"]*"[^>]*>claude-code, cursor</);
+    // Who publishes it, as one line under the summary.
+    expect(detailHtml).toMatch(/by Acme Platform Team · Acme, Inc\./);
+    // The two external links, each in its own labelled row.
+    expect(detailHtml).toContain('href="https://acme.example/code-review"');
+    expect(detailHtml).toContain('href="https://docs.acme.example/code-review"');
+    expect(detailHtml).toContain("Homepage");
+    expect(detailHtml).toContain("Docs");
+  });
+
+  // A raw SHA in the rail is 40 characters nobody reads. It is useful as the
+  // answer to "which commit is this", which is a tooltip, not a row.
+  it("hangs the revision off the date instead of printing it", () => {
+    expect(detailHtml).toMatch(
+      /<time datetime="2026-07-01T10:00:00\+00:00" title="[^"]*revision 3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39"/,
+    );
+    // Not as a value of its own anywhere on the page.
+    expect(detailHtml).not.toMatch(/>\s*3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39\s*</);
+  });
+
+  it("gives the support channels a block of their own, and only the ones set", async () => {
+    expect(detailHtml).toContain("Get help");
+    expect(detailHtml).toContain('href="https://github.com/acme/code-review/issues"');
+    expect(detailHtml).toContain('href="https://acme.example/chat"');
+    // A bare address is the shape a maintainer actually writes; it reaches
+    // the page as the mailto it obviously is.
+    expect(detailHtml).toContain('href="mailto:support@acme.example"');
+    expect(detailHtml).toContain('href="https://github.com/acme/code-review/security/policy"');
+
+    // One channel of four — the shape most repositories will have for a
+    // long time. The block renders; the three unset rows do not.
+    const partial = await readOut("p/github.com/acme/rust-style/index.html");
+    expect(partial).toContain("Get help");
+    expect(partial).toContain('href="https://github.com/acme/rust-style/security/policy"');
+    expect(partial).not.toContain("Issue tracker");
+    expect(partial).not.toContain("Chat");
+    // Vendor with no authors: the byline prints what there is.
+    expect(partial).toMatch(/by Acme, Inc\./);
+  });
+
+  // Most repositories publish no companion at all, and four dead rows are
+  // worse than no block.
+  it("renders no support block for a record carrying none", async () => {
+    const bare = await readOut("p/registry.example/team/bare/index.html");
+    expect(bare).not.toContain("Get help");
+    expect(bare).not.toContain("badge compat");
+    // Docs without a home page, to prove the two rows are independent.
+    const docsOnly = await readOut("p/github.com/acme/test-writer/index.html");
+    expect(docsOnly).toContain('href="https://docs.acme.example/test-writer"');
+    expect(docsOnly).not.toContain("Homepage");
+  });
+
+  // Every one of these URLs is a string a registry handed the index, and an
+  // `href` is not made safe by escaping. `old-helper` carries the hostile
+  // shape on purpose.
+  it("refuses a link whose scheme has no business on a package page", async () => {
+    const hostile = await readOut("p/github.com/acme/old-helper/index.html");
+    expect(hostile).not.toContain("javascript:");
+    expect(hostile).not.toContain("Homepage");
+  });
+
+  // The card stamp and the `updated` sort key both read the derived date, so
+  // an artifact with no commit date of its own still dates correctly.
+  it("dates a package by the derived value, not the artifact's created", async () => {
+    // Same date either way for an artifact that carries a commit date.
+    expect(indexHtml).toContain('datetime="2026-07-01T10:00:00+00:00"');
+    // One that carries none is dated by the stamp `enrich` took when it
+    // first saw the digest. Reading `created` here would leave it undated —
+    // no stamp on the card, and the bottom bucket of the `updated` sort.
+    const undated = await readOut("p/github.com/acme/old-helper/index.html");
+    expect(undated).toContain('datetime="2026-08-02T11:15:00Z"');
   });
 });
 
@@ -434,7 +550,10 @@ describe("config reaches the rendered HTML", () => {
     expect(labels.map((l) => l.replace(/<[^>]+>/g, "").trim())).toEqual([
       "License",
       "Repository",
+      "Homepage",
+      "Docs",
       "Owner",
+      "Updated",
     ]);
     // Icon first, so the label text of every row starts on one x.
     for (const label of labels) expect(label.trimStart()).toMatch(/^<svg/);

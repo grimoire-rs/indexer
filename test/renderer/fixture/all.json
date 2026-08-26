@@ -13,12 +13,25 @@
     "version": "1.2.3",
     "license": "Apache-2.0",
     "created": "2026-07-01T10:00:00+00:00",
+    "revision": "3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39",
+    "authors": "Acme Platform Team",
+    "vendor": "Acme, Inc.",
+    "url": "https://acme.example/code-review",
+    "documentation": "https://docs.acme.example/code-review",
+    "compatibility": "claude-code, cursor",
+    "support": {
+      "issues": "https://github.com/acme/code-review/issues",
+      "chat": "https://acme.example/chat",
+      "contact": "support@acme.example",
+      "security": "https://github.com/acme/code-review/security/policy"
+    },
     "keywords": ["review", "diff"],
     "tags": ["latest", "1", "1.2", "1.2.3", "1.1.0"],
     "deprecated": null,
     "hasReadme": true,
     "hasChangelog": true,
-    "logo": "/logos/github.com/acme/code-review.svg"
+    "logo": "/logos/github.com/acme/code-review.svg",
+    "updated": "2026-07-01T10:00:00+00:00"
   },
   {
     "schema": 1,
@@ -38,7 +51,8 @@
     "tags": ["latest", "2", "2.0", "2.0.0", "1.4.0", "1.3.0", "1.2.0"],
     "deprecated": null,
     "hasReadme": true,
-    "hasChangelog": true
+    "hasChangelog": true,
+    "updated": "2026-07-20T09:30:00+00:00"
   },
   {
     "schema": 1,
@@ -53,10 +67,15 @@
     "version": "0.4.1",
     "license": "MIT",
     "created": "2026-06-18T14:05:00+00:00",
+    "vendor": "Acme, Inc.",
+    "support": {
+      "security": "https://github.com/acme/rust-style/security/policy"
+    },
     "keywords": ["rust", "style", "lint"],
     "tags": ["latest", "0", "0.4", "0.4.1", "0.4.0", "0.3.2"],
     "deprecated": null,
-    "hasReadme": true
+    "hasReadme": true,
+    "updated": "2026-06-18T14:05:00+00:00"
   },
   {
     "schema": 1,
@@ -69,9 +88,11 @@
     "summary": "Failing test first",
     "version": "0.9.0",
     "created": "2026-07-12T08:00:00+00:00",
+    "documentation": "https://docs.acme.example/test-writer",
     "tags": ["latest", "0", "0.9", "0.9.0"],
     "deprecated": null,
-    "hasReadme": true
+    "hasReadme": true,
+    "updated": "2026-07-12T08:00:00+00:00"
   },
   {
     "schema": 1,
@@ -82,7 +103,9 @@
     "namespace": "github.com/acme",
     "owner": { "github": "acme", "id": 1 },
     "deprecated": "2026-06-01",
-    "replacedBy": "ghcr.io/acme/code-review"
+    "replacedBy": "ghcr.io/acme/code-review",
+    "url": "javascript:alert(document.domain)",
+    "updated": "2026-08-02T11:15:00Z"
   },
   {
     "schema": 1,
