@@ -44,12 +44,14 @@ describe("validateRatings", () => {
     expect(validateRatings(null)).toBeUndefined();
   });
 
-  it("defaults lockThreads to true", () => {
-    expect(validateRatings(MINIMAL)?.lockThreads).toBe(true);
+  // A locked thread cannot be voted on from GitLab's UI, so the default may not
+  // be the one that forecloses the whole point of the feature.
+  it("defaults lockThreads to false", () => {
+    expect(validateRatings(MINIMAL)?.lockThreads).toBe(false);
   });
 
-  it("honours an explicit lockThreads: false", () => {
-    expect(validateRatings({ ...MINIMAL, lockThreads: false })?.lockThreads).toBe(false);
+  it("honours an explicit lockThreads: true", () => {
+    expect(validateRatings({ ...MINIMAL, lockThreads: true })?.lockThreads).toBe(true);
   });
 
   it("defaults createBudget under GitHub's content-creation cap", () => {
@@ -126,7 +128,7 @@ describe("loadRatingsConfig", () => {
       provider: "github",
       container: "Ratings",
       createBudget: DEFAULT_CREATE_BUDGET,
-      lockThreads: true,
+      lockThreads: false,
     });
   });
 

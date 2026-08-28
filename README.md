@@ -176,7 +176,7 @@ CI (`npm run ci`). The block is optional; without it nothing is tallied.
   "provider": "github",   // "github" | "gitlab"
   "container": "Ratings", // GitHub: Discussions category. GitLab: work item type.
   "createBudget": 400,    // threads created per run; default 400
-  "lockThreads": true     // default TRUE - votes count, replies are refused
+  "lockThreads": false    // default FALSE - a locked thread cannot be voted on
 }
 ```
 
@@ -186,10 +186,19 @@ author allowlist is `index-policy.json`'s `trustedBots[].id`, and a second copy
 of the same ids in a second file is a consistency hazard rather than a
 convenience.
 
-`lockThreads` defaults to `true` on purpose. It is the low-moderation default —
-an operator gets a rating signal without also running a comment forum they have
-to moderate — and it independently hardens the marker rule, because a locked
-thread cannot receive the forged-marker reply that rule exists to reject.
+`lockThreads` defaults to `false`, and did not always. A lock looks like the
+low-moderation default — a rating signal without a comment forum to moderate —
+but on GitLab it also stops the voting. The work-item UI draws the thumbs-up
+control on a locked item and ignores the click, guarding on `discussionLocked`
+without sending the mutation, while REST and GraphQL both accept a reaction on
+that same item and read it back. So nothing warns you: the tally runs, the
+threads look healthy, and every one of them is unvotable by the only means most
+people have.
+
+Setting it costs nothing in marker authority — R-1 reads the thread body and
+never a comment, so a reply cannot forge a marker either way. Turn it on if you
+would rather moderate nothing and have checked that your forge still lets a
+human react; GitHub Discussions are untested here.
 
 Re-rendering with the block present adds one job to the generated pipeline
 (`ratings` on GitHub, `grim-indexer:ratings` on GitLab), an hourly schedule, and

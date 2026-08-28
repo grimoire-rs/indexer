@@ -49,15 +49,26 @@ export interface RatingsConfig {
    * state, so the only cost of a small budget is more runs to converge.
    */
   createBudget: number;
-  /**
-   * Lock every thread on creation. **Default `true`**: votes still count,
-   * replies are refused.
+   /**
+   * Lock every thread on creation. **Default `false`.**
    *
-   * Two things at once. It is the low-moderation default — an operator gets a
-   * rating signal without also running a comment forum they have to moderate.
-   * And it independently hardens R-1 clause 1: a locked thread cannot receive
-   * the forged-marker reply that clause exists to reject, so the marker rule
-   * and the lock have to fail together before a stranger's text is counted.
+   * It defaulted to `true`, on the belief that a lock refuses replies while
+   * votes still count. On GitLab that second half is not true: the work-item
+   * UI renders the thumbs-up control on a locked item and then does nothing
+   * when a human clicks it — the frontend guards on `discussionLocked` and
+   * never sends the mutation. Nothing surfaces that from the API side, where
+   * REST and GraphQL both accept a reaction on a locked item and read it back,
+   * so an index could tally happily while every thread it created was
+   * unvotable by the only means most people have.
+   *
+   * A thread exists to be voted on, so the default may not foreclose voting.
+   * GitHub Discussions are untested here and may well behave differently;
+   * `true` remains available for an operator who wants it and has checked.
+   *
+   * Turning it on costs nothing in marker authority. R-1 clause 1 reads the
+   * thread *body* and never a comment, so a reply cannot forge a marker
+   * whether or not the thread is locked — the lock was only ever a second
+   * barrier in front of a rule that already holds on its own.
    */
   lockThreads: boolean;
 }
@@ -102,7 +113,7 @@ export function validateRatings(raw: unknown): RatingsConfig | undefined {
     provider: ratings.provider as RatingProviderKind,
     container: ratings.container,
     createBudget: ratings.createBudget ?? DEFAULT_CREATE_BUDGET,
-    lockThreads: ratings.lockThreads ?? true,
+    lockThreads: ratings.lockThreads ?? false,
   };
 }
 
