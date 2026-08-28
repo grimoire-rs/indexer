@@ -107,11 +107,22 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileResult>
     }
   }
 
-  // 4. TALLY — the forge's own scalar counter. A zero-vote thread says nothing,
-  //    so it is omitted rather than published as `up: 0`.
+  // 4. TALLY — the forge's own scalar counter, for every authorized thread.
+  //
+  //    `up: 0` is published rather than omitted. Omitting it collapsed two
+  //    different states into one: a ref with no thread, and a ref whose thread
+  //    exists and has simply not been voted on yet. That distinction is the
+  //    whole bootstrap — `url` is opaque, so a catalog cannot construct a link
+  //    to the thread and can only offer the one this document carries. Dropping
+  //    the row dropped its `url` too, so a fresh index published nothing to vote
+  //    on, and nobody could cast the first vote from the catalog that would have
+  //    made the row appear.
+  //
+  //    Absence keeps a meaning, and a sharper one: no authorized thread exists
+  //    for that ref. A deleted thread leaves `bound`, so it still disappears.
   const fresh: Record<string, RatingStat> = {};
   for (const [ref, thread] of bound) {
-    if (thread.up > 0) fresh[ref] = { up: thread.up, target: thread.target, url: thread.url };
+    fresh[ref] = { up: thread.up, target: thread.target, url: thread.url };
   }
 
   // 4b. CARRY FORWARD what a truncated pass never reached.

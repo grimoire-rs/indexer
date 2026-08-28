@@ -203,10 +203,16 @@ describe("a complete run", () => {
         "ghcr.io/acme/one": {
           rating: { up: 6, target: "D_ghcr.io/acme/one", url: expect.any(String) as unknown },
         },
+        // The thread this run created for the second ref. No votes yet, and it
+        // is published anyway -- its `url` is the only link a catalog can offer
+        // to cast the first one.
+        "ghcr.io/acme/two": {
+          rating: { up: 0, target: expect.any(String) as unknown, url: expect.any(String) as unknown },
+        },
       },
     });
     expect(logs.join("\n")).toContain(
-      "ratings: refs=2 created=1/1 tallied=1 conflicts=0 secondary_limit_hit=false",
+      "ratings: refs=2 created=1/1 tallied=2 conflicts=0 secondary_limit_hit=false",
     );
   });
 
@@ -272,8 +278,12 @@ describe("R-2 — nothing empties a published rating set", () => {
       ],
     });
     expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(0);
-    const entries = stats().entries as Record<string, unknown>;
-    expect(entries["ghcr.io/acme/two"]).toEqual({ downloads: { total: 12 } });
+    const entries = stats().entries as Record<string, Record<string, unknown>>;
+    // The point of the test: a key this producer never computed is carried
+    // forward untouched. It now shares the entry with the rating thread this
+    // run created for the same ref, which is the bag-of-stats shape working.
+    expect(entries["ghcr.io/acme/two"].downloads).toEqual({ total: 12 });
+    expect(entries["ghcr.io/acme/two"].rating).toMatchObject({ up: 0 });
     expect(stats().providers).toEqual({ rating: "github", downloads: "registry" });
   });
 });

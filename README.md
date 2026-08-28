@@ -113,7 +113,7 @@ none of them writes it.
 | `providers` | object | Which backend produced each signal, keyed by stat name. `providers.rating` is `"github"` or `"gitlab"`. |
 | `entries` | object | Keyed by artifact ref, **exactly as that ref appears in `all.json`**. |
 | `entries[ref]` | object | One key per signal. |
-| `entries[ref].rating.up` | int | Upvotes. A ref with zero is omitted, never written as `0`. |
+| `entries[ref].rating.up` | int | Upvotes, `0` included. A thread that exists but has no votes is published as `0`, so its `url` is there to vote at. |
 | `entries[ref].rating.target` | string | The forge's own id for the thread. **Opaque.** |
 | `entries[ref].rating.url` | string | Where a human goes to vote. **Opaque.** |
 | `entries[ref].updated.at` | string | RFC 3339. When the artifact last moved. |
@@ -142,7 +142,7 @@ Five distinct levels of absence. None of them is an error, a warning above
 | The file (404) | This index publishes no stats |
 | `entries` | Nothing is rated yet |
 | A ref within `entries` | That artifact has no stats at all |
-| `rating` on a ref that is present | Unrated — and any other stat on that ref is unaffected |
+| `rating` on a ref that is present | No rating thread exists for it — not the same as a thread with `up: 0`. Any other stat on that ref is unaffected |
 | `rating` on a rendered catalog entry | Unrated. No consumer may assume the field is there |
 
 ### Reading a document you do not fully understand

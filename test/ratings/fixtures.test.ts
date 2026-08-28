@@ -94,12 +94,21 @@ describe("stats.json v1 fixtures", () => {
     expect(readRating(doc, RATED)).toBeUndefined();
   });
 
-  it("omits zero-vote refs rather than recording them as 0", () => {
-    for (const name of ["v1-minimal", "v1-ref-absent-from-entries"]) {
-      const entries = (load(name) as { entries: Record<string, { rating?: { up: number } }> }).entries;
-      for (const [ref, stats] of Object.entries(entries)) {
-        expect(stats.rating?.up ?? 1, ref).toBeGreaterThan(0);
-      }
-    }
+  // `up: 0` is the state a client is most likely to get wrong, because 0 is
+  // falsy: a reader testing the count for truthiness rather than the field for
+  // presence drops exactly the row that carries the link to cast a first vote.
+  // So the reference document contains one, and reading it must yield the
+  // thread rather than "unrated".
+  it("reads a zero-vote thread as a thread, not as unrated", () => {
+    const rating = readRating(load("v1-minimal"), "ghcr.io/acme/changelog");
+    expect(rating).toBeDefined();
+    expect(rating?.up).toBe(0);
+    expect(rating?.url).toBe("https://github.com/acme/index/discussions/43");
+  });
+
+  it("distinguishes a zero-vote thread from a ref with no thread at all", () => {
+    const doc = load("v1-minimal");
+    expect(readRating(doc, "ghcr.io/acme/changelog")?.up).toBe(0);
+    expect(readRating(doc, "ghcr.io/acme/never-published")).toBeUndefined();
   });
 });

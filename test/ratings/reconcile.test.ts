@@ -36,14 +36,22 @@ describe("budget ordering", () => {
 });
 
 describe("a complete run", () => {
-  it("tallies observed threads and omits zero-vote ones", async () => {
+  // A zero-vote thread is published, not omitted. It carries the `url` a
+  // catalog needs to offer the first vote, and omitting it made a ref with no
+  // thread indistinguishable from a thread nobody has voted on yet.
+  it("tallies observed threads, zero-vote ones included", async () => {
     const provider = memoryProvider({
       threads: [thread("ghcr.io/acme/a", 4), thread("ghcr.io/acme/b", 0)],
     });
     const result = await reconcile({ provider, desired: DESIRED, budget: 10, seed: EMPTY_SEED });
 
+    // `c` was missing and got created this run; a fresh thread has no votes, so
+    // it publishes as 0 too -- which is exactly the row a catalog needs to send
+    // someone to cast the first one.
     expect(result.fresh).toEqual({
       "ghcr.io/acme/a": { up: 4, target: "t-ghcr.io/acme/a", url: "https://forge.example/ghcr.io/acme/a" },
+      "ghcr.io/acme/b": { up: 0, target: "t-ghcr.io/acme/b", url: "https://forge.example/ghcr.io/acme/b" },
+      "ghcr.io/acme/c": { up: 0, target: "t-ghcr.io/acme/c", url: "https://forge.example/ghcr.io/acme/c" },
     });
     expect(result.created).toBe(1);
     expect(result.missing).toBe(1);
@@ -77,12 +85,30 @@ describe("a complete run", () => {
     expect(provider.threads).toHaveLength(3);
   });
 
-  it("drops a rating whose votes genuinely went to zero, because this producer completed", async () => {
+  it("republishes a rating whose votes went to zero, rather than dropping the thread", async () => {
     const seed: StatsSeed = {
       providers: { rating: "github" },
       entries: { "ghcr.io/acme/a": { rating: { up: 7, target: "t", url: "u" } } },
     };
     const provider = memoryProvider({ threads: [thread("ghcr.io/acme/a", 0)] });
+    const result = await reconcile({ provider, desired: ["ghcr.io/acme/a"], budget: 0, seed });
+
+    // 7 -> 0 is a real observation and it is published as one. The thread is
+    // still there and still votable, so the row stays with its `url`.
+    const zeroed = { up: 0, target: "t-ghcr.io/acme/a", url: "https://forge.example/ghcr.io/acme/a" };
+    expect(result.fresh).toEqual({ "ghcr.io/acme/a": zeroed });
+    expect(mergeStats(seed, "rating", "github", result.fresh).entries).toEqual({
+      "ghcr.io/acme/a": { rating: zeroed },
+    });
+  });
+
+  it("drops the rating of a ref whose thread is gone, which absence now means", async () => {
+    const seed: StatsSeed = {
+      providers: { rating: "github" },
+      entries: { "ghcr.io/acme/a": { rating: { up: 7, target: "t", url: "u" } } },
+    };
+    // No thread at all -- deleted on the forge, so it never reaches `bound`.
+    const provider = memoryProvider({ threads: [] });
     const result = await reconcile({ provider, desired: ["ghcr.io/acme/a"], budget: 0, seed });
 
     expect(result.fresh).toEqual({});
@@ -171,8 +197,10 @@ describe("the run's one log line", () => {
       threads: [thread("ghcr.io/acme/a", 4), thread("dup", 1, "t1"), thread("dup", 2, "t2")],
     });
     const result = await reconcile({ provider, desired: DESIRED, budget: 1, seed: EMPTY_SEED });
+    // tallied=2: `a` at 4 votes and the one thread this run created at 0. It
+    // counts published rows, and a zero-vote row is published.
     expect(logLine(result)).toBe(
-      "ratings: refs=3 created=1/2 tallied=1 conflicts=1 secondary_limit_hit=false",
+      "ratings: refs=3 created=1/2 tallied=2 conflicts=1 secondary_limit_hit=false",
     );
   });
 });

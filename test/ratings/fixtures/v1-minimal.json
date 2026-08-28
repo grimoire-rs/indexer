@@ -11,6 +11,13 @@
         "target": "DIC_kwDOAbc123",
         "url": "https://github.com/acme/index/discussions/42"
       }
+    },
+    "ghcr.io/acme/changelog": {
+      "rating": {
+        "up": 0,
+        "target": "DIC_kwDOAbc456",
+        "url": "https://github.com/acme/index/discussions/43"
+      }
     }
   }
 }
