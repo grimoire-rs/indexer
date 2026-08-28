@@ -665,7 +665,7 @@ describe("config reaches the rendered HTML", () => {
     expect(detailHtml).toMatch(/<summary[^>]*>\s*<svg/);
     expect(bundledCss).toMatch(/\.older\[[^\]]+\]>summary\[[^\]]+\]\{[^}]*list-style:none/);
     expect(bundledCss).toMatch(/::-webkit-details-marker\{display:none/);
-    expect(bundledCss).toMatch(/transition:transform \.16s/);
+    expect(bundledCss).toMatch(/transition:transform var\(--grim-duration-base\)/);
     // A quarter turn: closed points right at the row it opens, open points
     // down at it.
     expect(bundledCss).toMatch(/\.older\[[^\]]+\]\[open\][^{]*svg\{transform:rotate\(90deg\)/);
@@ -720,7 +720,7 @@ describe("config reaches the rendered HTML", () => {
     const mcp = await readOut("p/registry.example/team/bare/index.html");
     expect(mcp).toMatch(/<pre class="astro-code[^"]*"[^>]*style="[^"]*--shiki-dark:/);
 
-    expect(bundledCss).toMatch(/\.astro-code\{[^}]*border-radius:8px/);
+    expect(bundledCss).toMatch(/\.astro-code\{[^}]*border-radius:var\(--grim-radius-lg\)/);
     expect(bundledCss).toMatch(/:root\[data-theme=dark\][^{]*\.astro-code[^{]*\{[^}]*--shiki-dark/);
     // Injected, because the blocks come out of Shiki inside rendered
     // markdown — there is no authored markup to hang a button on. It joins
@@ -821,21 +821,66 @@ function layerBody(css: string): string {
   throw new Error("unterminated @layer grimoire");
 }
 
+/** Everything NOT inside an `@layer grimoire { … }` block. */
+function outsideLayers(css: string): string {
+  const parts: string[] = [];
+  let i = 0;
+  for (;;) {
+    const at = css.indexOf("@layer grimoire", i);
+    if (at < 0) return parts.join("") + css.slice(i);
+    parts.push(css.slice(i, at));
+    const open = css.indexOf("{", at);
+    let depth = 0;
+    let end = -1;
+    for (let j = open; j < css.length; j++) {
+      if (css[j] === "{") depth++;
+      else if (css[j] === "}" && --depth === 0) {
+        end = j;
+        break;
+      }
+    }
+    if (end < 0) throw new Error("unterminated @layer grimoire");
+    i = end + 1;
+  }
+}
+
 describe("theming", () => {
+  it("emits no rule at all outside @layer grimoire", () => {
+    // The check a source grep cannot fake, and the one that catches the
+    // defect the layer exists to prevent: an unlayered component block is
+    // scoped to `.foo[data-astro-cid-…]` — specificity (0,2,0) — which beats
+    // a consumer's `.foo` in EITHER source order, so nothing about injection
+    // order rescues it. Shipping `0.4.0` this leaked 9.6 KB, 40% of the
+    // emitted CSS, from two component blocks that were never wrapped.
+    expect(outsideLayers(bundledCss).trim()).toBe("");
+  });
+
   it("declares every token inside @layer grimoire, in both schemes", () => {
     expect(bundledCss).toContain("@layer grimoire");
     const body = layerBody(bundledCss);
     // Both token blocks must sit inside the layer, or an unlayered user
     // override would only win in one scheme.
-    expect(body).toMatch(/:root\{[^}]*--accent:/);
-    expect(body).toMatch(/\[data-theme=("dark"|dark)\]\{[^}]*--accent:/);
+    expect(body).toMatch(/:root\{[^}]*--grim-color-accent:/);
+    expect(body).toMatch(/\[data-theme=("dark"|dark)\]\{[^}]*--grim-color-accent:/);
     // …and nothing may declare a token outside it.
     expect(bundledCss.replace(body, "")).not.toMatch(/--(accent|bg|fg|card|border):/);
   });
 
+  it("lets a consumer override space and radius, not just colour", () => {
+    // A token that ships but cannot be reached is the defect the layer
+    // exists to prevent, and colour alone would not have caught it: these
+    // two families are declared once, in `:root`, and are read by rules in
+    // both the global block and a scoped component block.
+    expect(indexHtml).toContain("--grim-space-6: 7.77rem");
+    expect(indexHtml).toContain("--grim-radius-lg: 61px");
+    // Reaching them means the rules read the token rather than a literal.
+    expect(bundledCss).toMatch(/var\(--grim-space-6\)/);
+    expect(bundledCss).toMatch(/var\(--grim-radius-lg\)/);
+  });
+
   it("emits the user CSS unlayered, after the bundled stylesheet", () => {
-    expect(indexHtml).toContain("--accent: rgb(1 2 3)");
-    expect(indexHtml).toContain("--accent: rgb(4 5 6)");
+    expect(indexHtml).toContain("--grim-color-accent: rgb(1 2 3)");
+    expect(indexHtml).toContain("--grim-color-accent: rgb(4 5 6)");
     // Unlayered beats layered regardless of order, but the file is also
     // last in the document — assert the ordering that makes it obvious.
     expect(indexHtml.indexOf("rgb(1 2 3)")).toBeGreaterThan(

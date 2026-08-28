@@ -6,5 +6,15 @@ coverage/
 .DS_Store
 .test-index-*/
 
-# pre-commit hook state (tooling residue, not source)
-.claude/
+# Serena MCP server state — per-machine tooling residue, never source.
+.serena/
+
+# Claude Code local state is tooling residue, but the rule catalog and the
+# rules themselves are source: they are the written half of the theming
+# contract that `test/renderer/style_contract.test.ts` enforces. A rule that
+# is not committed is a rule only one machine has.
+# `.claude/*`, not `.claude/`: git does not descend into an excluded
+# directory, so a trailing-slash ignore cannot be negated from inside.
+.claude/*
+!.claude/rules.md
+!.claude/rules/

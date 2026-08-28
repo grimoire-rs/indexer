@@ -2,12 +2,20 @@
    in its own config and asserts these exact values, so they are chosen to be
    unmistakable rather than pleasant — an accent of rgb(1 2 3) is near-black.
 
+   Colour is declared in both schemes because colour is the only family that
+   differs per scheme; space and radius are measurements, declared once, and
+   they are here to prove the non-colour families are reachable too — a token
+   that ships but cannot be overridden is the defect this fixture exists to
+   catch.
+
    Deliberately NOT referenced from `index.config.json`: that file is what
    `npm run dev` renders, and wiring this in there paints every accent on the
    review site — brand mark, card links, active tab, version ring — black. */
 :root {
-  --accent: rgb(1 2 3);
+  --grim-color-accent: rgb(1 2 3);
+  --grim-space-6: 7.77rem;
+  --grim-radius-lg: 61px;
 }
 [data-theme="dark"] {
-  --accent: rgb(4 5 6);
+  --grim-color-accent: rgb(4 5 6);
 }

@@ -3,6 +3,10 @@
 // sheet. Everything in the global block sits in `@layer grimoire`, so a
 // user CSS file (unlayered) wins over any of it regardless of specificity
 // or injection order — that layer is the entire theming contract.
+//
+// The tokens themselves live in `../styles/tokens.css`, which declares the
+// same layer. That file is the contract; this one only spends it.
+import "../styles/tokens.css";
 import { Moon, Sun } from "lucide-preact";
 import { withBase } from "../lib/base";
 import { data } from "../lib/data";
@@ -119,9 +123,9 @@ function repoLabel(url: string): string {
     </script>
   </head>
   <body>
-    <header>
+    <header data-slot="site-header">
       <div class="shell header-row">
-        <a class="brand" href={withBase("/")}>
+        <a class="brand" href={withBase("/")} data-slot="brand">
           {/* Decorative: the brand text is right beside it, so announcing the
               logo too would read the index's name twice. */}
           {config.logo && <img class="brand-logo" src={withBase(config.logo)} alt="" />}
@@ -161,7 +165,7 @@ function repoLabel(url: string): string {
       <slot />
     </main>
 
-    <footer>
+    <footer data-slot="site-footer">
       <div class="shell">
         <p>
           Raw data: <a href={allJson}><code>{allJson}</code></a>{
@@ -359,70 +363,7 @@ function repoLabel(url: string): string {
     </script>
 
     <style is:global>
-      /* THE THEMING CONTRACT — these custom properties are the whole
-         customization surface. There is no component-override API.
-
-         Everything the renderer ships is layered. Unlayered CSS — i.e. any
-         user override file — beats a layered declaration outright, so a
-         single `:root { --accent: … }` wins in light AND dark without
-         !important and without knowing where Astro injects its bundle.
-         Redeclare under `[data-theme="dark"]` to differ per scheme.
-
-           surface   --bg --fg --card --border --muted --chip-bg
-           accent    --accent --accent-soft --on-accent
-           kinds     --kind-skill --kind-rule --kind-agent --kind-mcp
-                     --kind-bundle
-           states    --deprecated --banner-bg --banner-fg --banner-border
-
-         Every one is declared in both schemes below; `color-scheme` rides
-         along so form controls and scrollbars follow. Adding a token is
-         additive, removing or renaming one is a breaking change. */
       @layer grimoire {
-        :root {
-          --bg: #f7f6f3;
-          --fg: #1d1c1a;
-          --muted: #6d6a63;
-          --card: #ffffff;
-          --border: #dedbd3;
-          --accent: #6d4fc4;
-          --accent-soft: #efeafd;
-          --chip-bg: #edebe5;
-          --on-accent: #ffffff;
-          --kind-skill: #6d4fc4;
-          --kind-rule: #1a7f6b;
-          --kind-agent: #b0641a;
-          --kind-mcp: #2565c7;
-          --kind-bundle: #a63d68;
-          /* ~5.7:1 on --card (white) */
-          --deprecated: #9c5400;
-          --banner-bg: #fff3cd;
-          --banner-fg: #6b4c00;
-          --banner-border: #e0b84c;
-          color-scheme: light;
-        }
-        [data-theme="dark"] {
-          --bg: #16151a;
-          --fg: #e8e6e1;
-          --muted: #98948b;
-          --card: #201f26;
-          --border: #35333d;
-          --accent: #a58cf0;
-          --accent-soft: #2c2540;
-          --chip-bg: #2a2931;
-          --on-accent: #ffffff;
-          --kind-skill: #a58cf0;
-          --kind-rule: #4cc2a9;
-          --kind-agent: #e0a35c;
-          --kind-mcp: #6fa8f5;
-          --kind-bundle: #e07ba6;
-          /* ~7.6:1 on --card (#201f26) */
-          --deprecated: #e3a640;
-          --banner-bg: #4a3b0a;
-          --banner-fg: #f0d78c;
-          --banner-border: #8a6d1a;
-          color-scheme: dark;
-        }
-
         * {
           box-sizing: border-box;
         }
@@ -431,8 +372,8 @@ function repoLabel(url: string): string {
           min-height: 100vh;
           display: flex;
           flex-direction: column;
-          background: var(--bg);
-          color: var(--fg);
+          background: var(--grim-color-bg);
+          color: var(--grim-color-fg);
           font-family:
             system-ui,
             -apple-system,
@@ -446,31 +387,31 @@ function repoLabel(url: string): string {
         }
         main.shell {
           flex: 1;
-          padding-block: 1.5rem 3rem;
+          padding-block: var(--grim-space-7) var(--grim-space-9);
         }
         a {
-          color: var(--accent);
+          color: var(--grim-color-accent);
         }
 
         header {
-          border-bottom: 1px solid var(--border);
-          background: var(--card);
+          border-bottom: var(--grim-border-width) solid var(--grim-color-border);
+          background: var(--grim-color-card);
         }
         .header-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding-block: 0.8rem;
-          gap: 1rem;
+          padding-block: var(--grim-space-5);
+          gap: var(--grim-space-6);
         }
         .brand {
           display: inline-flex;
           align-items: center;
-          gap: 0.55rem;
-          color: var(--fg);
+          gap: var(--grim-space-4);
+          color: var(--grim-color-fg);
           text-decoration: none;
           font-weight: 600;
-          font-size: 1.05rem;
+          font-size: var(--grim-text-lg);
         }
         /* Height-bound, width free: a wordmark and a square icon are both
            valid logos and neither should be squashed into the other's box. */
@@ -480,20 +421,20 @@ function repoLabel(url: string): string {
           max-width: 12rem;
         }
         .brand-mark {
-          color: var(--accent);
+          color: var(--grim-color-accent);
           font-family: ui-monospace, "SFMono-Regular", monospace;
         }
         nav {
           display: flex;
           align-items: center;
-          gap: 1rem;
+          gap: var(--grim-space-6);
         }
         nav a {
-          color: var(--muted);
+          color: var(--grim-color-muted);
           text-decoration: none;
         }
         nav a:hover {
-          color: var(--fg);
+          color: var(--grim-color-fg);
         }
         /* Borderless and colour-inheriting: same resting and hover colours as
            the nav links beside it, so the row reads as one set. */
@@ -503,11 +444,11 @@ function repoLabel(url: string): string {
           border: none;
           background: none;
           padding: 0;
-          color: var(--muted);
+          color: var(--grim-color-muted);
           cursor: pointer;
         }
         #theme-toggle:hover {
-          color: var(--fg);
+          color: var(--grim-color-fg);
         }
         [data-theme="dark"] .when-light,
         [data-theme="light"] .when-dark {
@@ -521,13 +462,13 @@ function repoLabel(url: string): string {
           display: grid;
           grid-template-columns: 1fr auto;
           align-items: start;
-          gap: 0.6rem 2rem;
-          margin-block: 1rem 1.25rem;
+          gap: var(--grim-space-4) var(--grim-space-8);
+          margin-block: var(--grim-space-6) var(--grim-space-7);
         }
         .hero h1 {
           grid-column: 1 / -1;
           margin: 0;
-          font-size: 1.6rem;
+          font-size: var(--grim-text-2xl);
         }
         /* Label column, bar column. `minmax(0, …)` on the bars is what lets
            the commands scroll instead of widening the grid. */
@@ -535,11 +476,11 @@ function repoLabel(url: string): string {
           display: grid;
           grid-template-columns: auto minmax(0, 34rem);
           align-items: center;
-          gap: 0.4rem 0.7rem;
+          gap: var(--grim-space-3) var(--grim-space-5);
         }
         .side-label {
-          color: var(--muted);
-          font-size: 0.72rem;
+          color: var(--grim-color-muted);
+          font-size: var(--grim-text-2xs);
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.04em;
@@ -560,13 +501,15 @@ function repoLabel(url: string): string {
         }
         .hero p {
           margin: 0;
-          color: var(--muted);
+          color: var(--grim-color-muted);
           max-width: 46rem;
         }
         .hero code {
-          background: var(--chip-bg);
-          border-radius: 4px;
-          padding: 0.1rem 0.35rem;
+          background: var(--grim-color-chip-bg);
+          border-radius: var(--grim-radius-sm);
+          padding: var(--grim-space-1) var(--grim-space-3);
+          /* `em`, not a type token: inline code sizes against the prose it
+             sits in, so it must follow whatever that text is set at. */
           font-size: 0.9em;
         }
 
@@ -576,9 +519,9 @@ function repoLabel(url: string): string {
           display: flex;
           align-items: stretch;
           min-width: 0;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 8px;
+          background: var(--grim-color-card);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-lg);
         }
         /* No `overflow: hidden` — that would clip the platform menu. The end
            segments round themselves instead (8px border box, 1px border).
@@ -601,10 +544,10 @@ function repoLabel(url: string): string {
           cursor: pointer;
         }
         .cmd-field:hover {
-          background: var(--chip-bg);
+          background: var(--grim-color-chip-bg);
         }
         .cmd-field:focus-visible {
-          outline: 2px solid var(--accent);
+          outline: 2px solid var(--grim-color-accent);
           outline-offset: -2px;
         }
         .cmd-field code {
@@ -614,8 +557,9 @@ function repoLabel(url: string): string {
           border-radius: 0;
           /* Right padding is the icon's lane — the text scrolls under the
              fade rather than up against the glyph. */
-          padding: 0.4rem 2.1rem 0.4rem 0.7rem;
-          font-size: 0.85rem;
+          padding: var(--grim-space-3) 2.1rem var(--grim-space-3) var(--grim-space-5);
+          /* 2.1rem is the glyph lane's own width, not a rhythm step. */
+          font-size: var(--grim-text-sm);
           white-space: nowrap;
           overflow-x: auto;
           /* Scrollable, no bar: the bar is the height of the control and
@@ -642,19 +586,19 @@ function repoLabel(url: string): string {
           right: 0.6rem;
           display: grid;
           place-items: center;
-          color: var(--muted);
+          color: var(--grim-color-muted);
         }
         .cmd-icons > * {
           grid-area: 1 / 1;
-          transition: opacity 0.18s ease;
+          transition: opacity var(--grim-duration-slow) ease;
         }
         .cmd-icons .icon-done {
           opacity: 0;
-          color: var(--kind-rule);
+          color: var(--grim-color-kind-rule);
         }
         .cmd-field:hover .cmd-icons,
         .cmd-field:focus-visible .cmd-icons {
-          color: var(--fg);
+          color: var(--grim-color-fg);
         }
         .cmd-field.copied .icon-idle {
           opacity: 0;
@@ -675,11 +619,11 @@ function repoLabel(url: string): string {
           display: inline-flex;
           align-items: center;
           border: none;
-          border-left: 1px solid var(--border);
+          border-left: var(--grim-border-width) solid var(--grim-color-border);
           border-radius: 0;
           background: none;
-          padding: 0 0.5rem;
-          color: var(--muted);
+          padding: 0 var(--grim-space-4);
+          color: var(--grim-color-muted);
           text-decoration: none;
           cursor: pointer;
         }
@@ -693,11 +637,11 @@ function repoLabel(url: string): string {
         .os-menu > summary {
           display: inline-flex;
           align-items: center;
-          gap: 0.1rem;
-          padding: 0 0.45rem;
-          color: var(--muted);
+          gap: var(--grim-space-1);
+          padding: 0 var(--grim-space-4);
+          color: var(--grim-color-muted);
           cursor: pointer;
-          border-right: 1px solid var(--border);
+          border-right: var(--grim-border-width) solid var(--grim-color-border);
           /* Both spellings: the default triangle is a marker in Firefox and
              a `::-webkit-details-marker` pseudo-element in older WebKit. */
           list-style: none;
@@ -708,8 +652,8 @@ function repoLabel(url: string): string {
         .os-menu > summary:hover,
         .os-menu > summary:focus-visible,
         .os-menu[open] > summary {
-          background: var(--chip-bg);
-          color: var(--fg);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-fg);
         }
         .os-glyph {
           display: inline-flex;
@@ -729,41 +673,41 @@ function repoLabel(url: string): string {
           z-index: 5;
           min-width: 9rem;
           margin: 0;
-          padding: 0.25rem;
+          padding: var(--grim-space-2);
           list-style: none;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+          background: var(--grim-color-card);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-lg);
+          box-shadow: var(--grim-shadow-raised);
         }
         .os-menu li button {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: var(--grim-space-4);
           width: 100%;
           border: none;
-          border-radius: 6px;
+          border-radius: var(--grim-radius-md);
           background: none;
-          padding: 0.35rem 0.5rem;
-          color: var(--fg);
+          padding: var(--grim-space-3) var(--grim-space-4);
+          color: var(--grim-color-fg);
           font: inherit;
-          font-size: 0.85rem;
+          font-size: var(--grim-text-sm);
           text-align: left;
           cursor: pointer;
         }
         .os-menu li button:hover,
         .os-menu li button:focus-visible {
-          background: var(--chip-bg);
+          background: var(--grim-color-chip-bg);
         }
         .os-menu li button[aria-checked="true"] {
-          color: var(--accent);
+          color: var(--grim-color-accent);
         }
         /* Borderless segments need a different hover than the pills do — the
            border they would have tinted is not theirs any more. */
         .cmd-bar .seg:hover,
         .cmd-bar .seg:focus-visible {
-          background: var(--chip-bg);
-          color: var(--fg);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-fg);
         }
 
         /* The bar's end rounding, last so it wins.
@@ -776,12 +720,12 @@ function repoLabel(url: string): string {
            The summary is named explicitly rather than left to inherit. */
         .cmd-bar > :first-child,
         .cmd-bar > :first-child > summary {
-          border-start-start-radius: 7px;
-          border-end-start-radius: 7px;
+          border-start-start-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
+          border-end-start-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
         }
         .cmd-bar > :last-child {
-          border-start-end-radius: 7px;
-          border-end-end-radius: 7px;
+          border-start-end-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
+          border-end-end-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
         }
 
         /* Attribution sits opposite the raw-data line, on the same row where
@@ -791,7 +735,7 @@ function repoLabel(url: string): string {
           flex-wrap: wrap;
           justify-content: space-between;
           align-items: baseline;
-          gap: 0.35rem 1rem;
+          gap: var(--grim-space-3) var(--grim-space-6);
         }
         .attribution {
           margin: 0;
@@ -799,7 +743,7 @@ function repoLabel(url: string): string {
           text-align: end;
         }
         .attribution span[aria-hidden] {
-          color: var(--accent);
+          color: var(--grim-color-accent);
         }
         /* Sits between the raw-data line and the attribution, which keeps its
            `margin-inline-start: auto` and so stays pinned to the end. */
@@ -807,7 +751,7 @@ function repoLabel(url: string): string {
           margin: 0;
           display: flex;
           flex-wrap: wrap;
-          gap: 0.35rem 1rem;
+          gap: var(--grim-space-3) var(--grim-space-6);
         }
 
         /* Copy toast. Fixed and centred at the bottom: a card's three copy
@@ -821,36 +765,36 @@ function repoLabel(url: string): string {
           bottom: 1.25rem;
           z-index: 20;
           display: grid;
-          gap: 0.15rem;
+          gap: var(--grim-space-1);
           max-width: min(30rem, calc(100vw - 2rem));
-          padding: 0.5rem 0.85rem;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 10px;
-          box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+          padding: var(--grim-space-4) var(--grim-space-5);
+          background: var(--grim-color-card);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-xl);
+          box-shadow: var(--grim-shadow-overlay);
           /* Out of the layout and unhittable until shown, so it never eats a
              click aimed at whatever is beneath it. */
           pointer-events: none;
           opacity: 0;
           transform: translate(-50%, 0.5rem);
           transition:
-            opacity 160ms ease,
-            transform 160ms ease;
+            opacity var(--grim-duration-base) ease,
+            transform var(--grim-duration-base) ease;
         }
         #copy-toast.show {
           opacity: 1;
           transform: translate(-50%, 0);
         }
         #copy-toast .toast-name {
-          font-size: 0.8rem;
+          font-size: var(--grim-text-sm);
           font-weight: 600;
-          color: var(--fg);
+          color: var(--grim-color-fg);
         }
         /* The exact string, one line, clipped rather than wrapped — a long
            install one-liner must not grow the toast into the page. */
         #copy-toast .toast-value {
-          font-size: 0.78rem;
-          color: var(--muted);
+          font-size: var(--grim-text-xs);
+          color: var(--grim-color-muted);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -877,8 +821,8 @@ function repoLabel(url: string): string {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 0.75rem;
-          margin-bottom: 1.25rem;
+          gap: var(--grim-space-5);
+          margin-bottom: var(--grim-space-7);
         }
         /* Full-width basis in a wrapping row: the search bar takes a line to
            itself and pushes both chip groups onto the next one, which then
@@ -895,18 +839,19 @@ function repoLabel(url: string): string {
         }
         .controls input[type="search"] {
           flex: 1;
-          padding: 0.55rem 0.8rem;
+          padding: var(--grim-space-4) var(--grim-space-5);
           /* Room for the key hint, so a long query never runs under it. */
+          /* 2.4rem is the hint's measured width, not a rhythm step. */
           padding-right: 2.4rem;
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          background: var(--card);
-          color: var(--fg);
-          font-size: 0.95rem;
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-lg);
+          background: var(--grim-color-card);
+          color: var(--grim-color-fg);
+          font-size: var(--grim-text-md);
           min-width: 0;
         }
         .controls input[type="search"]:focus-visible {
-          outline: 2px solid var(--accent);
+          outline: 2px solid var(--grim-color-accent);
           outline-offset: 1px;
         }
         /* The `/` shortcut, shown as the key it is. It is a hint for a field
@@ -919,15 +864,15 @@ function repoLabel(url: string): string {
           top: 50%;
           translate: 0 -50%;
           pointer-events: none;
-          border: 1px solid var(--border);
+          border: var(--grim-border-width) solid var(--grim-color-border);
           border-bottom-width: 2px;
-          border-radius: 5px;
-          background: var(--chip-bg);
-          color: var(--muted);
+          border-radius: var(--grim-radius-md);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-muted);
           font-family: ui-monospace, "SFMono-Regular", monospace;
-          font-size: 0.72rem;
+          font-size: var(--grim-text-2xs);
           line-height: 1;
-          padding: 0.2rem 0.4rem;
+          padding: var(--grim-space-2) var(--grim-space-3);
         }
         .search-field:focus-within .search-hint,
         .search-field:has(input:not(:placeholder-shown)) .search-hint {
@@ -936,7 +881,7 @@ function repoLabel(url: string): string {
         .chips {
           display: flex;
           flex-wrap: wrap;
-          gap: 0.4rem;
+          gap: var(--grim-space-3);
         }
         /* A drawn rule rather than a "|" glyph: its height is the chip row's,
            not whatever the font gives a pipe. `stretch` overrides the
@@ -944,7 +889,7 @@ function repoLabel(url: string): string {
         .chip-sep {
           align-self: stretch;
           width: 1px;
-          background: var(--border);
+          background: var(--grim-color-border);
         }
         /* Held at the far end of the chip row: it answers a different
            question from sort and kind — what the catalog is withholding,
@@ -956,30 +901,30 @@ function repoLabel(url: string): string {
            accent, so "deprecated entries are in view" is signalled by the
            same colour the badges on those entries carry. */
         .chip.deprecated-toggle.active {
-          color: var(--deprecated);
-          border-color: var(--deprecated);
-          background: var(--chip-bg);
+          color: var(--grim-color-deprecated);
+          border-color: var(--grim-color-deprecated);
+          background: var(--grim-color-chip-bg);
         }
         .chip {
-          border: 1px solid var(--border);
-          background: var(--chip-bg);
-          color: var(--fg);
-          border-radius: 999px;
-          padding: 0.25rem 0.7rem;
-          font-size: 0.85rem;
-          transition: border-color 150ms ease;
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-fg);
+          border-radius: var(--grim-radius-pill);
+          padding: var(--grim-space-2) var(--grim-space-5);
+          font-size: var(--grim-text-sm);
+          transition: border-color var(--grim-duration-base) ease;
           cursor: pointer;
         }
         .chip small {
-          color: var(--muted);
+          color: var(--grim-color-muted);
         }
         /* button-only: the "+N" overflow chip is a span and stays inert */
         button.chip:hover {
-          border-color: var(--accent);
+          border-color: var(--grim-color-accent);
         }
         .chip.active {
-          border-color: var(--accent);
-          background: var(--accent-soft);
+          border-color: var(--grim-color-accent);
+          background: var(--grim-color-accent-soft);
         }
 
         .grid {
@@ -988,28 +933,28 @@ function repoLabel(url: string): string {
           padding: 0;
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
-          gap: 1rem;
+          gap: var(--grim-space-6);
         }
         .card {
           display: flex;
           flex-direction: column;
-          gap: 0.35rem;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 10px;
-          padding: 1rem 1.1rem;
+          gap: var(--grim-space-3);
+          background: var(--grim-color-card);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-xl);
+          padding: var(--grim-space-6) var(--grim-space-6);
           /* Whole card navigates to the detail page via the stretched title
              link below; real controls inside re-stack above the overlay. */
           position: relative;
           cursor: pointer;
-          transition: border-color 150ms ease;
+          transition: border-color var(--grim-duration-base) ease;
         }
         /* Card highlight yields while an inner control is hovered, so its
            own hover state reads as the click target instead. */
         .card:hover:not(
             :has(.keywords :hover, .copy-group :hover, .source:hover)
           ) {
-          border-color: var(--accent);
+          border-color: var(--grim-color-accent);
         }
         /* Keyboard focus wears the hover treatment rather than an outline on
            top of it — one affordance, whichever way the card was reached.
@@ -1017,7 +962,7 @@ function repoLabel(url: string): string {
            is the part that may not be dropped. */
         .card:focus-visible {
           outline: none;
-          border-color: var(--accent);
+          border-color: var(--grim-color-accent);
         }
         .card h2 a::after {
           content: "";
@@ -1032,13 +977,13 @@ function repoLabel(url: string): string {
         .card-head {
           display: flex;
           align-items: center;
-          gap: 0.6rem;
+          gap: var(--grim-space-4);
         }
         .card h2 {
           flex: 1;
           min-width: 0;
           margin: 0;
-          font-size: 1.05rem;
+          font-size: var(--grim-text-lg);
           font-family: ui-monospace, "SFMono-Regular", monospace;
           word-break: break-word;
         }
@@ -1050,19 +995,19 @@ function repoLabel(url: string): string {
           flex-shrink: 0;
           width: 28px;
           height: 28px;
-          border-radius: 6px;
+          border-radius: var(--grim-radius-md);
         }
         img.card-logo {
           object-fit: contain;
-          background: var(--chip-bg);
+          background: var(--grim-color-chip-bg);
         }
         .card-logo-fallback {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: var(--on-accent);
+          color: var(--grim-color-on-accent);
           font-weight: 700;
-          font-size: 0.85rem;
+          font-size: var(--grim-text-sm);
           font-family: ui-monospace, "SFMono-Regular", monospace;
         }
         /* THE LOGO SLOT — one box, three states, no layout shift.
@@ -1085,12 +1030,12 @@ function repoLabel(url: string): string {
           align-items: center;
           justify-content: center;
           overflow: hidden;
-          background: var(--chip-bg);
-          color: var(--muted);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-muted);
         }
         .logo-slot .logo-mark,
         .logo-slot img {
-          transition: opacity 200ms ease;
+          transition: opacity var(--grim-duration-slow) ease;
         }
         .logo-slot .logo-mark {
           width: 60%;
@@ -1119,7 +1064,7 @@ function repoLabel(url: string): string {
           display: none;
         }
         .logo-slot[data-state="broken"] {
-          border: 1px dashed var(--border);
+          border: var(--grim-border-width) dashed var(--grim-color-border);
         }
         @media (prefers-reduced-motion: reduce) {
           .logo-slot .logo-mark,
@@ -1129,54 +1074,57 @@ function repoLabel(url: string): string {
         }
         .badge {
           flex-shrink: 0;
-          font-size: 0.72rem;
+          font-size: var(--grim-text-2xs);
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.04em;
-          border: 1px solid currentColor;
-          border-radius: 999px;
-          padding: 0.05rem 0.5rem;
-          color: var(--muted);
+          border: var(--grim-border-width) solid currentColor;
+          border-radius: var(--grim-radius-pill);
+          /* Optical: below `--grim-space-1`, tuned so the pill hugs its text.
+             A rhythm step here visibly grows the pill. */
+          padding: 0.05rem var(--grim-space-4);
+          color: var(--grim-color-muted);
         }
         .kind-skill {
-          color: var(--kind-skill);
+          color: var(--grim-color-kind-skill);
         }
         .kind-rule {
-          color: var(--kind-rule);
+          color: var(--grim-color-kind-rule);
         }
         .kind-agent {
-          color: var(--kind-agent);
+          color: var(--grim-color-kind-agent);
         }
         .kind-mcp {
-          color: var(--kind-mcp);
+          color: var(--grim-color-kind-mcp);
         }
         .kind-bundle {
-          color: var(--kind-bundle);
+          color: var(--grim-color-kind-bundle);
         }
         .badge.deprecated {
-          color: var(--deprecated);
+          color: var(--grim-color-deprecated);
         }
         .chip[class*="kind-"] {
-          color: var(--fg);
+          color: var(--grim-color-fg);
         }
         .namespace {
           margin: 0;
-          color: var(--muted);
-          font-size: 0.82rem;
+          color: var(--grim-color-muted);
+          font-size: var(--grim-text-sm);
           font-family: ui-monospace, "SFMono-Regular", monospace;
         }
         .meta-row {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 0.4rem;
+          gap: var(--grim-space-3);
         }
         .pill {
-          font-size: 0.78rem;
-          color: var(--muted);
-          border: 1px solid var(--border);
-          border-radius: 999px;
-          padding: 0.03rem 0.5rem;
+          font-size: var(--grim-text-xs);
+          color: var(--grim-color-muted);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-pill);
+          /* Optical, as above — the smallest badge in the UI. */
+          padding: 0.03rem var(--grim-space-4);
         }
         .pill.version {
           font-family: ui-monospace, "SFMono-Regular", monospace;
@@ -1186,22 +1134,22 @@ function repoLabel(url: string): string {
         .pill.rating {
           display: inline-flex;
           align-items: center;
-          gap: 0.15rem;
+          gap: var(--grim-space-1);
         }
         .updated {
-          font-size: 0.78rem;
-          color: var(--muted);
+          font-size: var(--grim-text-xs);
+          color: var(--grim-color-muted);
         }
         .deprecated-strip {
           margin: 0;
-          font-size: 0.82rem;
-          color: var(--deprecated);
+          font-size: var(--grim-text-sm);
+          color: var(--grim-color-deprecated);
         }
         /* Long descriptions would stretch their whole grid row; clamp to 3
            lines so cards stay uniform. Full text lives on the detail page. */
         .description {
           margin: 0;
-          font-size: 0.92rem;
+          font-size: var(--grim-text-md);
           /* `auto` basis, not `0`: overflow:hidden drops the min-height:auto
              floor, so a 0-basis item can collapse in an auto-height column. */
           flex: 1 1 auto;
@@ -1214,12 +1162,12 @@ function repoLabel(url: string): string {
         .keywords {
           display: flex;
           flex-wrap: wrap;
-          gap: 0.3rem;
+          gap: var(--grim-space-2);
         }
         .chip.keyword {
-          font-size: 0.72rem;
-          padding: 0.1rem 0.5rem;
-          color: var(--muted);
+          font-size: var(--grim-text-2xs);
+          padding: var(--grim-space-1) var(--grim-space-4);
+          color: var(--grim-color-muted);
         }
         .chip.keyword.overflow {
           cursor: default;
@@ -1228,40 +1176,40 @@ function repoLabel(url: string): string {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 0.6rem;
-          margin-top: 0.5rem;
+          gap: var(--grim-space-4);
+          margin-top: var(--grim-space-4);
         }
         .copy-group {
           display: flex;
-          gap: 0.4rem;
+          gap: var(--grim-space-3);
           flex-wrap: wrap;
         }
         .copy {
           display: inline-flex;
           align-items: center;
-          gap: 0.32rem;
-          transition: border-color 150ms ease;
-          border: 1px solid var(--border);
-          background: var(--chip-bg);
-          color: var(--fg);
-          border-radius: 6px;
-          padding: 0.28rem 0.55rem;
-          font-size: 0.8rem;
+          gap: var(--grim-space-3);
+          transition: border-color var(--grim-duration-base) ease;
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-fg);
+          border-radius: var(--grim-radius-md);
+          padding: var(--grim-space-2) var(--grim-space-4);
+          font-size: var(--grim-text-sm);
           font-family: ui-monospace, "SFMono-Regular", monospace;
           cursor: pointer;
         }
         .copy:hover {
-          border-color: var(--accent);
+          border-color: var(--grim-color-accent);
         }
         .copy.copied {
-          color: var(--kind-rule);
-          border-color: var(--kind-rule);
+          color: var(--grim-color-kind-rule);
+          border-color: var(--grim-color-kind-rule);
         }
         .sr-only {
           position: absolute;
           width: 1px;
           height: 1px;
-          margin: -1px;
+          margin: calc(-1 * var(--grim-border-width));
           padding: 0;
           border: 0;
           overflow: hidden;
@@ -1274,22 +1222,22 @@ function repoLabel(url: string): string {
            corners are the same ones every other panel uses. */
         .code-block {
           position: relative;
-          margin: 1rem 0;
+          margin: var(--grim-space-6) 0;
         }
         .astro-code {
           margin: 0;
-          padding: 0.9rem 1rem;
-          border: 1px solid var(--border);
-          border-radius: 8px;
+          padding: var(--grim-space-6) var(--grim-space-6);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-lg);
           overflow-x: auto;
-          font-size: 0.85rem;
+          font-size: var(--grim-text-sm);
           line-height: 1.5;
           tab-size: 2;
           /* Shiki colours tokens; the surface is ours. Its own background is
              the theme's editor chrome — GitHub's blue-grey `#24292e` — which
              next to this page's purple-tinted card reads as a green cast.
              `!important` because Shiki writes it as an inline style. */
-          background-color: var(--chip-bg) !important;
+          background-color: var(--grim-color-chip-bg) !important;
         }
         /* The dark half of the pair. Shiki writes the light colour inline and
            the dark one as a custom property on the same token, so switching
@@ -1318,28 +1266,28 @@ function repoLabel(url: string): string {
           width: 1.9rem;
           height: 1.9rem;
           padding: 0;
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          background: var(--card);
-          color: var(--muted);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-md);
+          background: var(--grim-color-card);
+          color: var(--grim-color-muted);
           cursor: pointer;
           opacity: 0;
           transition:
-            opacity 120ms ease,
-            color 120ms ease,
-            border-color 120ms ease;
+            opacity var(--grim-duration-fast) ease,
+            color var(--grim-duration-fast) ease,
+            border-color var(--grim-duration-fast) ease;
         }
         .code-block:hover .code-copy,
         .code-copy:focus-visible {
           opacity: 1;
         }
         .code-copy:hover {
-          color: var(--accent);
-          border-color: var(--accent);
+          color: var(--grim-color-accent);
+          border-color: var(--grim-color-accent);
         }
         .code-copy.copied {
-          color: var(--kind-rule);
-          border-color: var(--kind-rule);
+          color: var(--grim-color-kind-rule);
+          border-color: var(--grim-color-kind-rule);
           opacity: 1;
         }
         @media (prefers-reduced-motion: reduce) {
@@ -1358,20 +1306,20 @@ function repoLabel(url: string): string {
           text-decoration: none;
         }
         .source {
-          font-size: 0.85rem;
+          font-size: var(--grim-text-sm);
           white-space: nowrap;
         }
         .empty {
-          color: var(--muted);
+          color: var(--grim-color-muted);
         }
 
         footer {
-          border-top: 1px solid var(--border);
-          color: var(--muted);
-          font-size: 0.85rem;
+          border-top: var(--grim-border-width) solid var(--grim-color-border);
+          color: var(--grim-color-muted);
+          font-size: var(--grim-text-sm);
         }
         footer p {
-          margin: 0.8rem 0;
+          margin: var(--grim-space-5) 0;
         }
         footer a {
           color: inherit;

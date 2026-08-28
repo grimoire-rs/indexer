@@ -160,7 +160,7 @@ function CardLogo({ pkg }: { pkg: CatalogPackage }) {
       <span
         class="card-logo card-logo-fallback"
         aria-hidden="true"
-        style={{ background: `var(--kind-${pkg.kind}, var(--muted))` }}
+        style={{ background: `var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))` }}
       >
         {pkg.name[0]?.toUpperCase()}
       </span>
@@ -512,9 +512,9 @@ export default function Catalog({
   const chipTabIndex = shown.length === 0 ? 0 : -1;
 
   return (
-    <section class="catalog">
-      <div class="controls" ref={controlsRef}>
-        <div class="search-field">
+    <section class="catalog" data-slot="catalog">
+      <div class="controls" data-slot="catalog-toolbar" ref={controlsRef}>
+        <div class="search-field" data-slot="catalog-search">
           <input
             ref={searchRef}
             type="search"
@@ -534,6 +534,7 @@ export default function Catalog({
           <button
             type="button"
             class={sort === "name" ? "chip active" : "chip"}
+            data-slot="filter-chip"
             tabIndex={chipTabIndex}
             onKeyDown={onChipKeyDown}
             onClick={() => setSort("name")}
@@ -543,6 +544,7 @@ export default function Catalog({
           <button
             type="button"
             class={sort === "updated" ? "chip active" : "chip"}
+            data-slot="filter-chip"
             tabIndex={chipTabIndex}
             onKeyDown={onChipKeyDown}
             onClick={() => setSort("updated")}
@@ -553,6 +555,7 @@ export default function Catalog({
             <button
               type="button"
               class={sort === "rating" ? "chip active" : "chip"}
+              data-slot="filter-chip"
               tabIndex={chipTabIndex}
               onKeyDown={onChipKeyDown}
               onClick={() => setSort("rating")}
@@ -569,6 +572,7 @@ export default function Catalog({
           <button
             type="button"
             class={kind === null ? "chip active" : "chip"}
+            data-slot="filter-chip"
             tabIndex={chipTabIndex}
             onKeyDown={onChipKeyDown}
             onClick={() => setKind(null)}
@@ -580,6 +584,7 @@ export default function Catalog({
               key={k}
               type="button"
               class={kind === k ? `chip active kind-${k}` : `chip kind-${k}`}
+              data-slot="filter-chip"
               tabIndex={chipTabIndex}
               onKeyDown={onChipKeyDown}
               onClick={() => setKind(kind === k ? null : k)}
@@ -624,25 +629,26 @@ export default function Catalog({
             <li
               key={`${p.namespace}/${p.name}`}
               class="card"
+              data-slot="package-card"
               tabIndex={0}
               onKeyDown={onCardKeyDown}
             >
               <div class="card-head">
                 <CardLogo pkg={p} />
-                <h2>
+                <h2 data-slot="package-name">
                   <a href={withBase(`/p/${p.namespace}/${p.name}/`)} tabIndex={-1}>
                     {p.name}
                   </a>
                 </h2>
                 {p.deprecated ? (
-                  <span class="badge deprecated">deprecated</span>
+                  <span class="badge deprecated" data-slot="package-kind">deprecated</span>
                 ) : (
-                  <span class={`badge kind-${p.kind}`}>{p.kind}</span>
+                  <span class={`badge kind-${p.kind}`} data-slot="package-kind">{p.kind}</span>
                 )}
               </div>
               <p class="namespace">{p.namespace}</p>
               {(p.version || p.license || lastUpdated(p) || p.rating) && (
-                <div class="meta-row">
+                <div class="meta-row" data-slot="package-meta">
                   {p.version && <span class="pill version">v{p.version}</span>}
                   {p.license && <span class="pill license">{p.license}</span>}
                   {/* A count and nothing more. The page is prerendered once
@@ -680,7 +686,7 @@ export default function Catalog({
               )}
               {p.description && <p class="description">{p.description}</p>}
               {p.keywords && p.keywords.length > 0 && (
-                <div class="keywords">
+                <div class="keywords" data-slot="package-keywords">
                   {p.keywords.slice(0, 5).map((kw) => (
                     <button
                       key={kw}

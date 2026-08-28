@@ -166,7 +166,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
 
 <Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo}>
   <div class="detail">
-    <header class="detail-head">
+    <header class="detail-head" data-slot="detail-header">
       {
         pkg.logo ? (
           // The placeholder ships in the markup and the image fades in over
@@ -182,7 +182,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
             <img src={withBase(pkg.logo)} alt="" />
           </span>
         ) : (
-          <div class="tile letter" style={`background: var(--kind-${pkg.kind}, var(--muted))`}>
+          <div class="tile letter" style={`background: var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`}>
             {pkg.name[0]?.toUpperCase()}
           </div>
         )
@@ -202,7 +202,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
 
     {
       pkg.deprecated && (
-        <p class="deprecated-banner">
+        <p class="deprecated-banner" data-slot="deprecated-banner">
           ⚠️ deprecated{pkg.replacedBy ? ` — replaced by ${pkg.replacedBy}` : ""}
         </p>
       )
@@ -229,7 +229,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
       }
     </div>
 
-    <div class="detail-body">
+    <div class="detail-body" data-slot="detail-body">
       <main class="detail-main">
         {/* Radio tabs, not a scripted tablist: the ribbon works on a page
             whose JS never ran, and a radio group already has the keyboard
@@ -324,7 +324,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
         {openTab === null && <p class="panel-empty">No content available.</p>}
       </main>
 
-      <aside class="detail-rail">
+      <aside class="detail-rail" data-slot="detail-rail">
         {tags.length > 0 && (
           <section>
             <h2>Versions</h2>
@@ -509,33 +509,39 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
 </script>
 
 <style>
+@layer grimoire {
+  /* Layered so a user CSS file (unlayered) outranks these rules. Astro
+     scopes a component style to `.foo[data-astro-cid-…]` — specificity
+     (0,2,0) — which beats a consumer's `.foo` in EITHER source order, so
+     source order alone does not make this overridable. Not reindented:
+     the wrapper stays a two-line diff. */
   .detail {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: var(--grim-space-7);
   }
   .detail-head {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 1rem 1.25rem;
+    gap: var(--grim-space-6);
+    background: var(--grim-color-card);
+    border: var(--grim-border-width) solid var(--grim-color-border);
+    border-radius: var(--grim-radius-xl);
+    padding: var(--grim-space-6) var(--grim-space-7);
   }
   .tile {
     flex-shrink: 0;
     width: 3.5rem;
     height: 3.5rem;
-    border-radius: 10px;
+    border-radius: var(--grim-radius-xl);
     object-fit: cover;
   }
   .tile.letter {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--on-accent);
-    font-size: 1.5rem;
+    color: var(--grim-color-on-accent);
+    font-size: var(--grim-text-xl);
     font-weight: 700;
     font-family: ui-monospace, "SFMono-Regular", monospace;
   }
@@ -543,18 +549,18 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     margin: 0;
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    font-size: 1.5rem;
+    gap: var(--grim-space-4);
+    font-size: var(--grim-text-xl);
     font-family: ui-monospace, "SFMono-Regular", monospace;
   }
   .summary {
-    margin: 0.3rem 0 0;
-    color: var(--muted);
+    margin: var(--grim-space-2) 0 0;
+    color: var(--grim-color-muted);
   }
   .byline {
-    margin: 0.35rem 0 0;
-    color: var(--muted);
-    font-size: 0.82rem;
+    margin: var(--grim-space-3) 0 0;
+    color: var(--grim-color-muted);
+    font-size: var(--grim-text-sm);
   }
   /* The kind badge names a closed set of five and shouts accordingly. A
      compatibility hint is a free string off the registry — upper-casing it
@@ -570,31 +576,31 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
+    gap: var(--grim-space-4);
   }
   .support li {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    font-size: 0.9rem;
+    gap: var(--grim-space-3);
+    font-size: var(--grim-text-md);
   }
   .support li :global(svg) {
     flex-shrink: 0;
-    color: var(--muted);
+    color: var(--grim-color-muted);
   }
   .deprecated-banner {
     margin: 0;
-    background: var(--banner-bg);
-    color: var(--banner-fg);
-    border: 1px solid var(--banner-border);
-    border-radius: 8px;
-    padding: 0.6rem 0.9rem;
+    background: var(--grim-color-banner-bg);
+    color: var(--grim-color-banner-fg);
+    border: var(--grim-border-width) solid var(--grim-color-banner-border);
+    border-radius: var(--grim-radius-lg);
+    padding: var(--grim-space-4) var(--grim-space-6);
     font-weight: 600;
   }
   .detail-body {
     display: grid;
     grid-template-columns: 1fr 18rem;
-    gap: 2rem;
+    gap: var(--grim-space-8);
     align-items: start;
   }
   @media (max-width: 55rem) {
@@ -604,10 +610,10 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   }
   .detail-main {
     min-width: 0;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 1.25rem 1.5rem;
+    background: var(--grim-color-card);
+    border: var(--grim-border-width) solid var(--grim-color-border);
+    border-radius: var(--grim-radius-xl);
+    padding: var(--grim-space-7) var(--grim-space-7);
   }
   /* Markdown opens with its own heading, whose margin lands on top of the
      panel padding and reads as a hole. Every panel sets its own top edge. */
@@ -624,23 +630,26 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
      panel's own top edge rather than a line floating in the content. */
   .ribbon {
     display: flex;
-    gap: 1.25rem;
-    margin: -1.25rem -1.5rem 1.25rem;
-    padding: 0 1.5rem;
-    border-bottom: 1px solid var(--border);
+    gap: var(--grim-space-7);
+    /* The negation of `.detail-main`'s own padding, written as that token so
+       the two cannot drift apart into a bleed that no longer reaches the edge. */
+    margin: calc(-1 * var(--grim-space-7)) calc(-1 * var(--grim-space-7))
+      var(--grim-space-7);
+    padding: 0 var(--grim-space-7);
+    border-bottom: var(--grim-border-width) solid var(--grim-color-border);
   }
   .ribbon label {
-    padding: 0.7rem 0;
-    margin-bottom: -1px; /* the active underline sits on the panel rule */
+    padding: var(--grim-space-5) 0;
+    margin-bottom: calc(-1 * var(--grim-border-width)); /* the active underline sits on the panel rule */
     border-bottom: 2px solid transparent;
-    font-size: 0.85rem;
+    font-size: var(--grim-text-sm);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--muted);
+    color: var(--grim-color-muted);
     cursor: pointer;
   }
   .ribbon label:hover {
-    color: var(--fg);
+    color: var(--grim-color-fg);
   }
   /* Nothing behind it. Still shown, so the ribbon is the same shape on every
      package page, but visibly not a thing to click. */
@@ -653,7 +662,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   #panel-readme:disabled ~ .ribbon label[for="panel-readme"]:hover,
   #panel-contents:disabled ~ .ribbon label[for="panel-contents"]:hover,
   #panel-changelog:disabled ~ .ribbon label[for="panel-changelog"]:hover {
-    color: var(--muted);
+    color: var(--grim-color-muted);
   }
   /* Every tab empty: say it once, in the middle. */
   .panel-empty {
@@ -661,7 +670,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     place-items: center;
     min-height: 11rem;
     margin: 0;
-    color: var(--muted);
+    color: var(--grim-color-muted);
   }
   .tab-panel {
     display: none;
@@ -674,16 +683,16 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   #panel-readme:checked ~ .ribbon label[for="panel-readme"],
   #panel-contents:checked ~ .ribbon label[for="panel-contents"],
   #panel-changelog:checked ~ .ribbon label[for="panel-changelog"] {
-    color: var(--fg);
-    border-bottom-color: var(--accent);
+    color: var(--grim-color-fg);
+    border-bottom-color: var(--grim-color-accent);
   }
   /* The input carries the focus, the label shows it. */
   #panel-readme:focus-visible ~ .ribbon label[for="panel-readme"],
   #panel-contents:focus-visible ~ .ribbon label[for="panel-contents"],
   #panel-changelog:focus-visible ~ .ribbon label[for="panel-changelog"] {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--grim-color-accent);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: var(--grim-radius-sm);
   }
 
   /* A bundle's member list: what it installs, one row each. A grid, not a
@@ -696,7 +705,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     padding: 0;
     display: grid;
     grid-template-columns: auto auto 1fr;
-    gap: 0.45rem 0.75rem;
+    gap: var(--grim-space-4) var(--grim-space-5);
     align-items: center;
   }
   .members li {
@@ -711,8 +720,8 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     justify-self: start;
   }
   .members code {
-    color: var(--muted);
-    font-size: 0.82rem;
+    color: var(--grim-color-muted);
+    font-size: var(--grim-text-sm);
     overflow-wrap: anywhere;
   }
   /* Narrow: three columns of a long ref do not fit, so each member becomes
@@ -729,32 +738,32 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   .detail-rail {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: var(--grim-space-7);
   }
   .detail-rail section {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 1rem;
+    background: var(--grim-color-card);
+    border: var(--grim-border-width) solid var(--grim-color-border);
+    border-radius: var(--grim-radius-xl);
+    padding: var(--grim-space-6);
   }
   /* Panel label. The main panel's ribbon labels match this by hand — they
      are <label>s, not headings, so they cannot join the selector. */
   .detail-rail h2 {
-    margin: 0 0 0.6rem;
-    font-size: 0.85rem;
+    margin: 0 0 var(--grim-space-4);
+    font-size: var(--grim-text-sm);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--muted);
+    color: var(--grim-color-muted);
   }
   /* Loose badges, both for the cascade and the older tags — VersionMenu owns
      the pill itself, this only lays them out. */
   .cascade {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.3rem;
+    gap: var(--grim-space-2);
   }
   .older {
-    margin-top: 0.7rem;
+    margin-top: var(--grim-space-5);
   }
   /* The UA marker is a glyph that flips between two characters with no
      in-between; a real chevron can turn. `list-style` kills it everywhere
@@ -764,22 +773,22 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   .older > summary {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: var(--grim-space-3);
     list-style: none;
-    padding-block: 0.15rem;
+    padding-block: var(--grim-space-1);
     cursor: pointer;
-    font-size: 0.8rem;
-    color: var(--muted);
+    font-size: var(--grim-text-sm);
+    color: var(--grim-color-muted);
   }
   .older > summary::-webkit-details-marker {
     display: none;
   }
   .older > summary:hover {
-    color: var(--fg);
+    color: var(--grim-color-fg);
   }
   .older > summary :global(svg) {
     flex-shrink: 0;
-    transition: transform 160ms ease;
+    transition: transform var(--grim-duration-base) ease;
   }
   .older[open] > summary :global(svg) {
     transform: rotate(90deg);
@@ -790,7 +799,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     }
   }
   .older[open] > summary {
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--grim-space-4);
   }
   dl {
     margin: 0;
@@ -800,14 +809,14 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
        `stretch` sits each at the top of its own box, so the size difference
        reads as two lines that never quite line up. */
     align-items: center;
-    gap: 0.45rem 0.7rem;
+    gap: var(--grim-space-4) var(--grim-space-5);
   }
   dt {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    color: var(--muted);
-    font-size: 0.85rem;
+    gap: var(--grim-space-3);
+    color: var(--grim-color-muted);
+    font-size: var(--grim-text-sm);
   }
   /* Every icon is the same box, so the label text lands on one x without an
      icon column of its own. */
@@ -816,15 +825,15 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   }
   dd {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: var(--grim-text-md);
   }
   .keywords {
     list-style: none;
-    margin: 0.75rem 0 0;
+    margin: var(--grim-space-5) 0 0;
     padding: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: var(--grim-space-3);
   }
   /* The chip is the link, not a box around it — otherwise the padding is
      dead space the pointer falls through. Bordered and hovering to accent
@@ -833,27 +842,28 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
      that answers differently reads as a different kind of thing. */
   .keywords a {
     display: inline-block;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--chip-bg);
-    padding: 0.15rem 0.6rem;
-    font-size: 0.78rem;
-    color: var(--muted);
+    border: var(--grim-border-width) solid var(--grim-color-border);
+    border-radius: var(--grim-radius-pill);
+    background: var(--grim-color-chip-bg);
+    padding: var(--grim-space-1) var(--grim-space-4);
+    font-size: var(--grim-text-xs);
+    color: var(--grim-color-muted);
     text-decoration: none;
     transition:
-      color 120ms ease,
-      border-color 120ms ease,
-      background-color 120ms ease;
+      color var(--grim-duration-fast) ease,
+      border-color var(--grim-duration-fast) ease,
+      background-color var(--grim-duration-fast) ease;
   }
   .keywords a:hover,
   .keywords a:focus-visible {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    color: var(--grim-color-accent);
+    border-color: var(--grim-color-accent);
+    background: var(--grim-color-accent-soft);
   }
   @media (prefers-reduced-motion: reduce) {
     .keywords a {
       transition: none;
     }
   }
+}
 </style>

@@ -28,6 +28,7 @@ const commands: [string, string][] = [
 <button
   type="button"
   class:list={["version", { current }]}
+  data-slot="version-pill"
   data-copy={pinned}
   data-copy-name={tag === "latest" ? "reference" : `pinned ${tag}`}
   data-menu={menuId}
@@ -46,33 +47,39 @@ const commands: [string, string][] = [
 </div>
 
 <style>
+@layer grimoire {
+  /* Layered so a user CSS file (unlayered) outranks these rules. Astro
+     scopes a component style to `.foo[data-astro-cid-…]` — specificity
+     (0,2,0) — which beats a consumer's `.foo` in EITHER source order, so
+     source order alone does not make this overridable. Not reindented:
+     the wrapper stays a two-line diff. */
   /* No `span` inside: the shared copy script only swaps a label when it
      finds one, so the tag keeps its text and flashes the class instead. */
   .version {
-    border: 1px solid var(--border);
-    border-radius: 999px;
+    border: var(--grim-border-width) solid var(--grim-color-border);
+    border-radius: var(--grim-radius-pill);
     background: transparent;
-    padding: 0.15rem 0.6rem;
+    padding: var(--grim-space-1) var(--grim-space-4);
     font-family: ui-monospace, "SFMono-Regular", monospace;
-    font-size: 0.85rem;
-    color: var(--muted);
+    font-size: var(--grim-text-sm);
+    color: var(--grim-color-muted);
     white-space: nowrap;
     cursor: pointer;
   }
   .version:hover,
   .version:focus-visible {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    color: var(--grim-color-accent);
+    border-color: var(--grim-color-accent);
+    background: var(--grim-color-accent-soft);
   }
   .version.current {
-    color: var(--fg);
+    color: var(--grim-color-fg);
     font-weight: 600;
-    border-color: var(--accent);
+    border-color: var(--grim-color-accent);
   }
   .version.copied {
-    color: var(--accent);
-    background: var(--accent-soft);
+    color: var(--grim-color-accent);
+    background: var(--grim-color-accent-soft);
   }
 
   .version-menu {
@@ -82,28 +89,29 @@ const commands: [string, string][] = [
     inset: auto;
     margin: 0;
     min-width: 11rem;
-    padding: 0.3rem;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+    padding: var(--grim-space-2);
+    background: var(--grim-color-card);
+    border: var(--grim-border-width) solid var(--grim-color-border);
+    border-radius: var(--grim-radius-lg);
+    box-shadow: var(--grim-shadow-raised);
   }
   .cmd {
     display: block;
     width: 100%;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--grim-radius-md);
     background: transparent;
-    color: var(--muted);
+    color: var(--grim-color-muted);
     font: inherit;
-    font-size: 0.82rem;
+    font-size: var(--grim-text-sm);
     text-align: left;
-    padding: 0.3rem 0.5rem;
+    padding: var(--grim-space-2) var(--grim-space-4);
     cursor: pointer;
   }
   .cmd:hover,
   .cmd:focus-visible {
-    background: var(--chip-bg);
-    color: var(--fg);
+    background: var(--grim-color-chip-bg);
+    color: var(--grim-color-fg);
   }
+}
 </style>

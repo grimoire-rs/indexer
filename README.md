@@ -242,10 +242,54 @@ Two things are frozen and safe to build on: the published URL layout
 (`/p/<namespace>/<name>/` and `/all.json`) and the per-record `schema`
 field. Everything else may still move.
 
-Theming is CSS custom properties, defined for both light and dark. There
-is deliberately no component-override API yet — publishing one would
-freeze a prop contract per slot, and that is not a promise worth making
-this early.
+Theming is CSS custom properties, all named `--grim-<category>-<role>` and
+all declared in one file — `src/renderer/astro/styles/tokens.css`, whose
+contract comment is the only reference. There is no second table here to go
+stale.
+
+| Family | Tokens |
+|---|---|
+| Colour | `--grim-color-*` — surface, accent, package kind, state |
+| Space | `--grim-space-1` … `-9`, a sparse scale whose steps grow apart |
+| Type | `--grim-text-2xs` … `-2xl` |
+| Radius | `--grim-radius-sm` … `-xl`, `-pill` |
+| Border, motion, elevation | `--grim-border-width`, `--grim-duration-*`, `--grim-shadow-*` |
+
+**Colour is the only family that differs per scheme**, so it is the only one
+you override twice — under `:root` *and* `[data-theme="dark"]`. `:root` is
+scheme-agnostic, so a `:root`-only colour override silently takes dark mode
+with it. Everything else is a measurement: declare it once.
+
+Everything the renderer ships sits in `@layer grimoire`, and your file is
+emitted unlayered and last. Unlayered CSS beats a layered rule outright, at
+any specificity, so an ordinary selector wins with no `!important` and no
+knowledge of where Astro injected its bundle.
+
+To target one element rather than retheme globally, use its `data-slot`:
+
+```css
+[data-slot="package-card"] { border-radius: 2px; }
+```
+
+The slots are `brand`, `catalog`, `catalog-search`, `catalog-toolbar`,
+`deprecated-banner`, `detail-body`, `detail-header`, `detail-rail`,
+`filter-chip`, `install-command`, `package-card`, `package-keywords`,
+`package-kind`, `package-meta`, `package-name`, `site-footer`, `site-header`
+and `version-pill`. Those names are stable; **class names are not** — they
+are internal and unversioned, so `@layer` will make a rule targeting one
+win, but nothing promises the class is still there next release.
+
+There is deliberately no component-override API (`--grim-card-radius` and
+friends). With the layer and the slots, it would reach nothing the CSS above
+cannot already reach, and it would freeze a per-slot prop contract that is
+not worth promising this early.
+
+> **If you wrote a `theme.css` against `0.4.0` or earlier**, it no longer
+> applies — silently, without an error. The tokens were unnamespaced
+> (`--accent`, `--bg`, `--fg`), which collides with any other stylesheet on
+> the page using those names. They are now `--grim-color-accent`,
+> `--grim-color-bg`, `--grim-color-fg` and so on: the same role names behind
+> a `--grim-color-` prefix.
 
 > **Use `0.1.4` or later.** `0.1.0` installs without an executable - npm
 > silently stripped its `bin` entry at publish time. `0.1.1` and `0.1.2`
@@ -296,8 +340,8 @@ every VS Code affordance on both pages.
 
 It renders through the same `inlineConfig` as `grim-indexer build`, so the
 preview is the release output, not an approximation. Edits under
-`src/renderer/astro/` (templates, components, the token block in
-`layouts/Base.astro`) reload in place; changing the renderer's own
+`src/renderer/astro/` (templates, components, the tokens in
+`styles/tokens.css`) reload in place; changing the renderer's own
 TypeScript needs a restart, because `npm run dev` builds `dist/` on start.
 
 The scratch index root lives in the gitignored `.dev/`, rebuilt on every

@@ -1,0 +1,157 @@
+/* SPDX-License-Identifier: Apache-2.0
+   Copyright 2026 The Grimoire Authors
+
+   THE THEMING CONTRACT — these custom properties are the whole customization
+   surface. There is no component-override API; see `data-slot` below for the
+   other half of the contract.
+
+   Everything the renderer ships is layered. Unlayered CSS — i.e. any user
+   override file — beats a layered declaration outright, at any specificity,
+   so a single `:root { --grim-color-accent: … }` wins in light AND dark
+   without !important and without knowing where Astro injects its bundle.
+
+   Names are `--grim-<category>-<role>`. The category segment is not
+   decoration: it is what stops a colour named `--grim-text` from colliding
+   with the type-scale tokens below.
+
+   COLOUR is the one family that differs per scheme, so it is the one family
+   declared twice — `:root` and `[data-theme="dark"]`. Redeclare BOTH when you
+   override one: `:root` is scheme-agnostic, so a `:root`-only override
+   silently takes dark mode with it. Every other family is a measurement, not
+   an appearance, and is declared once.
+
+   Adding a token is additive. Removing or renaming one is a breaking change.
+
+   `test/renderer/style_contract.test.ts` holds this file to it, and
+   `test/renderer/build.test.ts` proves the layer survives a real build. */
+
+@layer grimoire {
+  :root {
+    /* ---- Colour: surface ------------------------------------------- */
+    --grim-color-bg: #f7f6f3;
+    --grim-color-fg: #1d1c1a;
+    --grim-color-muted: #6d6a63;
+    --grim-color-card: #ffffff;
+    --grim-color-border: #dedbd3;
+    --grim-color-chip-bg: #edebe5;
+
+    /* ---- Colour: accent -------------------------------------------- */
+    --grim-color-accent: #6d4fc4;
+    --grim-color-accent-soft: #efeafd;
+    --grim-color-on-accent: #ffffff;
+
+    /* ---- Colour: package kind --------------------------------------
+       Read through a name composed at runtime — `Catalog.tsx` and the detail
+       page build `var(--grim-color-kind-${pkg.kind})`. Grepping for one of
+       these finds the declaration and no use site; all five are used. */
+    --grim-color-kind-skill: #6d4fc4;
+    --grim-color-kind-rule: #1a7f6b;
+    --grim-color-kind-agent: #b0641a;
+    --grim-color-kind-mcp: #2565c7;
+    --grim-color-kind-bundle: #a63d68;
+
+    /* ---- Colour: state --------------------------------------------- */
+    /* ~5.7:1 on --grim-color-card (white) */
+    --grim-color-deprecated: #9c5400;
+    --grim-color-banner-bg: #fff3cd;
+    --grim-color-banner-fg: #6b4c00;
+    --grim-color-banner-border: #e0b84c;
+
+    color-scheme: light;
+
+    /* ---- Space -----------------------------------------------------
+       Numbered, not role-named, because a spacing step is pure ordinal
+       magnitude: bigger number, more room. The steps are sparse and the
+       distance between them GROWS — 2, 2, 2, 4, 4, 8, 8, 16px — so the
+       scale stays usable at the top without minting a step per pixel.
+       A bare number is only honest with a published role, so here it is:
+
+         1  hairline inset — badge and pill padding
+         2  tight — an icon and its label
+         3  chip padding, keyword gaps
+         4  default gap inside one control
+         5  between related controls
+         6  card padding, row gap
+         7  between sections
+         8  page block separation
+         9  page bottom                                                 */
+    --grim-space-1: 0.125rem;
+    --grim-space-2: 0.25rem;
+    --grim-space-3: 0.375rem;
+    --grim-space-4: 0.5rem;
+    --grim-space-5: 0.75rem;
+    --grim-space-6: 1rem;
+    --grim-space-7: 1.5rem;
+    --grim-space-8: 2rem;
+    --grim-space-9: 3rem;
+
+    /* ---- Type ------------------------------------------------------
+       Role-named, unlike space: a type step is "metadata vs body vs
+       heading", which is a job, not a magnitude. `xl` is a detail-page
+       heading and `2xl` the landing hero — two sizes because those are two
+       deliberately different headings, not drift. */
+    --grim-text-2xs: 0.72rem;
+    --grim-text-xs: 0.78rem;
+    --grim-text-sm: 0.85rem;
+    --grim-text-md: 0.95rem;
+    --grim-text-lg: 1.05rem;
+    --grim-text-xl: 1.5rem;
+    --grim-text-2xl: 1.6rem;
+
+    /* ---- Radius ---------------------------------------------------- */
+    --grim-radius-sm: 4px;
+    --grim-radius-md: 6px;
+    --grim-radius-lg: 8px;
+    --grim-radius-xl: 10px;
+    --grim-radius-pill: 999px;
+
+    /* ---- Border ----------------------------------------------------
+       One width carries every rule in the UI. It is a token so a consumer
+       can thicken every seam at once, and so the two places that pull a
+       border into its neighbour can say `calc(-1 * …)` instead of
+       hardcoding the negation of a number declared elsewhere. */
+    --grim-border-width: 1px;
+
+    /* ---- Motion ---------------------------------------------------- */
+    --grim-duration-fast: 120ms;
+    --grim-duration-base: 160ms;
+    --grim-duration-slow: 200ms;
+
+    /* ---- Elevation -------------------------------------------------
+       A drop shadow is a black scrim rather than a palette colour: it reads
+       correctly over either scheme, which is why these are not declared
+       twice. Overriding one is how a consumer changes elevation. */
+    --grim-shadow-raised: 0 6px 20px rgb(0 0 0 / 18%);
+    --grim-shadow-overlay: 0 8px 24px rgb(0 0 0 / 18%);
+  }
+
+  /* Colour only. Every other family above is a measurement that does not
+     change with the scheme, and redeclaring one here would be a second
+     source of truth for the same value. */
+  [data-theme="dark"] {
+    --grim-color-bg: #16151a;
+    --grim-color-fg: #e8e6e1;
+    --grim-color-muted: #98948b;
+    --grim-color-card: #201f26;
+    --grim-color-border: #35333d;
+    --grim-color-chip-bg: #2a2931;
+
+    --grim-color-accent: #a58cf0;
+    --grim-color-accent-soft: #2c2540;
+    --grim-color-on-accent: #ffffff;
+
+    --grim-color-kind-skill: #a58cf0;
+    --grim-color-kind-rule: #4cc2a9;
+    --grim-color-kind-agent: #e0a35c;
+    --grim-color-kind-mcp: #6fa8f5;
+    --grim-color-kind-bundle: #e07ba6;
+
+    /* ~7.6:1 on --grim-color-card (#201f26) */
+    --grim-color-deprecated: #e3a640;
+    --grim-color-banner-bg: #4a3b0a;
+    --grim-color-banner-fg: #f0d78c;
+    --grim-color-banner-border: #8a6d1a;
+
+    color-scheme: dark;
+  }
+}
