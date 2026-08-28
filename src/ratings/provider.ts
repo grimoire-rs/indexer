@@ -19,6 +19,11 @@ import type { TrustedBot } from "../validate/core/ownership.js";
 // The factory owns the dispatch, so it imports both implementations while they
 // import the shared plumbing back. ESM handles the cycle: everything crossing it
 // is a hoisted function declaration, referenced only from inside a closure.
+//
+// A `const` read at module scope is the case that rule excludes, and `PAGE_SIZE`
+// was one -- see `paging.ts`, which is why it lives there and not here. Re-exported
+// so callers still have one place to look.
+export { PAGE_SIZE } from "./paging.js";
 import { githubProvider as github } from "./provider_github.js";
 import { gitlabProvider as gitlab } from "./provider_gitlab.js";
 
@@ -96,21 +101,6 @@ export class RateLimited extends ForgeError {
 /** GitHub's documented floor when neither header says how long to wait. */
 export const BACKOFF_FLOOR_MS = 60_000;
 
-/**
- * Nodes per page.
- *
- * 50 rather than the API maximum of 100. This used to be a workaround for
- * `request()`'s fixed 1 MiB cap — a page carries every thread's full body,
- * including bodies this bot did not write, so a container holding long human
- * threads overran the cap and [`graphql`] reported it as a transport failure.
- * That was a real failure on first runs, before any bot thread existed.
- *
- * The cap is now per-call (`LARGE_RESPONSE_BYTES`, passed below), so the size
- * argument for keeping this at 50 is gone. It stays at 50 anyway: raising it
- * changes request count and cursor behaviour for every existing index, which
- * is a separate decision from fixing the overrun.
- */
-export const PAGE_SIZE = 50;
 
 /**
  * The body every provider writes. The marker sits on its own line, which is the

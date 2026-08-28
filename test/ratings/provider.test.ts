@@ -14,6 +14,7 @@ import { buildMarker } from "../../src/ratings/marker.js";
 import {
   createRatingProvider,
   ForgeError,
+  PAGE_SIZE,
   RateLimited,
   type RatingProvider,
   type RatingProviderConfig,
@@ -442,5 +443,33 @@ describe("create", () => {
       .catch((e: unknown) => e as ForgeError);
     expect(err.code).toBe(65);
     expect(err.message).toContain("Ratings");
+  });
+
+  // The page-size regression. `PAGE_SIZE` used to be declared in `provider.ts`,
+  // which the factory imports *before* the declaration is reached, and both
+  // providers read it at module scope to build their query. Node's ESM made
+  // that a temporal dead zone and every `ratings` run died on import -- but
+  // this transform resolves the same read against a namespace that is not
+  // populated yet, so it yielded `undefined` and every test here still passed.
+  //
+  // Asserting on the emitted query is therefore the only assertion that catches
+  // it: behaviour alone cannot, because a stub does not mind `first:undefined`.
+  it.each([
+    ["github", GITHUB, "discussions"] as const,
+    ["gitlab", GITLAB, "workItems"] as const,
+  ])("%s asks for a real page size, not undefined", async (forge, config, field) => {
+    const calls = onQuery((body) =>
+      body.includes(field)
+        ? forge === "github"
+          ? ghPage([])
+          : glPage([])
+        : json({ data: { repository: GH_REPO, project: GL_PROJECT } }),
+    );
+    await createRatingProvider(forge, config).listAuthored();
+
+    const page = calls.find((c) => c.body?.includes(`${field}(first:`));
+    expect(page, `no ${field} query was sent`).toBeDefined();
+    expect(page?.body).toContain(`${field}(first:${PAGE_SIZE},`);
+    expect(page?.body).not.toContain("first:undefined");
   });
 });

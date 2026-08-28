@@ -14,7 +14,6 @@
 import { authorizeThread, type ObservedThread } from "./marker.js";
 import {
   ForgeError,
-  PAGE_SIZE,
   at,
   graphql,
   nodes,
@@ -24,6 +23,7 @@ import {
   type RatingProviderConfig,
   type RatingThread,
 } from "./provider.js";
+import { PAGE_SIZE } from "./paging.js";
 import { EXIT } from "../cli/exit.js";
 
 const TYPES = `
