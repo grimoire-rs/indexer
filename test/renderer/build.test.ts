@@ -76,8 +76,14 @@ async function render(site: string, overrides: SiteConfig = {}): Promise<Built> 
   await fs.cp(FIXTURE, root, { recursive: true });
   await fs.mkdir(outDir, { recursive: true });
   // Stand in for the data compile: all.json plus a path-addressable copy,
-  // both of which must survive the render.
+  // both of which must survive the render — and the enrichment checkpoint,
+  // which `compileIndex` writes into `outDir` by the same route and which the
+  // next run's `enrich --seed` reads back off the deployed site.
   await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
+  await fs.writeFile(
+    path.join(outDir, "enrich.json"),
+    '{"schema_version":1,"packages":{}}\n',
+  );
   await fs.mkdir(path.join(outDir, "index/github.com/acme/code-review"), { recursive: true });
   await fs.writeFile(
     path.join(outDir, "index/github.com/acme/code-review/metadata.json"),
@@ -105,6 +111,10 @@ const EMITTED_FILES = [
   "index.html",
   "all.json",
   "stats.json",
+  // The enrichment checkpoint. It takes the same route `all.json` does — into
+  // `outDir` before `stage`, surviving as the last `public/` layer — so if that
+  // route ever changes, this is the assertion that says so.
+  "enrich.json",
   "p/github.com/acme/code-review/index.html",
   "p/github.com/acme/starter-pack/index.html",
   "p/github.com/acme/old-helper/index.html",

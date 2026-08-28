@@ -16,6 +16,8 @@ servers, and bundles available in one or more OCI registries.
   reports (`revision`, `authors`, `vendor`, `url`, `documentation`,
   `compatibility` and the repository's `support` channels). The only step
   that goes online, and the only one that needs `grim` on `PATH`.
+  `--seed` restores the sidecars from `<site>/enrich.json` first, so a
+  pipeline that commits nothing still only downloads what moved.
 - `grim-indexer build` — render `index/**` into a static site.
 - `grim-indexer validate` — CI gate for contribution PRs/MRs against an
   index repo.
@@ -210,6 +212,35 @@ republishes a `stats.json` carrying `updated` and nothing else. The sidecar is
 never committed — it is a build input the deploy publishes — so there is no
 history to unwind either way.
 
+## The enrichment checkpoint
+
+`enrich` skips work by digest, and every one of those comparisons reads
+`enrich/<namespace>/<name>/data.json` off disk. The scaffolded CI never has
+that file — the sidecars live only in the deploy job's workspace and are
+committed nowhere — so without help every deploy re-downloads every README,
+changelog, logo and payload, and re-dates every artifact that carries no
+`created` of its own.
+
+So `build` publishes `enrich.json` beside `all.json`, and
+`grim-indexer enrich --seed` reads it back from `<site>/enrich.json` before
+refreshing. The live site is the checkpoint, the same arrangement the ratings
+sidecar already uses. The generated CI passes `--seed`; re-render with
+`npm run ci` to pick it up.
+
+Unlike `stats.json`, **this is not a read contract.** Nothing outside this
+package reads it, its shape may change without notice, and no client should
+code against it.
+
+Failure is never fatal: an unreachable, oversized, unparseable or
+unrecognised checkpoint warns and seeds nothing, and the run does the full
+download it would have done anyway. A checkpoint that disagrees with itself —
+claiming a README it does not carry — has the digest that guards that file
+dropped, so the next run fetches it rather than trusting a stale flag.
+
+`describe` still runs once per package and is never skipped, so CI still
+installs `grim` and still makes one round trip each. The checkpoint saves the
+downloads, not the probe.
+
 ## Status
 
 Pre-1.0. The end-to-end loop was proven against live GitHub repositories
@@ -240,7 +271,8 @@ announce, which needs a credential beyond the CI token.
 
 Two things are frozen and safe to build on: the published URL layout
 (`/p/<namespace>/<name>/` and `/all.json`) and the per-record `schema`
-field. Everything else may still move.
+field. Everything else may still move — including `/enrich.json`, which is
+this package's own checkpoint and not a read contract.
 
 Theming is CSS custom properties, all named `--grim-<category>-<role>` and
 all declared in one file — `src/renderer/astro/styles/tokens.css`, whose

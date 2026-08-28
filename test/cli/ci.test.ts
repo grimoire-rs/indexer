@@ -404,6 +404,24 @@ describe("normalizeForDrift", () => {
   });
 });
 
+// The deploy job never commits, so `enrich/` is empty on every run. Without
+// `--seed` that means the digest probes compare against nothing: every README
+// and payload is downloaded again, and every artifact with no `created` of its
+// own is re-dated to the build. The flag is what makes the published site the
+// checkpoint, so it is pinned here rather than left to the template's prose.
+describe("the enrich step", () => {
+  const pipeline = (ci: CiConfig) =>
+    renderCi(resolveCi(ci)).get(ci.forge === "gitlab" ? GITLAB : PAGES) ?? "";
+
+  it.each([...FORGES])("seeds from the published checkpoint on %s", (forge) => {
+    expect(pipeline({ forge })).toContain("npm run enrich -- --seed");
+  });
+
+  it.each([...FORGES])("renders no enrich step at all when %s turns it off", (forge) => {
+    expect(pipeline({ forge, enrich: false })).not.toContain("npm run enrich");
+  });
+});
+
 describe("stale detection", () => {
   const rendered = (ci: CiConfig) => renderCi(resolveCi(ci));
 

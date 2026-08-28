@@ -21,7 +21,15 @@
       # the site to pointers-only, never block a deploy that is otherwise
       # ready. `enrich` itself keeps any sidecar it fails to refresh. Set
       # `"enrich": false` in the `ci` block to drop these two steps entirely.
+      #
+      # `--seed` restores enrich/ from `<site>/enrich.json` - the checkpoint the
+      # last deploy published - before refreshing. Nothing is committed here, so
+      # without it this job starts from an empty tree every run: every digest
+      # probe compares against nothing, every README and payload is downloaded
+      # again, and every artifact without a `created` of its own is re-dated to
+      # this build. A checkpoint that cannot be read is a warning, not a
+      # failure; the run just does the full download it used to do.
       - name: Refresh package metadata
         run: |
-          npm run enrich ||
+          npm run enrich -- --seed ||
             echo "::warning::enrich failed - building without READMEs, logos and version lists"

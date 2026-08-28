@@ -195,6 +195,7 @@ export async function run(argv: string[]): Promise<number> {
     .argument("[root]", "index repo root", ".")
     .description("refresh enrich/ sidecars (README, logo, versions) from the registry")
     .option("--grim <path>", "grim binary to read the registry with", "grim")
+    .option("--seed", "restore enrich/ from <site>/enrich.json before refreshing")
     .action(async (root: string, opts: EnrichFlags) => {
       code = await enrich(root, opts);
     });

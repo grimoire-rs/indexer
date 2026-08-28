@@ -35,7 +35,7 @@ const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
  * alphanumeric extension is ever joined onto a path — `logo.a/b` or
  * `logo.` + traversal must not reach `writeFileSync`.
  */
-const LOGO_EXT = /^[A-Za-z0-9]{1,8}$/;
+export const LOGO_EXT = /^[A-Za-z0-9]{1,8}$/;
 
 /** Runs one `grim` subcommand and parses its JSON. Injected so tests need no binary. */
 export type GrimRunner = (args: string[]) => Promise<unknown>;
@@ -155,7 +155,7 @@ function decode(member: CompanionFile): Buffer {
  * upstream would render forever — the detail page globs the directory, it does
  * not consult a flag in `data.json`.
  */
-function clearCompanions(dir: string): void {
+export function clearCompanions(dir: string): void {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir)) {
     const low = entry.toLowerCase();
@@ -175,7 +175,7 @@ const MARKDOWN_KINDS = new Set(["skill", "rule", "agent"]);
 const JSON_KINDS = new Set(["bundle", "mcp"]);
 
 /** Both spellings, so a kind that changes shape upstream cannot leave the old one behind. */
-function clearContents(dir: string): void {
+export function clearContents(dir: string): void {
   for (const name of ["contents.md", "contents.json"]) {
     fs.rmSync(path.join(dir, name), { force: true });
   }

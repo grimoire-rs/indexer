@@ -49,6 +49,26 @@ describe("compileIndex", () => {
 
     // logo copied to dist/logos/<ns>/<name>.<ext>
     expect(fs.existsSync(path.join(outDir, "logos", "github.com", "acme", "foo.svg"))).toBe(true);
+
+    // The enrichment checkpoint, published beside all.json. It carries the
+    // `descDigest` all.json strips — that is the whole point, since it is what
+    // the next run's `enrich --seed` compares against.
+    const checkpoint = JSON.parse(fs.readFileSync(path.join(outDir, "enrich.json"), "utf8")) as {
+      schema_version: number;
+      packages: Record<string, { data: Record<string, unknown> }>;
+    };
+    expect(checkpoint.schema_version).toBe(1);
+    expect(checkpoint.packages["github.com/acme/foo"].data).toHaveProperty("descDigest");
+  });
+
+  // An index with nothing enriched yet publishes no checkpoint at all: an
+  // absent document and an empty one read identically, and not writing keeps
+  // `dist/` honest about what this build actually had.
+  it("publishes no checkpoint when nothing is enriched", async () => {
+    await compileIndex({ root: path.join(FIXTURES, "no-enrich"), outDir });
+
+    expect(fs.existsSync(path.join(outDir, "all.json"))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, "enrich.json"))).toBe(false);
   });
 
   it("lets index metadata win over the sidecar on key overlap", async () => {

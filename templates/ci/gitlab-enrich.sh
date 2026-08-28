@@ -6,6 +6,15 @@
       #
       # Nothing is committed and no token is involved: the sidecars live only
       # in this job's workspace, which is why this needs no CI variables.
+      #
+      # That is also why `--seed` is here. With an empty workspace every digest
+      # probe compares against nothing, so every README and payload is
+      # downloaded again and every artifact without a `created` of its own is
+      # re-dated to this build. `--seed` restores enrich/ from
+      # `<site>/enrich.json` - the checkpoint the last deploy published - so the
+      # published site is the checkpoint, exactly as it is for the ratings
+      # sidecar. An unreadable checkpoint warns and falls back to the full
+      # download; it never fails the job.
       if command -v apk >/dev/null 2>&1; then
         apk add --no-cache curl tar
       elif command -v apt-get >/dev/null 2>&1; then
@@ -22,5 +31,5 @@
         && curl -fsSL --proto '=https' --tlsv1.2 -O "$base/$tarball" -O "$base/$tarball.sha256" \
         && sha256sum -c "$tarball.sha256" \
         && tar -xzf "$tarball" -C /usr/local/bin --strip-components=1 "${tarball%.tar.gz}/grim" ) \
-        && npm run enrich \
+        && npm run enrich -- --seed \
         || echo "warning: enrich failed - building without READMEs, logos and version lists"
