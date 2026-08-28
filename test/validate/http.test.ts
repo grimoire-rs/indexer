@@ -55,4 +55,25 @@ describe("request", () => {
 
     expect(await request(URL)).toMatchObject({ status: 0, body: "" });
   });
+
+  // Two callers legitimately read more than a small JSON document: the
+  // enrichment checkpoint, which is the whole sidecar tree, and a ratings page,
+  // which carries every thread's full body. Before the cap was per-call both
+  // surfaced as `status: 0` — read by `graphql` as a transport failure, which
+  // is how an oversized first page got reported as a dead socket.
+  it("reads past the default cap when the caller asks for a larger one", async () => {
+    const body = "x".repeat(MAX_RESPONSE_BYTES + 1);
+    stubFetch(() => ({ body }));
+
+    const response = await request(URL, {}, { maxBytes: MAX_RESPONSE_BYTES * 2 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toBe(body);
+  });
+
+  it("still caps at the larger value", async () => {
+    stubFetch(() => ({ body: "x".repeat(MAX_RESPONSE_BYTES + 1) }));
+
+    expect(await request(URL, {}, { maxBytes: MAX_RESPONSE_BYTES })).toMatchObject({ status: 0 });
+  });
 });

@@ -13,7 +13,7 @@
  */
 
 import { CliError, EXIT, type ExitCode } from "../cli/exit.js";
-import { request, type HttpResponse } from "../validate/adapters/http.js";
+import { LARGE_RESPONSE_BYTES, request, type HttpResponse } from "../validate/adapters/http.js";
 import { buildMarker, type AuthorizedThread } from "./marker.js";
 import type { TrustedBot } from "../validate/core/ownership.js";
 // The factory owns the dispatch, so it imports both implementations while they
@@ -99,10 +99,16 @@ export const BACKOFF_FLOOR_MS = 60_000;
 /**
  * Nodes per page.
  *
- * ponytail: 50 rather than the API maximum of 100 because `request()` caps a
- * response at 1 MiB and a page carries every thread's full body — including
- * bodies this bot did not write. Halve it again, or teach `request()` a
- * per-call cap, if an index ever trips the cap on a legitimate page.
+ * 50 rather than the API maximum of 100. This used to be a workaround for
+ * `request()`'s fixed 1 MiB cap — a page carries every thread's full body,
+ * including bodies this bot did not write, so a container holding long human
+ * threads overran the cap and [`graphql`] reported it as a transport failure.
+ * That was a real failure on first runs, before any bot thread existed.
+ *
+ * The cap is now per-call (`LARGE_RESPONSE_BYTES`, passed below), so the size
+ * argument for keeping this at 50 is gone. It stays at 50 anyway: raising it
+ * changes request count and cursor behaviour for every existing index, which
+ * is a separate decision from fixing the overrun.
  */
 export const PAGE_SIZE = 50;
 
@@ -215,6 +221,11 @@ export async function graphql(
   const response = await request(api, { ...headers, "Content-Type": "application/json" }, {
     method: "POST",
     body: JSON.stringify({ query, variables }),
+    // A page is `PAGE_SIZE` threads and every one of their bodies. The default
+    // 1 MiB is sized for a small JSON document, and overrunning it lands as
+    // `status: 0` below — reported as a transport failure, which is what an
+    // oversized first page was being misdiagnosed as.
+    maxBytes: LARGE_RESPONSE_BYTES,
   });
 
   const wait = rateLimitOf(response);

@@ -14,6 +14,18 @@ export const USER_AGENT = "grim-indexer-bot";
 export const TIMEOUT_MS = 30_000;
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 
+/**
+ * The cap for the two calls that legitimately read more than a small JSON
+ * document: the enrichment checkpoint, which is the whole sidecar tree, and a
+ * ratings page, which carries every thread's full body — including bodies this
+ * bot did not write.
+ *
+ * The same ceiling `enrich` already accepts from one `grim` subprocess
+ * (`MAX_OUTPUT_BYTES`), so the largest thing this toolchain holds in memory is
+ * one number rather than three.
+ */
+export const LARGE_RESPONSE_BYTES = 16 * 1024 * 1024;
+
 export interface HttpResponse {
   /** HTTP status, or 0 when the request never completed. */
   status: number;
@@ -51,6 +63,18 @@ async function readCapped(
 export interface RequestOptions {
   method?: string;
   body?: string;
+  /**
+   * Response-size cap for this call, in bytes. Defaults to
+   * [`MAX_RESPONSE_BYTES`], so every call site that does not ask keeps the
+   * reply it already got, byte for byte.
+   *
+   * Per-call because the default is sized for a small JSON document, and two
+   * callers legitimately read more: the enrichment checkpoint is the whole
+   * sidecar tree, and a ratings page carries every thread's full body. Both
+   * used to surface as `{status: 0}` — indistinguishable from a transport
+   * failure, which is how an oversized page got reported as one.
+   */
+  maxBytes?: number;
 }
 
 export async function request(
@@ -71,7 +95,7 @@ export async function request(
       redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    const body = await readCapped(response, MAX_RESPONSE_BYTES);
+    const body = await readCapped(response, options.maxBytes ?? MAX_RESPONSE_BYTES);
     if (body === null) return none;
     return {
       status: response.status,
