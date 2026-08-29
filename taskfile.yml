@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+# The entry point for humans and CI alike. The toolchain (task, node, grim) is
+# pinned in ocx.toml — locally direnv supplies PATH via .envrc (`direnv
+# allow`), in CI ocx-sh/setup-ocx does.
+#
+# These tasks are thin wrappers over the npm scripts, deliberately: the build,
+# the tests and the dev server all live in package.json, so there is no second
+# definition here to drift out of step with it.
+
+tasks:
+  default:
+    desc: Everything CI runs
+    cmds:
+      - task: check
+
+  install:
+    desc: Install dependencies from the lockfile
+    cmd: npm ci
+
+  build:
+    desc: Compile dist/ — tsc, then copy the renderer's Astro sources
+    cmd: npm run build
+
+  lint:
+    desc: eslint over the repo
+    cmd: npm run lint
+
+  typecheck:
+    desc: tsc --noEmit
+    cmd: npm run typecheck
+
+  test:
+    desc: The vitest suite
+    cmd: npm test
+
+  smoke:
+    desc: Boot the dev server headless, assert it renders, assert it cleans up
+    cmd: npm run dev:smoke
+
+  check:
+    desc: The full gate — lint, typecheck, vitest, dev smoke
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: test
+      - task: smoke
+
+  # `interactive: true` keeps the foreground dev server usable under Task
+  # (Ctrl-C reaches it, and its output is not buffered).
+  #
+  #   task dev
+  #   task dev FIXTURE=/path/to/a/real/index
+  #   task dev -- --port 4400 --config ./variant.json
+  dev:
+    desc: Serve a fixture index locally with live reload
+    vars:
+      FIXTURE: '{{.FIXTURE | default "test/fixtures/dev"}}'
+    interactive: true
+    cmd: npm run dev -- --root {{.FIXTURE}} {{.CLI_ARGS}}
+
+  update:lock:
+    desc: Re-resolve tool tags and rewrite ocx.lock
+    cmd: ocx lock

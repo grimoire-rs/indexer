@@ -1,0 +1,19 @@
+#:schema https://ocx.sh/schemas/project/v1.json
+# OCX project toolchain.
+#
+# Node is deliberately NOT in [tools]. `engines: >=22.14.0` is a claim CI has
+# to prove on both majors, and a binding name declared in the default table
+# *and* in a group is a duplicate-selection error rather than an override —
+# so the two node majors are groups, and every invocation names one:
+#
+#   ocx run -g default,node24 -- task check
+#   ocx run -g default,node22 -- task check
+[tools]
+go-task = "ocx.sh/go-task/task:3"
+grim = "ocx.sh/grimoire/cli:latest"
+
+[group.node22.tools]
+nodejs = "ocx.sh/nodejs/node:22"
+
+[group.node24.tools]
+nodejs = "ocx.sh/nodejs/node:24"

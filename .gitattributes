@@ -1,0 +1,3 @@
+# ocx rewrites the whole lock on every re-resolve; a union merge keeps two
+# branches that each added a tool from conflicting over untouched blocks.
+ocx.lock merge=union

@@ -1,0 +1,58 @@
+[metadata]
+lock_version = 3
+declaration_hash_version = 1
+declaration_hash = "sha256:adc035fdf8f184280534def68b128e8136eeb3bfa98d86b87b35ce678cd9035e"
+generated_by = "ocx 0.5.8"
+generated_at = "2026-08-29T13:01:08Z"
+
+[[tool]]
+name = "go-task"
+group = "default"
+repository = "ocx.sh/go-task/task"
+
+[tool.platforms]
+"darwin/amd64" = "sha256:958d2f88bec42ed62b3ab8e0435bffe5cecdfdad43055c3a8e7ec376564c4886"
+"darwin/arm64" = "sha256:5e4da091444fa604c41b9fb44b956fcdcc37a5f94b8a52c8240a8c3b0c1d7597"
+"linux/amd64" = "sha256:df420d1c99d7e80ce6366104af4e6b57135e95940763e235c907525c438effee"
+"linux/arm64" = "sha256:f5440402699c1f53b2941aa6e26049747c56a10ba730ba9692ffeaea6f429454"
+"windows/amd64" = "sha256:ac4b71cb82926c9e282074ab218e75989efe243836c761a2f4974dd31d34d94c"
+"windows/arm64" = "sha256:4a29127f29db746ab7c1d3991e4b35caa61c0f6687cc4aa2914c6fbb63a7f527"
+
+[[tool]]
+name = "grim"
+group = "default"
+repository = "ocx.sh/grimoire/cli"
+
+[tool.platforms]
+"darwin/amd64" = "sha256:21d53f543441f99db1e7163296bd1af21f19af94bf11ff2155c37d5de914c6b3"
+"darwin/arm64" = "sha256:50e4e8a74acdc381acbb21f2d2fa0576b933675b716960f1d3a5b313c8e3a08e"
+"linux/amd64" = "sha256:a8ae19ecbc4091fefd0cb5fb4ea66f451d7cf1891223c014690cb83f08b90ae9"
+"linux/arm64" = "sha256:31a34f8ad31b580b50d020b9d483fbae0c2b3a2d705e593d93d2a70e55cff11e"
+"windows/amd64" = "sha256:da3ea2488f70d71219b2e899f1fbc46ab047bfc4613a4cf3142fe26549dc9941"
+"windows/arm64" = "sha256:9992d347d206a78d07ce7b55c4c5831dfcc9530049f11ae6082161947132de33"
+
+[[tool]]
+name = "nodejs"
+group = "node22"
+repository = "ocx.sh/nodejs/node"
+
+[tool.platforms]
+"darwin/amd64" = "sha256:95a078ea6a5b78d2a5cefb4702af712f2c3781a4d88f9a3e61b02f9f1eaba15d"
+"darwin/arm64" = "sha256:e3283362fe08a814ae539535c7359388e9f0c54db6d7d5bb4580aaba2fd75bec"
+"linux/amd64+libc.glibc" = "sha256:907d91e62b67346dae9f9bef3d545f99794e5133356741020e7949adc58c6d01"
+"linux/arm64+libc.glibc" = "sha256:9529f127a625a4576d8d27ecc0cddd11df5c3c33d83dfbd43622092578d43b58"
+"windows/amd64" = "sha256:aee9ac400f9cc6dfd7e98622d4ff4a73c69435a898f23e5a538fa5cefcc194a3"
+"windows/arm64" = "sha256:910d760a3d86b4ad9d922b76971a6ae2ac8b7b925d135e0e3dde872ccc4783e7"
+
+[[tool]]
+name = "nodejs"
+group = "node24"
+repository = "ocx.sh/nodejs/node"
+
+[tool.platforms]
+"darwin/amd64" = "sha256:c6f2c5709fba82adcaa248d8a4801800acd7aa847017813af282d2c1b4a95380"
+"darwin/arm64" = "sha256:61e81247d80b9a53ce327bf4738aa3f7875ef0d20ef5b25b8166c066383decc0"
+"linux/amd64+libc.glibc" = "sha256:b698e2e621ef7fa85341118c1f6a967dbd9e3715a43bab8e484fe0c5aa546762"
+"linux/arm64+libc.glibc" = "sha256:eefe4a88f27aa433019a4251eab0b354f9e05bcd8382cd3e8a03d7ab0853b689"
+"windows/amd64" = "sha256:f14791518b3eda7d84e18a03bf31b4a1b023c3b0877d1ce6e583adc071660f02"
+"windows/arm64" = "sha256:4941b4b3b8159feb1b2891007cc35c5957e24098beecd54bb9aec907c20065e0"
