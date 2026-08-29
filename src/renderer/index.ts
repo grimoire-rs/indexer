@@ -130,7 +130,7 @@ interface StatsFile {
   schema_version?: unknown;
   generated_at?: unknown;
   providers?: Record<string, unknown>;
-  entries?: Record<string, { rating?: { up?: number } } | undefined>;
+  entries?: Record<string, { rating?: { up?: number; url?: unknown } } | undefined>;
 }
 
 /**
@@ -156,8 +156,13 @@ function withRatings(packages: CatalogPackage[], stats: StatsFile | null): Catal
   return packages.map((p) => {
     // A ref present but carrying only other stats, and a `rating` whose `up`
     // is not a number, are both unrated — same as not being listed at all.
-    const up = entries[p.ref]?.rating?.up;
-    return typeof up === "number" ? { ...p, rating: { up } } : p;
+    const rating = entries[p.ref]?.rating;
+    if (typeof rating?.up !== "number") return p;
+    // `url` rides along so a card can offer the vote; `target` does not, and
+    // must not — it is the forge's own thread id, useless on a page and
+    // otherwise inlined into every visitor's HTML.
+    const url = typeof rating.url === "string" ? rating.url : undefined;
+    return { ...p, rating: url ? { up: rating.up, url } : { up: rating.up } };
   });
 }
 

@@ -66,7 +66,18 @@ export interface CatalogPackage extends IndexRecord {
    * absence, and none of them is an error. The site is anonymous — it is built
    * once for everyone — so this is a count and never a "you voted" state.
    */
-  rating?: { up: number };
+  rating?: {
+    up: number;
+    /**
+     * Where a human goes to vote, straight from the sidecar. **Opaque** — no
+     * client parses one and none constructs one, which is exactly what makes
+     * it safe to hand to a reader as a link and nothing else. The forge's own
+     * thread id (`rating.target`) is deliberately NOT carried here: it is a
+     * producer detail with no use on a page, and inlining it would put it in
+     * every visitor's HTML.
+     */
+    url?: string;
+  };
 }
 
 /**
