@@ -361,18 +361,47 @@ not worth promising this early.
 
 ## Developing the renderer
 
-Changing how the site *looks* needs a way to see it that does not cost an
-npm release. `npm run dev` serves the catalog with hot reload:
+The toolchain — `task`, `node`, `grim` — is pinned in `ocx.toml`. Once:
 
 ```sh
-npm run dev                                 # the bundled test fixture
-npm run dev -- --port 4400
-npm run dev -- --root /path/to/an/index     # your own index, or a checkout
-                                            # of github.com/grimoire-rs/index
-npm run dev -- --config ./variant.json      # try an index.config.json without
-                                            # editing the index it renders
-npm run dev -- --help
+direnv allow          # or: eval "$(ocx direnv export -g default,node24)"
+task install
 ```
+
+Node is deliberately not in `ocx.toml`'s default `[tools]` table. `engines`
+claims node 22 *and* 24, so both are groups and every invocation names one:
+`ocx run -g default,node22 -- task check` is the other half of what CI runs.
+
+Changing how the site *looks* needs a way to see it that does not cost an
+npm release. `task dev` serves the catalog with hot reload:
+
+```sh
+task dev                                    # the bundled dev index
+task dev -- --port 4400
+task dev FIXTURE=/path/to/an/index          # your own index, or a checkout
+                                            # of github.com/grimoire-rs/index
+task dev -- --config ./variant.json         # try an index.config.json without
+                                            # editing the index it renders
+task dev -- --help
+```
+
+`task --list` has the rest; `task check` is the whole gate CI runs.
+
+### The dev index
+
+`test/fixtures/dev/` is what `task dev` renders, and it holds **one artifact
+per rendering state** — rated, zero-vote and unrated; deprecated with and
+without a replacement; a logo present, absent, and declared-but-not-shipped;
+every kind; enriched and pointer-only; a second namespace on a second forge.
+Its `README.md` is the table of which artifact exists for which state.
+
+It ships an `index/` tree, so `task dev` runs the real `compileIndex` — which
+is the only way the three logo states differ, since publishing
+`enrich/<ns>/<name>/logo.<ext>` is something only the compile path does.
+
+Add a state by adding an artifact and a row in that table. It is not a test
+fixture: `test/renderer/fixture/` is, and `test/renderer/build.test.ts`
+counts its contents, so the two are kept apart on purpose.
 
 Every part of the hero is config, so `--config` is how you review the site
 with a piece switched off — `{"install": []}` drops the installer buttons,
@@ -383,13 +412,14 @@ It renders through the same `inlineConfig` as `grim-indexer build`, so the
 preview is the release output, not an approximation. Edits under
 `src/renderer/astro/` (templates, components, the tokens in
 `styles/tokens.css`) reload in place; changing the renderer's own
-TypeScript needs a restart, because `npm run dev` builds `dist/` on start.
+TypeScript needs a restart, because `task dev` builds `dist/` on start.
 
 The scratch index root lives in the gitignored `.dev/`, rebuilt on every
 run — the repo you point `--root` at is copied, never rendered in place.
 
-`npm run dev:smoke` boots the server, asserts the landing and detail pages
-render, and checks the staged directory is cleaned up on shutdown. That
+`task smoke` (`npm run dev:smoke`) boots the server, asserts the landing and
+detail pages render, and checks the staged directory is cleaned up on
+shutdown. It is part of `task check`, so CI runs it too. That
 check lives here rather than in the vitest suite because Astro's dev server
 does not route correctly when nested inside vitest's own Vite; the build
 path is covered by `test/renderer/build.test.ts`.
@@ -399,4 +429,7 @@ install the resulting tarball into a scratch index repo.
 
 ## License
 
-Apache-2.0
+Apache-2.0. See `NOTICE` for the third-party assets a built index carries:
+the artifact-kind marks are Microsoft's codicons under CC BY 4.0 — the same
+glyphs the VS Code extension uses, so one catalogue reads the same in both —
+alongside Lucide (ISC) and Material Design Icons (Apache-2.0).
