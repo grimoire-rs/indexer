@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "sunset-agent",
+  "kind": "agent",
+  "ref": "ghcr.io/acme/sunset-agent",
+  "description": "Retired with nothing to point at.",
+  "repository": "https://github.com/acme/sunset-agent",
+  "keywords": [
+    "deprecated"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

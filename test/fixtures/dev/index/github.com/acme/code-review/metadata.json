@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "code-review",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/code-review",
+  "description": "Review a diff against the team's checklist.",
+  "repository": "https://github.com/acme/code-review",
+  "keywords": [
+    "review",
+    "diff",
+    "quality"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

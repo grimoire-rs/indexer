@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "many-versions",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/many-versions",
+  "description": "Published often, and it shows.",
+  "repository": "https://github.com/acme/many-versions",
+  "keywords": [
+    "versions"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

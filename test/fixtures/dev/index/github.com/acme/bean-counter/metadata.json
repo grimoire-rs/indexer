@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "bean-counter",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/bean-counter",
+  "description": "Count what the build produced.",
+  "repository": "https://github.com/acme/bean-counter",
+  "keywords": [
+    "metrics"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

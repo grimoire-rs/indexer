@@ -1,0 +1,19 @@
+{
+  "title": "old-helper",
+  "summary": "Superseded by code-review.",
+  "version": "0.2.0",
+  "keywords": [
+    "deprecated"
+  ],
+  "tags": [
+    "latest",
+    "0",
+    "0.2",
+    "0.2.0"
+  ],
+  "deprecated": "unmaintained since 2026-06; the checklist it enforced moved into code-review",
+  "replacedBy": "ghcr.io/acme/code-review",
+  "created": "2026-01-09T12:00:00+00:00",
+  "updated": "2026-06-01T12:00:00+00:00",
+  "hasReadme": true
+}

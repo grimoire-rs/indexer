@@ -1,0 +1,20 @@
+{
+  "title": "test-writer",
+  "summary": "Write the failing test before the fix.",
+  "version": "0.9.0",
+  "keywords": [
+    "testing",
+    "tdd"
+  ],
+  "tags": [
+    "latest",
+    "0",
+    "0.9",
+    "0.9.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-12T08:00:00+00:00",
+  "updated": "2026-07-12T08:00:00+00:00",
+  "documentation": "https://docs.acme.example/test-writer",
+  "hasReadme": true
+}

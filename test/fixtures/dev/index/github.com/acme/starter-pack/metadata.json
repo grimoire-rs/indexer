@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "starter-pack",
+  "kind": "bundle",
+  "ref": "ghcr.io/acme/starter-pack",
+  "description": "Everything a new repository needs on day one.",
+  "repository": "https://github.com/acme/starter-pack",
+  "keywords": [
+    "bundle",
+    "starter"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

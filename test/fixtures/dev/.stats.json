@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-28T09:30:00Z",
+  "providers": {
+    "rating": "github"
+  },
+  "entries": {
+    "ghcr.io/acme/starter-pack": {
+      "rating": {
+        "up": 47,
+        "target": "DIC_kwDOAbc456",
+        "url": "https://github.com/grimoire-rs/index/discussions/7"
+      }
+    },
+    "ghcr.io/acme/context7": {
+      "rating": {
+        "up": 21,
+        "target": "DIC_kwDOAbc321",
+        "url": "https://github.com/grimoire-rs/index/discussions/12"
+      }
+    },
+    "ghcr.io/acme/code-review": {
+      "rating": {
+        "up": 12,
+        "target": "DIC_kwDOAbc123",
+        "url": "https://github.com/grimoire-rs/index/discussions/42"
+      }
+    },
+    "ghcr.io/acme/many-versions": {
+      "rating": {
+        "up": 8
+      }
+    },
+    "ghcr.io/acme/ghost-logo": {
+      "rating": {
+        "up": 5,
+        "target": "DIC_kwDOAbc777",
+        "url": "https://github.com/grimoire-rs/index/discussions/23"
+      }
+    },
+    "ghcr.io/acme/enterprise-compliance-policy-pack": {
+      "rating": {
+        "up": 3,
+        "target": "DIC_kwDOAbc888",
+        "url": "https://github.com/grimoire-rs/index/discussions/31"
+      }
+    },
+    "ghcr.io/acme/old-helper": {
+      "rating": {
+        "up": 2,
+        "target": "DIC_kwDOAbc555",
+        "url": "https://github.com/grimoire-rs/index/discussions/5"
+      }
+    },
+    "ghcr.io/acme/rust-style": {
+      "rating": {
+        "up": 0,
+        "target": "DIC_kwDOAbc789",
+        "url": "https://github.com/grimoire-rs/index/discussions/9"
+      }
+    },
+    "registry.gitlab.example/team/mirror": {
+      "rating": {
+        "up": 1,
+        "target": "DIC_kwDOAbc111",
+        "url": "https://gitlab.com/grimoire-rs/index/-/work_items/3"
+      }
+    },
+    "ghcr.io/acme/bean-counter": {
+      "downloads": {
+        "total": 4213,
+        "last": "2026-08-20"
+      }
+    },
+    "ghcr.io/acme/gone": {
+      "rating": {
+        "up": 3,
+        "target": "DIC_kwDOAbc999",
+        "url": "https://github.com/grimoire-rs/index/discussions/1"
+      }
+    }
+  }
+}

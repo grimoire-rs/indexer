@@ -1,0 +1,18 @@
+{
+  "title": "sunset-agent",
+  "summary": "Retired with nothing to point at.",
+  "version": "1.4.0",
+  "keywords": [
+    "deprecated"
+  ],
+  "tags": [
+    "latest",
+    "1",
+    "1.4",
+    "1.4.0"
+  ],
+  "deprecated": "the hosted model it drove was retired; nothing replaces it",
+  "created": "2026-02-14T08:20:00+00:00",
+  "updated": "2026-08-01T08:20:00+00:00",
+  "hasReadme": true
+}

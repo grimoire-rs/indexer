@@ -1,0 +1,22 @@
+{
+  "title": "starter-pack",
+  "summary": "Everything a new repository needs on day one.",
+  "version": "2.0.0",
+  "license": "MIT",
+  "keywords": [
+    "bundle",
+    "starter"
+  ],
+  "tags": [
+    "latest",
+    "2",
+    "2.0",
+    "2.0.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-20T09:30:00+00:00",
+  "updated": "2026-07-20T09:30:00+00:00",
+  "vendor": "Acme",
+  "hasReadme": true,
+  "logo": "/logos/github.com/acme/starter-pack.svg"
+}

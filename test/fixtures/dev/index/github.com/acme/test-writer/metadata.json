@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "test-writer",
+  "kind": "agent",
+  "ref": "ghcr.io/acme/test-writer",
+  "description": "Write the failing test before the fix.",
+  "repository": "https://github.com/acme/test-writer",
+  "keywords": [
+    "testing",
+    "tdd"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

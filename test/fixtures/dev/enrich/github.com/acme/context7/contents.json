@@ -1,0 +1,11 @@
+{
+  "description": "Docs lookup over stdio.",
+  "server": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@acme/context7"
+    ]
+  }
+}

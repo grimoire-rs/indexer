@@ -1,0 +1,19 @@
+{
+  "title": "mirror",
+  "summary": "Lives in a second namespace, on a second forge.",
+  "version": "0.3.0",
+  "keywords": [
+    "mirror",
+    "gitlab"
+  ],
+  "tags": [
+    "latest",
+    "0",
+    "0.3",
+    "0.3.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-28T15:00:00+00:00",
+  "updated": "2026-07-28T15:00:00+00:00",
+  "hasReadme": true
+}

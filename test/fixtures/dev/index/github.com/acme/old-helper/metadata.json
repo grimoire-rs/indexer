@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "old-helper",
+  "kind": "rule",
+  "ref": "ghcr.io/acme/old-helper",
+  "description": "Superseded by code-review.",
+  "repository": "https://github.com/acme/old-helper",
+  "keywords": [
+    "deprecated"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

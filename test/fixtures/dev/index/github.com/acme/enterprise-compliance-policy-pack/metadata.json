@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "name": "enterprise-compliance-policy-pack",
+  "kind": "rule",
+  "ref": "ghcr.io/acme/enterprise-compliance-policy-pack",
+  "description": "A single rule set covering retention, provenance, third-party review, export control and the annual attestation, written so an auditor can follow it without reading the code it governs.",
+  "repository": "https://github.com/acme/enterprise-compliance-policy-pack",
+  "keywords": [
+    "compliance",
+    "governance",
+    "retention",
+    "provenance",
+    "audit",
+    "export-control",
+    "attestation",
+    "policy",
+    "security",
+    "privacy",
+    "legal",
+    "enterprise"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

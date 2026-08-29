@@ -1,0 +1,21 @@
+{
+  "title": "ghost-logo",
+  "summary": "Declares a logo it does not ship.",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "keywords": [
+    "fixture",
+    "logo"
+  ],
+  "tags": [
+    "latest",
+    "1",
+    "1.0",
+    "1.0.0"
+  ],
+  "deprecated": null,
+  "created": "2026-08-02T11:00:00+00:00",
+  "updated": "2026-08-02T11:00:00+00:00",
+  "hasReadme": true,
+  "logo": "/logos/github.com/acme/ghost-logo.svg"
+}

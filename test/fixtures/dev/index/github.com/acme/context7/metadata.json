@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "context7",
+  "kind": "mcp",
+  "ref": "ghcr.io/acme/context7",
+  "description": "Docs lookup over stdio.",
+  "repository": "https://github.com/acme/context7",
+  "keywords": [
+    "mcp",
+    "docs"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

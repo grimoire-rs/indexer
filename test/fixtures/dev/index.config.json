@@ -1,0 +1,41 @@
+{
+  "site": "https://index.example.test",
+  "brand": "dev index",
+  "brandMark": "dev",
+  "logo": "/logo.svg",
+  "description": "Every rendering state the catalog has, in one index.",
+  "tagline": "Skills, rules, agents, MCP servers and bundles \u2014 one artifact per state.",
+  "docsUrl": "https://docs.example.test",
+  "installDocsUrl": "https://docs.example.test/install.html",
+  "repoUrl": "https://github.com/acme/index",
+  "install": [
+    {
+      "os": "Linux / macOS",
+      "command": "curl -LsSf https://setup.example.test/sh | sh"
+    },
+    {
+      "os": "Windows",
+      "command": "irm https://setup.example.test/ps1 | iex"
+    }
+  ],
+  "vscodeExtension": "acme.acme-vscode",
+  "registry": {
+    "alias": "dev",
+    "index": "https://index.example.test"
+  },
+  "footerNote": "dev index \u2014 synthetic data, nothing here is real",
+  "footerLinks": [
+    {
+      "label": "privacy",
+      "href": "https://acme.example.test/privacy"
+    }
+  ],
+  "ratings": {
+    "provider": "github",
+    "container": "Ratings"
+  },
+  "ci": {
+    "forge": "github",
+    "autoMerge": true
+  }
+}

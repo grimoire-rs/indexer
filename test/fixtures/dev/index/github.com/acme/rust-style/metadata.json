@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "rust-style",
+  "kind": "rule",
+  "ref": "ghcr.io/acme/rust-style",
+  "description": "House Rust style, the parts rustfmt cannot express.",
+  "repository": "https://github.com/acme/rust-style",
+  "keywords": [
+    "rust",
+    "style"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

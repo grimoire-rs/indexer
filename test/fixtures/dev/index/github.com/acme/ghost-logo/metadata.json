@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "ghost-logo",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/ghost-logo",
+  "description": "Declares a logo it does not ship.",
+  "repository": "https://github.com/acme/ghost-logo",
+  "keywords": [
+    "fixture",
+    "logo"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

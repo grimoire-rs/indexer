@@ -1,0 +1,18 @@
+{
+  "title": "bean-counter",
+  "summary": "Count what the build produced.",
+  "version": "0.1.0",
+  "keywords": [
+    "metrics"
+  ],
+  "tags": [
+    "latest",
+    "0",
+    "0.1",
+    "0.1.0"
+  ],
+  "deprecated": null,
+  "created": "2026-08-11T07:15:00+00:00",
+  "updated": "2026-08-11T07:15:00+00:00",
+  "hasReadme": true
+}

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "mirror",
+  "kind": "rule",
+  "ref": "registry.gitlab.example/team/mirror",
+  "description": "Lives in a second namespace, on a second forge.",
+  "repository": "https://gitlab.example/team/mirror",
+  "keywords": [
+    "mirror",
+    "gitlab"
+  ],
+  "owner": {
+    "login": "team",
+    "id": 77
+  }
+}

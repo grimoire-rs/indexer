@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "name": "bare",
+  "kind": "mcp",
+  "ref": "registry.example/acme/bare",
+  "description": "A pointer and nothing else.",
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

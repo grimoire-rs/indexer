@@ -16,7 +16,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const repo = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const FIXTURE = path.join(repo, "test/renderer/fixture");
+// The dev index, not the build test's fixture: it ships an `index/` tree, so
+// the branch below runs the real `compileIndex` and every state that only
+// exists on the compile path — logo publishing above all — is visible here.
+const FIXTURE = path.join(repo, "test/fixtures/dev");
 /** Scratch index root. Gitignored, and reused so Vite's cache survives. */
 const SCRATCH = path.join(repo, ".dev");
 
@@ -35,7 +38,10 @@ if (values.help) {
 usage: npm run dev -- [--root <index-repo>] [--port <n>] [--smoke]
 
   --root   an index repo to render (a checkout of grimoire-rs/index, or your
-           own). Default: the bundled renderer test fixture.
+           own). Default: test/fixtures/dev, the bundled dev index — one
+           artifact per rendering state (rated/zero-vote/unrated, deprecated
+           with and without a replacement, logo present/absent/broken, all
+           five kinds, enriched and pointer-only).
   --config an index.config.json to render with, overriding whatever the root
            carries. Restart to pick up an edit — config is baked at boot.
            Try a variant without the hero strip:
@@ -122,7 +128,20 @@ if (values.smoke) {
   const detail = "p/github.com/acme/code-review/";
   const checks = [
     [server.url, "<title>"],
-    [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, "Fixture README"],
+    // The dev server, not the build, is what a rendering change is reviewed
+    // in — and it is the one path a stale Vite cache can serve old markup
+    // from. So the catalog's clickable affordances are asserted *here*:
+    // the rating count is an anchor to the forge thread, not a bare span.
+    [server.url, 'class="rating-count" href="https://'],
+    // A heading the detail page only emits when enrichment arrived and had a
+    // `support` block — so this fails on a broken render *and* on a dev index
+    // whose enrich sidecars stopped being read.
+    [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, "Get help"],
+    // The vote badge reaches the detail page too, with both halves live —
+    // it was missing here long after the cards had it.
+    [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, 'class="rating-vote"'],
+    // And the kind mark behind the panel.
+    [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, "panel-watermark"],
   ];
   let failed = 0;
   for (const [url, needle] of checks) {

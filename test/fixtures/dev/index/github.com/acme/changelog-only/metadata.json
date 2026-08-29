@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "changelog-only",
+  "kind": "agent",
+  "ref": "ghcr.io/acme/changelog-only",
+  "description": "Ships history and no introduction.",
+  "repository": "https://github.com/acme/changelog-only",
+  "keywords": [
+    "fixture"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

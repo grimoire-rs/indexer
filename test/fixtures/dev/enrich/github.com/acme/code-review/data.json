@@ -1,0 +1,36 @@
+{
+  "title": "code-review",
+  "summary": "Review a diff against the team's checklist.",
+  "version": "1.2.3",
+  "license": "Apache-2.0",
+  "keywords": [
+    "review",
+    "diff",
+    "quality"
+  ],
+  "tags": [
+    "latest",
+    "1",
+    "1.2",
+    "1.2.3",
+    "1.1.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-01T10:00:00+00:00",
+  "updated": "2026-07-01T10:00:00+00:00",
+  "revision": "3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39",
+  "authors": "The Acme Authors",
+  "vendor": "Acme",
+  "url": "https://acme.example/code-review",
+  "documentation": "https://docs.acme.example/code-review",
+  "compatibility": "claude-code, cursor",
+  "support": {
+    "issues": "https://github.com/acme/code-review/issues",
+    "chat": "https://acme.example/chat",
+    "contact": "support@acme.example",
+    "security": "https://github.com/acme/code-review/security/policy"
+  },
+  "hasReadme": true,
+  "hasChangelog": true,
+  "logo": "/logos/github.com/acme/code-review.svg"
+}

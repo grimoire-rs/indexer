@@ -1,0 +1,19 @@
+{
+  "title": "changelog-only",
+  "summary": "Ships history and no introduction.",
+  "version": "2.2.0",
+  "keywords": [
+    "fixture"
+  ],
+  "tags": [
+    "latest",
+    "2",
+    "2.2",
+    "2.2.0"
+  ],
+  "deprecated": null,
+  "created": "2026-06-06T06:06:00+00:00",
+  "updated": "2026-06-06T06:06:00+00:00",
+  "hasReadme": false,
+  "hasChangelog": true
+}

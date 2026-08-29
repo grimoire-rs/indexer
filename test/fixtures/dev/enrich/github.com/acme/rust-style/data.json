@@ -1,0 +1,24 @@
+{
+  "title": "rust-style",
+  "summary": "House Rust style, the parts rustfmt cannot express.",
+  "version": "0.4.1",
+  "license": "Apache-2.0",
+  "keywords": [
+    "rust",
+    "style"
+  ],
+  "tags": [
+    "latest",
+    "0",
+    "0.4",
+    "0.4.1"
+  ],
+  "deprecated": null,
+  "created": "2026-06-18T14:05:00+00:00",
+  "updated": "2026-06-18T14:05:00+00:00",
+  "support": {
+    "security": "https://github.com/acme/rust-style/security/policy"
+  },
+  "hasReadme": true,
+  "hasChangelog": true
+}
