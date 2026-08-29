@@ -3,6 +3,7 @@
 // VS Code deep link points at it, and search engines index it — the route
 // shape is a contract, not an implementation detail.
 import {
+  ArrowBigUp,
   BookOpen,
   Bug,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   MessageCircle,
   Scale,
   ShieldAlert,
+  TriangleAlert,
   User,
 } from "lucide-preact";
 import Base from "../../layouts/Base.astro";
@@ -23,6 +25,7 @@ import VersionMenu from "../../components/VersionMenu.astro";
 import CommandField from "../../components/CommandField.astro";
 import PickerMenu from "../../components/PickerMenu.astro";
 import { BrandMark } from "../../components/BrandMark.tsx";
+import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "../../components/KindMark.tsx";
 import {
   mdiBitbucket,
   mdiGit,
@@ -34,12 +37,14 @@ import { withBase } from "../../lib/base";
 import { SHIKI_THEMES } from "../../lib/code";
 import {
   compareVersions,
+  deprecationNote,
   externalUrl,
   lastUpdated,
   resolveMemberRef,
   timeAgo,
   versionCascade,
   vscodeUrl,
+  vscodeVoteUrl,
   type CatalogPackage,
 } from "../../lib/catalog";
 import { data } from "../../lib/data";
@@ -162,167 +167,245 @@ const supportChannels = [
 // taking a row of its own and putting 40 hex characters in the rail.
 const updated = lastUpdated(pkg);
 const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : updated;
+
+// The card's vote badge, on the page the card links to. Same two halves and
+// the same rule: the count opens the forge thread, because no forge offers a
+// URL that casts a vote, and the extension's `/vote?repo=` route is the only
+// one that does — behind its own disclosure modal, never on this link alone.
+const votes = pkg.rating ? `${pkg.rating.up} upvote${pkg.rating.up === 1 ? "" : "s"}` : "";
+const thread = externalUrl(pkg.rating?.url);
+const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
+
+// The kind as texture, the way a card wears it. A retired package spends it
+// on the warning instead — the kind is written in the badge either way.
+const headMark = pkg.deprecated ? DEPRECATED_MARK : KIND_MARKS[pkg.kind];
+const headMarkColor = pkg.deprecated
+  ? "var(--grim-color-deprecated)"
+  : `var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`;
 ---
 
 <Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo}>
   <div class="detail">
-    <header class="detail-head" data-slot="detail-header">
-      {
-        pkg.logo ? (
-          // The placeholder ships in the markup and the image fades in over
-          // it, so a slow or failing load never flashes a broken glyph. The
-          // slot starts `loading`; the handler in `Base.astro` moves it to
-          // `ready` or `broken`. Icon mirrors `LogoMark` in `Catalog.tsx`.
-          <span class="tile logo-slot" data-static data-state="loading">
-            {/* Both marks ship; CSS shows one per state. The card grid picks
-                between them in Preact instead, but this page has to settle
-                its placeholder before any script runs. */}
-            <Image class="logo-mark mark-loading" aria-hidden="true" />
-            <ImageOff class="logo-mark mark-broken" aria-hidden="true" />
-            <img src={withBase(pkg.logo)} alt="" />
-          </span>
-        ) : (
-          <div class="tile letter" style={`background: var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`}>
-            {pkg.name[0]?.toUpperCase()}
-          </div>
-        )
-      }
-      <div class="detail-head-text">
-        <h1>
-          {pkg.name} <span class={`badge kind-${pkg.kind}`}>{pkg.kind}</span>
-          {/* Skills only — every other kind reports null, and grim's own
-              surfaces show it beside the kind for the same reason: it
-              qualifies what the thing is, not what it says about itself. */}
-          {pkg.compatibility && <span class="badge compat">{pkg.compatibility}</span>}
-        </h1>
-        {description && <p class="summary">{description}</p>}
-        {byline && <p class="byline">by {byline}</p>}
-      </div>
-    </header>
-
-    {
-      pkg.deprecated && (
-        <p class="deprecated-banner" data-slot="deprecated-banner">
-          ⚠️ deprecated{pkg.replacedBy ? ` — replaced by ${pkg.replacedBy}` : ""}
-        </p>
-      )
-    }
-
-    <div class="cmd-bar" data-os-switch data-os-noun={`add command for ${pkg.name}`}>
-      <PickerMenu choices={scopeChoices} title="Scope" label="Choose the scope" />
-      <CommandField
-        value={scopeChoices[0].command}
-        name={`${scopeChoices[0].name} add command for ${pkg.name}`}
-        label="Copy the add command"
-      />
-      {
-        vscode && (
-          <a
-            class="seg brand-link"
-            href={vscode}
-            title="Open in VS Code"
-            aria-label={`Open ${pkg.name} in VS Code`}
-          >
-            <BrandMark path={mdiMicrosoftVisualStudioCode} />
-          </a>
-        )
-      }
-    </div>
-
     <div class="detail-body" data-slot="detail-body">
-      <main class="detail-main">
-        {/* Radio tabs, not a scripted tablist: the ribbon works on a page
-            whose JS never ran, and a radio group already has the keyboard
-            behaviour tabs want (arrows move, only one selected). The inputs
-            are visually hidden rather than `hidden`, which would take them
-            out of the focus order along with the pixels. */}
-        {/* All three tabs are always offered — a ribbon that grows a tab per
-            package makes the panel a different shape on every page. An empty
-            one is disabled instead: greyed, not clickable through to a
-            sentence apologising for itself. */}
-        <input
-          type="radio"
-          name="panel"
-          id="panel-readme"
-          class="sr-only"
-          checked={openTab === "readme"}
-          disabled={!filled.readme}
-        />
-        <input
-          type="radio"
-          name="panel"
-          id="panel-contents"
-          class="sr-only"
-          checked={openTab === "contents"}
-          disabled={!filled.contents}
-        />
-        <input
-          type="radio"
-          name="panel"
-          id="panel-changelog"
-          class="sr-only"
-          checked={openTab === "changelog"}
-          disabled={!filled.changelog}
-        />
-        {/* The greyed tab says it is not for clicking; the tooltip says why,
-            so the answer is one hover away instead of a panel of its own. */}
-        <div class="ribbon">
-          <label for="panel-readme" title={filled.readme ? undefined : "no readme available"}>
-            Readme
-          </label>
-          <label for="panel-contents" title={filled.contents ? undefined : "no contents available"}>
-            Contents
-          </label>
-          <label
-            for="panel-changelog"
-            title={filled.changelog ? undefined : "no changelog available"}
-          >
-            Changelog
-          </label>
-        </div>
-        {filled.readme && (
-          <div class="prose tab-panel" id="tab-readme">
-            <Readme />
-          </div>
-        )}
-        {
-          filled.contents && (
-            <div class="prose tab-panel" id="tab-contents">
-              {Contents ? (
-                <Contents />
-              ) : members.length > 0 ? (
-                <ul class="members">
-                  {members.map((member) => (
-                    <li>
-                      {member.href ? (
-                        <a href={member.href}>{member.name}</a>
-                      ) : (
-                        <span>{member.name}</span>
-                      )}
-                      <span class={`badge kind-${member.kind}`}>{member.kind}</span>
-                      <code>{member.ref}</code>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Code
-                  code={JSON.stringify(contentsData, null, 2)}
-                  lang="json"
-                  themes={SHIKI_THEMES}
-                />
+      <div class="detail-col">
+        <header class="detail-head" data-slot="detail-header">
+          {
+            pkg.logo ? (
+              // The placeholder ships in the markup and the image fades in over
+              // it, so a slow or failing load never flashes a broken glyph. The
+              // slot starts `loading`; the handler in `Base.astro` moves it to
+              // `ready` or `broken`. Icon mirrors `LogoMark` in `Catalog.tsx`.
+              <span class="tile logo-slot" data-static data-state="loading">
+                {/* Both marks ship; CSS shows one per state. The card grid picks
+                    between them in Preact instead, but this page has to settle
+                    its placeholder before any script runs. */}
+                <Image class="logo-mark mark-loading" aria-hidden="true" />
+                <ImageOff class="logo-mark mark-broken" aria-hidden="true" />
+                <img src={withBase(pkg.logo)} alt="" />
+              </span>
+            ) : (
+              <div class="tile letter" style={`background: var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`}>
+                {pkg.name[0]?.toUpperCase()}
+              </div>
+            )
+          }
+          <div class="detail-head-text">
+            <h1>
+              {pkg.name} <span class={`badge kind-${pkg.kind}`}>{pkg.kind}</span>
+              {/* Skills only — every other kind reports null, and grim's own
+                  surfaces show it beside the kind for the same reason: it
+                  qualifies what the thing is, not what it says about itself. */}
+              {pkg.compatibility && (
+                <span class="badge compat" title={`Built for ${pkg.compatibility}`}>
+                  {pkg.compatibility}
+                </span>
               )}
-            </div>
+            </h1>
+            {description && <p class="summary">{description}</p>}
+            {byline && <p class="byline">by {byline}</p>}
+          </div>
+        </header>
+
+        {
+          pkg.deprecated && (
+            <p class="deprecated-banner" data-slot="deprecated-banner">
+              {/* Drawn, not an emoji: ⚠️ renders as a different glyph on every
+                  platform, takes the system's colour rather than the token's,
+                  and sits off the text baseline. Every other icon on this site
+                  comes from one stroked set; this one had no reason not to. */}
+              <TriangleAlert size={16} aria-hidden="true" />
+              {deprecationNote(pkg)}
+            </p>
           )
         }
-        {filled.changelog && (
-          <div class="prose tab-panel" id="tab-changelog">
-            <Changelog />
+
+        <div class="cmd-bar" data-os-switch data-os-noun={`add command for ${pkg.name}`}>
+          <PickerMenu choices={scopeChoices} title="Scope" label="Choose the scope" />
+          <CommandField
+            value={scopeChoices[0].command}
+            name={`${scopeChoices[0].name} add command for ${pkg.name}`}
+            label="Copy the add command"
+          />
+          {
+            vscode && (
+              <a
+                class="seg brand-link"
+                href={vscode}
+                title="Open in VS Code"
+                aria-label={`Open ${pkg.name} in VS Code`}
+              >
+                <BrandMark path={mdiMicrosoftVisualStudioCode} />
+              </a>
+            )
+          }
+        </div>
+
+        <main class="detail-main">
+          {/* The kind as texture behind the panel, the way a card wears it:
+              oversized and hung off the panel's bottom-right corner, so
+              `overflow: hidden` crops it to the rounded edge. Decorative — the
+              kind is a badge beside the name — so it is aria-hidden unless it
+              is the warning a retired package wears instead. */}
+          {
+            headMark && (
+              <KindMark
+                glyph={headMark}
+                class="panel-watermark"
+                size={220}
+                role={pkg.deprecated ? "img" : undefined}
+                aria-label={pkg.deprecated ? "deprecated" : undefined}
+                aria-hidden={pkg.deprecated ? undefined : "true"}
+                style={`color: ${headMarkColor}`}
+              />
+            )
+          }
+          {/* Radio tabs, not a scripted tablist: the ribbon works on a page
+              whose JS never ran, and a radio group already has the keyboard
+              behaviour tabs want (arrows move, only one selected). The inputs
+              are visually hidden rather than `hidden`, which would take them
+              out of the focus order along with the pixels. */}
+          {/* All three tabs are always offered — a ribbon that grows a tab per
+              package makes the panel a different shape on every page. An empty
+              one is disabled instead: greyed, not clickable through to a
+              sentence apologising for itself. */}
+          <input
+            type="radio"
+            name="panel"
+            id="panel-readme"
+            class="sr-only"
+            checked={openTab === "readme"}
+            disabled={!filled.readme}
+          />
+          <input
+            type="radio"
+            name="panel"
+            id="panel-contents"
+            class="sr-only"
+            checked={openTab === "contents"}
+            disabled={!filled.contents}
+          />
+          <input
+            type="radio"
+            name="panel"
+            id="panel-changelog"
+            class="sr-only"
+            checked={openTab === "changelog"}
+            disabled={!filled.changelog}
+          />
+          {/* The greyed tab says it is not for clicking; the tooltip says why,
+              so the answer is one hover away instead of a panel of its own. */}
+          <div class="ribbon">
+            <label for="panel-readme" title={filled.readme ? undefined : "no readme available"}>
+              Readme
+            </label>
+            <label for="panel-contents" title={filled.contents ? undefined : "no contents available"}>
+              Contents
+            </label>
+            <label
+              for="panel-changelog"
+              title={filled.changelog ? undefined : "no changelog available"}
+            >
+              Changelog
+            </label>
+            {
+              pkg.rating && (
+                <span class="rating-group">
+                  {thread ? (
+                    <a
+                      class="rating-count"
+                      href={thread}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`${votes} — open the thread to vote`}
+                      aria-label={`${votes}. Open the voting thread`}
+                    >
+                      <ArrowBigUp size={13} aria-hidden="true" />
+                      {pkg.rating.up}
+                    </a>
+                  ) : (
+                    <span class="rating-count" title={votes}>
+                      <ArrowBigUp size={13} aria-hidden="true" />
+                      {pkg.rating.up}
+                    </span>
+                  )}
+                  {voteUrl && (
+                    <a
+                      class="rating-vote"
+                      href={voteUrl}
+                      title="Upvote in VS Code"
+                      aria-label={`Upvote ${pkg.name} in VS Code`}
+                    >
+                      <BrandMark path={mdiMicrosoftVisualStudioCode} size={12} />
+                    </a>
+                  )}
+                </span>
+              )
+            }
           </div>
-        )}
-        {/* Nothing anywhere: one statement in the middle of the panel, rather
-            than three tabs each denying it separately. */}
-        {openTab === null && <p class="panel-empty">No content available.</p>}
-      </main>
+          {filled.readme && (
+            <div class="prose tab-panel" id="tab-readme">
+              <Readme />
+            </div>
+          )}
+          {
+            filled.contents && (
+              <div class="prose tab-panel" id="tab-contents">
+                {Contents ? (
+                  <Contents />
+                ) : members.length > 0 ? (
+                  <ul class="members">
+                    {members.map((member) => (
+                      <li>
+                        {member.href ? (
+                          <a href={member.href}>{member.name}</a>
+                        ) : (
+                          <span>{member.name}</span>
+                        )}
+                        <span class={`badge kind-${member.kind}`}>{member.kind}</span>
+                        <code>{member.ref}</code>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Code
+                    code={JSON.stringify(contentsData, null, 2)}
+                    lang="json"
+                    themes={SHIKI_THEMES}
+                  />
+                )}
+              </div>
+            )
+          }
+          {filled.changelog && (
+            <div class="prose tab-panel" id="tab-changelog">
+              <Changelog />
+            </div>
+          )}
+          {/* Nothing anywhere: one statement in the middle of the panel, rather
+              than three tabs each denying it separately. */}
+          {openTab === null && <p class="panel-empty">No content available.</p>}
+        </main>
+      </div>
 
       <aside class="detail-rail" data-slot="detail-rail">
         {tags.length > 0 && (
@@ -346,6 +429,22 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
                 </div>
               </details>
             )}
+          </section>
+        )}
+
+        {supportChannels.length > 0 && (
+          <section class="support">
+            <h2>Get help</h2>
+            <ul>
+              {supportChannels.map(({ label, href, Icon }) => (
+                <li>
+                  <Icon size={15} aria-hidden="true" />
+                  <a href={href} target="_blank" rel="noopener noreferrer">
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 
@@ -449,21 +548,6 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
           )}
         </section>
 
-        {supportChannels.length > 0 && (
-          <section class="support">
-            <h2>Get help</h2>
-            <ul>
-              {supportChannels.map(({ label, href, Icon }) => (
-                <li>
-                  <Icon size={15} aria-hidden="true" />
-                  <a href={href} target="_blank" rel="noopener noreferrer">
-                    {label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
       </aside>
     </div>
   </div>
@@ -520,19 +604,41 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     flex-direction: column;
     gap: var(--grim-space-7);
   }
+  /* The left column: header, install bar and panel, all to the width of the
+     README rather than to the width of the page. The rail then runs the
+     full height beside them instead of starting a screenful down, which is
+     what left the top-right corner of the page empty. */
+  .detail-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--grim-space-7);
+    min-width: 0;
+  }
   .detail-head {
     display: flex;
-    align-items: center;
+    /* Stretch, so the logo can take the height of the whole text block
+       beside it rather than sitting centred against a third of it. */
+    align-items: stretch;
     gap: var(--grim-space-6);
     background: var(--grim-color-card);
     border: var(--grim-border-width) solid var(--grim-color-border);
     border-radius: var(--grim-radius-xl);
     padding: var(--grim-space-6) var(--grim-space-7);
   }
+  .detail-head-text {
+    min-width: 0;
+  }
   .tile {
-    flex-shrink: 0;
-    width: 3.5rem;
-    height: 3.5rem;
+    flex: 0 0 auto;
+    align-self: stretch;
+    width: auto;
+    height: auto;
+    /* Square, sized by the text block it stands beside. Bounded at both
+       ends: a one-line header must not shrink it to a favicon, and a long
+       summary must not grow it into the page. */
+    aspect-ratio: 1;
+    min-height: 3.5rem;
+    max-height: 7rem;
     border-radius: var(--grim-radius-xl);
     object-fit: cover;
   }
@@ -554,11 +660,14 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     font-family: ui-monospace, "SFMono-Regular", monospace;
   }
   .summary {
-    margin: var(--grim-space-2) 0 0;
+    margin: var(--grim-space-4) 0 0;
     color: var(--grim-color-muted);
   }
+  /* Tight to the summary above it. Evenly spaced between the name and the
+     summary it read as a third heading; who publishes this is a footnote on
+     the sentence, so it sits with the sentence. */
   .byline {
-    margin: var(--grim-space-3) 0 0;
+    margin: var(--grim-space-1) 0 0;
     color: var(--grim-color-muted);
     font-size: var(--grim-text-sm);
   }
@@ -590,6 +699,10 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   }
   .deprecated-banner {
     margin: 0;
+    /* The glyph sits on the sentence's line rather than above it. */
+    display: flex;
+    align-items: center;
+    gap: var(--grim-space-3);
     background: var(--grim-color-banner-bg);
     color: var(--grim-color-banner-fg);
     border: var(--grim-border-width) solid var(--grim-color-banner-border);
@@ -599,7 +712,7 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
   }
   .detail-body {
     display: grid;
-    grid-template-columns: 1fr 18rem;
+    grid-template-columns: minmax(0, 1fr) 18rem;
     gap: var(--grim-space-8);
     align-items: start;
   }
@@ -614,6 +727,31 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
     border: var(--grim-border-width) solid var(--grim-color-border);
     border-radius: var(--grim-radius-xl);
     padding: var(--grim-space-7) var(--grim-space-7);
+    /* Crops the oversized kind mark to the rounded edge and gives it a
+       stacking context to sit behind in — without `isolation` a
+       `z-index: -1` child escapes to the root and vanishes under the
+       panel's own background. */
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  /* Hung off the panel's bottom-right corner, cropped by the panel's own
+     rounded edge. Opacity on the element rather than in the colour: the
+     glyph's paths overlap, and a translucent fill composites every crossing
+     twice and comes out blotchy along its own joins. */
+  .detail-main :global(.panel-watermark) {
+    position: absolute;
+    z-index: -1;
+    opacity: 0.14;
+    bottom: calc(-1 * var(--grim-space-8));
+    right: calc(-1 * var(--grim-space-8));
+    pointer-events: none;
+  }
+  /* The vote rides the ribbon's right end — the panel's own row of
+     controls, and the one line on this page that was already a toolbar. */
+  .ribbon .rating-group {
+    align-self: center;
+    margin-left: auto;
   }
   /* Markdown opens with its own heading, whose margin lands on top of the
      panel padding and reads as a hole. Every panel sets its own top edge. */
@@ -735,16 +873,22 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
       grid-column: 1 / -1;
     }
   }
+  /* One panel, not three cards stacked. Beside a single tall README panel a
+     column of separately bordered boxes read as debris; the sections are
+     still separated, by a rule inside the panel rather than by a gap and a
+     second border each. */
   .detail-rail {
     display: flex;
     flex-direction: column;
-    gap: var(--grim-space-7);
-  }
-  .detail-rail section {
     background: var(--grim-color-card);
     border: var(--grim-border-width) solid var(--grim-color-border);
     border-radius: var(--grim-radius-xl);
+  }
+  .detail-rail section {
     padding: var(--grim-space-6);
+  }
+  .detail-rail section + section {
+    border-top: var(--grim-border-width) solid var(--grim-color-border);
   }
   /* Panel label. The main panel's ribbon labels match this by hand — they
      are <label>s, not headings, so they cannot join the selector. */
