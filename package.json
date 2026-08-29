@@ -12,7 +12,8 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates",
+    "NOTICE"
   ],
   "exports": {
     ".": {
@@ -36,6 +37,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.14.0",
     "@vitest/coverage-v8": "^4.1.10",
+    "@vscode/codicons": "0.0.45",
     "eslint": "^10.8.0",
     "js-yaml": "^4.1.0",
     "jsdom": "^29.1.1",

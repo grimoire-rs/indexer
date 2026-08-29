@@ -264,9 +264,20 @@ describe("frozen URLs", () => {
 // the ratings job left in the index root — the page never fetches anything.
 describe("ratings", () => {
   it("joins the sidecar onto the cards by ref", () => {
-    expect(indexHtml).toContain('title="47 upvotes"'); // starter-pack
-    expect(indexHtml).toContain('title="12 upvotes"'); // code-review
-    expect(indexHtml).toContain('title="1 upvote"'); // rust-style, singular
+    // Prefix, not the whole attribute: the count carries the thread link's
+    // own hint after it when the sidecar names one.
+    expect(indexHtml).toContain('title="47 upvotes'); // starter-pack
+    expect(indexHtml).toContain('title="12 upvotes'); // code-review
+    expect(indexHtml).toContain('title="1 upvote'); // rust-style, singular
+  });
+
+  // No forge offers a URL that casts a vote, so the count opens the thread
+  // and the extension's own `/vote` route is what actually casts one.
+  it("offers both ways to vote — the thread, and the extension", () => {
+    expect(indexHtml).toContain('href="https://github.com/acme/index/discussions/42"');
+    expect(indexHtml).toContain(
+      'href="vscode://acme.acme-vscode/vote?repo=ghcr.io%2Facme%2Fcode-review"',
+    );
   });
 
   // Every level of absence in one page: a ref the sidecar omits
@@ -274,14 +285,15 @@ describe("ratings", () => {
   // and a rating for a ref that is not in the catalog at all (`acme/gone`).
   // None of them is an error, and none of them renders a zero.
   it("leaves everything else unrated, and invents no card for an unknown ref", () => {
-    expect(indexHtml.match(/class="pill rating"/g)).toHaveLength(3);
+    expect(indexHtml.match(/class="rating-group"/g)).toHaveLength(3);
     expect(indexHtml).not.toContain("acme/gone");
     expect(indexHtml).not.toContain("0 upvotes");
   });
 
   // Anonymous by construction: one prerendered page for every visitor, so
-  // there is no "you voted" state it could be right about.
-  it("renders a count and no vote affordance", () => {
+  // there is no "you voted" state it could be right about. Offering a way to
+  // vote is not the same as claiming to know whether you have.
+  it("carries no viewer state, and no forge thread id", () => {
     expect(indexHtml).not.toContain("upvoteCount");
     expect(indexHtml).not.toContain("viewerHasUpvoted");
     // The forge's own thread id is a producer detail; it stays in the
@@ -289,9 +301,25 @@ describe("ratings", () => {
     expect(indexHtml).not.toContain("DIC_kwDO");
   });
 
-  it("offers rating as a third sort chip", () => {
-    const chips = indexHtml.match(/<div class="chips" role="group" aria-label="Sort by">[\s\S]*?<\/div>/)![0]!;
-    expect([...chips.matchAll(/>([a-z]+)<\/button>/g)].map((m) => m[1])).toEqual([
+  // The card carries the badge; the page carries the reason. `deprecated` is
+  // the publisher's own message, and dropping it left the reader with the one
+  // thing the badge already said.
+  it("states the deprecation on the detail page, with a drawn glyph", async () => {
+    const html = await readOut("p/github.com/acme/old-helper/index.html");
+    const banner = /<p class="deprecated-banner"[^>]*>([\s\S]*?)<\/p>/.exec(html)![1]!;
+    expect(banner.replace(/<[^>]+>/g, "").trim()).toBe(
+      "deprecated: 2026-06-01 — replaced by ghcr.io/acme/code-review",
+    );
+    // Every icon on this site comes from one stroked set. An emoji renders
+    // as a different glyph per platform and ignores the colour token.
+    expect(banner).toContain("lucide-triangle-alert");
+    expect(html).not.toContain("\u26a0");
+  });
+
+  it("offers rating as a third sort field", () => {
+    const select = indexHtml.match(/<select class="sort-field"[\s\S]*?<\/select>/)![0]!;
+    // `[^>]*`: the selected option carries `selected` ahead of its `value`.
+    expect([...select.matchAll(/<option[^>]*value="([a-z]+)"/g)].map((m) => m[1])).toEqual([
       "name",
       "updated",
       "rating",

@@ -23,7 +23,7 @@
  * immediately afterwards, before paint. These tests pin that.
  */
 import { hydrate, render } from "preact";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Catalog from "../../src/renderer/astro/components/Catalog.tsx";
 import type { CatalogPackage } from "../../src/renderer/types.js";
@@ -58,8 +58,23 @@ function hydrateWithQuery(markup: string, query: string): HTMLElement {
   const host = document.createElement("div");
   host.innerHTML = markup;
   document.body.append(host);
+  mounted.push(host);
   hydrate(<Catalog packages={PACKAGES} vscodeExtension={null} />, host);
   return host;
+}
+
+/**
+ * Islands mounted by a test, so they can be unmounted by it.
+ *
+ * `document.body.innerHTML = ""` drops the nodes and leaves Preact believing
+ * the component is still mounted — its state and its effects survive, and the
+ * URL-writing effect of a previous test then stamps that test's `?q=` onto
+ * the next one's location. Emptying the body is not a teardown.
+ */
+const mounted: HTMLElement[] = [];
+
+function unmountAll() {
+  for (const host of mounted.splice(0)) render(null, host);
 }
 
 /** Each visible card as (name from text, logo src, link href). */
@@ -80,6 +95,7 @@ describe("catalog hydration with a seeded query", () => {
   });
 
   afterEach(() => {
+    unmountAll();
     document.body.innerHTML = "";
     history.replaceState({}, "", "/");
     delete document.documentElement.dataset.query;
@@ -118,5 +134,153 @@ describe("catalog hydration with a seeded query", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe("charlie");
+  });
+});
+
+// The view has to survive leaving the page and coming back. Without this the
+// deprecated toggle was unreachable by Back: turn it on, open the package it
+// revealed, press Back, and the remounted catalog knew nothing about it — so
+// the card you had just been looking at was hidden again.
+//
+// It round-trips through two places, on purpose. `q` and `kind` are what you
+// are looking at, and a keyword chip on a package page deep-links `?q=`, so
+// they stay shareable in the URL. Sort, direction and deprecated visibility
+// are preferences — the same answer every visit — and live in storage, which
+// is where grim keeps `show_deprecated` too.
+describe("the view round-trips", () => {
+  const DEPRECATED = [
+    ...PACKAGES,
+    {
+      namespace: "acme",
+      name: "delta",
+      kind: "rule",
+      ref: "r.test/acme/delta",
+      deprecated: "unmaintained; use alpha",
+    },
+  ] as unknown as CatalogPackage[];
+
+  /** Mount fresh at `url` — a first-time visitor, or Back landing here. */
+  function mountAt(url: string): HTMLElement {
+    history.replaceState({}, "", url);
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={DEPRECATED} vscodeExtension={null} />, host);
+    return host;
+  }
+
+  const names = (host: HTMLElement) =>
+    [...host.querySelectorAll("li.card h2 a")].map((a) => a.textContent?.trim());
+
+  const chip = (host: HTMLElement, label: string) =>
+    [...host.querySelectorAll<HTMLElement>("button.chip")].find(
+      (b) => b.textContent?.trim().split(/\s/)[0] === label,
+    );
+
+  // Renders land in a microtask; the *plain* effects that write the URL and
+  // storage are deferred past a frame. A fixed sleep for the second kind
+  // raced on a slower run, so anything that waits on an effect polls with
+  // `vi.waitFor` instead of guessing a duration.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
+  });
+
+  it("stores the toggle as a preference, and leaves the URL alone", async () => {
+    const host = mountAt("/");
+    await settle();
+    expect(names(host), "deprecated hidden by default").not.toContain("delta");
+
+    chip(host, "deprecated")?.click();
+    await settle();
+
+    expect(names(host)).toContain("delta");
+    await vi.waitFor(() => expect(localStorage.getItem("grim.catalog.deprecated")).toBe("1"));
+    expect(location.search, "a preference is not a query").toBe("");
+    // Kind and deprecation both survive on the address line, and neither
+    // costs the name a row: the kind leads as a word, deprecation keeps its
+    // word in the foot's aside. A retired rule is still a rule, and the catalog
+    // filters on kind. The retirement *reason* is a sentence and belongs to
+    // the detail page, not to a card in an even-rowed grid.
+    const card = [...host.querySelectorAll("li.card")].find((c) =>
+      c.querySelector("h2 a")?.textContent?.includes("delta"),
+    )!;
+    expect(card.querySelector(".namespace")?.textContent).toContain("rule · acme");
+    // The watermark carries it, and is labelled precisely because it is the
+    // only deprecation signal the card has left.
+    expect(card.querySelector(".card-watermark")?.getAttribute("aria-label")).toBe("deprecated");
+    expect(card.textContent).not.toContain("unmaintained; use alpha");
+  });
+
+  it("seeds the toggle from the stored preference — Back, or a week later", async () => {
+    localStorage.setItem("grim.catalog.deprecated", "1");
+    const host = mountAt("/");
+    await settle();
+
+    expect(names(host)).toContain("delta");
+    expect(chip(host, "deprecated")?.className).toContain("active");
+  });
+
+  // The server cannot see storage any more than it can see the URL, so the
+  // first render must still be the unfiltered one it shipped.
+  it("does not read a preference during the first render", () => {
+    localStorage.setItem("grim.catalog.deprecated", "1");
+    const host = document.createElement("div");
+    render(<Catalog packages={DEPRECATED} vscodeExtension={null} />, host);
+    expect([...host.querySelectorAll("li.card h2 a")].map((a) => a.textContent)).not.toContain(
+      "delta",
+    );
+  });
+
+  const sortField = (host: HTMLElement) =>
+    host.querySelector<HTMLSelectElement>("select.sort-field")?.value;
+
+  it("takes kind from the URL and sort from storage, dropping what it does not know", async () => {
+    // `updated`, not `rating`: the rating option is offered only when some
+    // package carries one, and none of these do.
+    localStorage.setItem("grim.catalog.sort", "updated");
+    const host = mountAt("/?kind=rule");
+    await settle();
+    expect(chip(host, "rule")?.className).toContain("active");
+    expect(sortField(host)).toBe("updated");
+
+    unmountAll();
+    // `kind` reaches a class name and `sort` selects a comparator, so neither
+    // follows a hand-typed URL or a hand-edited storage entry.
+    localStorage.setItem("grim.catalog.sort", "whatever");
+    const bogus = mountAt("/?kind=../etc");
+    await settle();
+    expect(chip(bogus, "all")?.className).toContain("active");
+    expect(sortField(bogus)).toBe("name");
+  });
+
+  // Direction is per field, so picking one takes that field's own: carrying
+  // "ascending" over from a name sort would land the reader on oldest-first.
+  it("stores the direction only while it differs from the field's own", async () => {
+    localStorage.setItem("grim.catalog.sort", "updated");
+    const host = mountAt("/");
+    await settle();
+    expect(localStorage.getItem("grim.catalog.dir"), "desc is updated's own").toBeNull();
+
+    host.querySelector<HTMLElement>("button.sort-dir")!.click();
+    await vi.waitFor(() => expect(localStorage.getItem("grim.catalog.dir")).toBe("asc"));
+
+    const select = host.querySelector<HTMLSelectElement>("select.sort-field")!;
+    select.value = "name";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => {
+      expect(localStorage.getItem("grim.catalog.sort"), "name is the default").toBeNull();
+      expect(localStorage.getItem("grim.catalog.dir"), "and asc is name's own").toBeNull();
+    });
+  });
+
+  it("leaves a clean URL clean, rather than stamping defaults into it", async () => {
+    mountAt("/");
+    await settle();
+    expect(location.search).toBe("");
   });
 });

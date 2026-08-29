@@ -1,0 +1,30 @@
+grim-indexer
+Copyright 2026 The Grimoire Authors
+
+This product includes software developed by The Grimoire Authors, licensed
+under the Apache License, Version 2.0. See LICENSE.
+
+--------------------------------------------------------------------------
+Third-party assets bundled in the rendered site
+--------------------------------------------------------------------------
+
+codicons
+  https://github.com/microsoft/vscode-codicons
+  Copyright (c) Microsoft Corporation
+  Licensed under CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+
+  Six glyphs (sparkle, law, agent, mcp, package, warning) are inlined as SVG
+  path data in `src/renderer/astro/components/KindMark.tsx` and rendered into
+  every built index. Extracted from @vscode/codicons 0.0.45, unmodified. They
+  are the same marks the Grimoire VS Code extension shows for each artifact
+  kind, so one catalogue reads the same on both surfaces.
+
+Lucide
+  https://github.com/lucide-icons/lucide
+  Copyright (c) Lucide Contributors
+  Licensed under the ISC License.
+
+Material Design Icons (@mdi/js)
+  https://github.com/Templarian/MaterialDesign
+  Licensed under the Apache License, Version 2.0.
+  Used only for brand marks Lucide does not carry.

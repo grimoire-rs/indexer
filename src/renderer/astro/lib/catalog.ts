@@ -22,6 +22,30 @@ export function lastUpdated(p: CatalogPackage): string | undefined {
   return p.updated ?? p.created;
 }
 
+/**
+ * The deprecation sentence, or `null` for a package that is not deprecated.
+ *
+ * `deprecated` is the publisher's own **message**, not a date — grim's own
+ * detail pane renders it as `Deprecated: use acme/code-review-2`. Dropping it
+ * and printing the bare word left the reader with the one thing they already
+ * knew from the badge and none of the reason, so it is the message that leads
+ * here; `replacedBy` is a separate field and rides after it.
+ *
+ * The detail page states it; a card shows the `deprecated` badge and stops
+ * there. A retirement notice is usually a sentence, and a sentence on a card
+ * pushed the description out of a grid whose rows have to stay even.
+ */
+export function deprecationNote(p: CatalogPackage): string | null {
+  if (!p.deprecated) return null;
+  const reason = typeof p.deprecated === "string" ? p.deprecated.trim() : "";
+  return [
+    reason ? `deprecated: ${reason}` : "deprecated",
+    p.replacedBy ? `replaced by ${p.replacedBy}` : "",
+  ]
+    .filter(Boolean)
+    .join(" — ");
+}
+
 // Publishing 0.10.0 also moves the rolling tags 0.10, 0 and latest, so the
 // full tag list is mostly history. Return just the current release's chain
 // (latest | 0 | 0.10 | 0.10.0). `tags` must already be sorted newest-first.
@@ -115,6 +139,19 @@ export function externalUrl(raw: unknown): string | null {
 /** `vscode://<publisher.extension>/open?repo=<ref>`, or null when disabled. */
 export function vscodeUrl(extension: string | null, ref: string): string | null {
   return extension ? `vscode://${extension}/open?repo=${encodeURIComponent(ref)}` : null;
+}
+
+/**
+ * One-click upvote through the VS Code extension.
+ *
+ * `/vote?repo=` is a route the extension ships for exactly this — its own
+ * handler comment says it "lets an index page offer a one-click upvote". The
+ * link authorizes nothing on its own: the extension gates the public post
+ * behind a disclosure modal naming the forge and the thread, and it refuses
+ * to *retract* from a link at all, since a retraction waives that modal.
+ */
+export function vscodeVoteUrl(extension: string | null, ref: string): string | null {
+  return extension ? `vscode://${extension}/vote?repo=${encodeURIComponent(ref)}` : null;
 }
 
 /**

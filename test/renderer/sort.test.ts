@@ -214,9 +214,19 @@ describe("deprecated visibility", () => {
   // would otherwise accumulate across the three mounts this test makes.
   afterEach(() => {
     document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
   });
 
   function mount(): HTMLElement {
+    // The island stores sort, direction and deprecated visibility as reader
+    // preferences and seeds from them on mount, so what the previous
+    // iteration of the loop below left behind would arrive as this one's
+    // starting view and the "default" half of the test would be asserting
+    // the *previous* mode's end state. Each mount starts where a first-time
+    // visitor does.
+    localStorage.clear();
+    history.replaceState({}, "", "/");
     const host = document.createElement("div");
     document.body.append(host);
     render(h(Catalog, { packages: ROWS, vscodeExtension: null }), host);
@@ -235,6 +245,15 @@ describe("deprecated visibility", () => {
     );
   }
 
+  /** Pick a sort field in the combo box, the way a reader does. */
+  async function pickSort(host: HTMLElement, value: Sort) {
+    const select = host.querySelector<HTMLSelectElement>("select.sort-field");
+    if (!select) throw new Error("no sort field");
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
   async function click(el: HTMLElement | undefined) {
     el?.click();
     // Preact flushes a hook-driven re-render in a microtask; give it a turn
@@ -246,13 +265,12 @@ describe("deprecated visibility", () => {
   it("hides a deprecated entry by default in every sort mode, and interleaves it once the toggle brings it back", async () => {
     for (const sort of modes) {
       const host = mount();
-      if (sort !== "name") await click(chip(host, sort));
-      // rev_df_f Warn-1: without this, a missing/dead chip (`el?.click()`
-      // no-ops silently) leaves `sort` on its default "name" and the loop
-      // can't tell — this failed against two mutations (rating chip
-      // removed; both non-name chips rewired to `setSort("name")`) that
-      // the bare card-content assertions below did not catch.
-      expect(chip(host, sort)?.className, sort).toContain("active");
+      if (sort !== "name") await pickSort(host, sort);
+      // rev_df_f Warn-1: without this, a sort that never took (a missing
+      // option, a handler wired to the wrong field) leaves the mode on its
+      // default "name" and the loop can't tell — this failed against two
+      // mutations that the bare card-content assertions below did not catch.
+      expect(host.querySelector<HTMLSelectElement>("select.sort-field")?.value, sort).toBe(sort);
 
       expect(cardNames(host), `${sort}: default`).toEqual(DEFAULT_ORDER[sort]);
 

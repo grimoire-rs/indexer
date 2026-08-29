@@ -61,22 +61,38 @@ function repoLabel(url: string): string {
     <meta property="og:image" content={withBase(image)} />
     <meta name="twitter:card" content="summary" />
     <script is:inline>
+      // Reading `localStorage` *throws* in a browser set to block site data —
+      // it does not return null — and everything below this point, the
+      // command-bar helpers included, lives in the same script block. One
+      // guarded reader, so a blocked store costs a preference rather than
+      // the page.
+      const pref = (key) => {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      };
+
       // Before first paint: stored preference wins, else system scheme.
       document.documentElement.dataset.theme =
-        localStorage.getItem("theme") ??
+        pref("theme") ??
         (matchMedia("(prefers-color-scheme: dark)").matches
           ? "dark"
           : "light");
 
-      // Also before first paint: a `?q=` deep link (a keyword chip on a
-      // package page) means the catalog the server rendered — every package,
-      // empty search box — is the wrong one. Flag it so CSS holds the
-      // catalog back rather than showing the full list and collapsing it a
-      // moment later. The island drops the flag once it has applied the
-      // query — which is the render after hydration, never the hydrating one
-      // itself; the timeout is the failsafe for an island that never
-      // hydrates, where a flash beats a blank page.
-      if (new URLSearchParams(location.search).get("q")) {
+      // Also before first paint: a deep link (a keyword chip on a package
+      // page) or a stored preference means the catalog the server rendered —
+      // every package, empty search box, name order, deprecated hidden — is
+      // the wrong one. Flag it so CSS holds the catalog back rather than
+      // showing the full list and rearranging it a moment later. The island
+      // drops the flag once it has applied the view — which is the render
+      // after hydration, never the hydrating one itself; the timeout is the
+      // failsafe for an island that never hydrates, where a flash beats a
+      // blank page.
+      const view = new URLSearchParams(location.search);
+      const arranged = ["sort", "dir", "deprecated"].some((k) => pref("grim.catalog." + k));
+      if (view.get("q") || view.get("kind") || arranged) {
         document.documentElement.dataset.query = "";
         setTimeout(() => delete document.documentElement.dataset.query, 3000);
       }
@@ -824,15 +840,16 @@ function repoLabel(url: string): string {
           gap: var(--grim-space-5);
           margin-bottom: var(--grim-space-7);
         }
-        /* Full-width basis in a wrapping row: the search bar takes a line to
-           itself and pushes both chip groups onto the next one, which then
-           sit side by side. The container's 0.75rem gap separates the two
-           rows, and reads wider than the 0.4rem inside a group — so sort and
-           kind still group visually without a wrapper element. */
+        /* Wide basis, not full width: the field and the sort control share
+           the first line and the kind chips wrap to the next, and on a narrow
+           viewport the sort control drops below the field instead of
+           squeezing it. The container gap separates the rows and reads wider
+           than the gap inside a chip group, so the groups still read as
+           groups without a wrapper element. */
         .search-field {
           position: relative;
           display: flex;
-          flex: 1 1 100%;
+          flex: 1 1 22rem;
           /* Breathing room above the field when `/` scrolls it to the top of
              the viewport, so it does not sit flush against the edge. */
           scroll-margin-top: 1.25rem;
@@ -878,18 +895,20 @@ function repoLabel(url: string): string {
         .search-field:has(input:not(:placeholder-shown)) .search-hint {
           display: none;
         }
+        /* Row two of the toolbar, whole. `flex-basis: 100%` is what forces
+           the break — the search field's basis is only as wide as it needs
+           to be now, so without this the filters ride up beside it. */
+        .filter-row {
+          flex: 1 1 100%;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--grim-space-3);
+        }
         .chips {
           display: flex;
           flex-wrap: wrap;
           gap: var(--grim-space-3);
-        }
-        /* A drawn rule rather than a "|" glyph: its height is the chip row's,
-           not whatever the font gives a pipe. `stretch` overrides the
-           container's `align-items: center` for this one item. */
-        .chip-sep {
-          align-self: stretch;
-          width: 1px;
-          background: var(--grim-color-border);
         }
         /* Held at the far end of the chip row: it answers a different
            question from sort and kind — what the catalog is withholding,
@@ -905,6 +924,57 @@ function repoLabel(url: string): string {
           border-color: var(--grim-color-deprecated);
           background: var(--grim-color-chip-bg);
         }
+        /* One object with two halves — a direction cap and the field —
+           sharing an edge, and built to the search field's own measurements
+           so the pair sits level with it at the same height. Squarer than a
+           chip on purpose: a chip toggles a filter, this chooses a value,
+           and it belongs to the field beside it rather than to the row of
+           filters below. */
+        .sort-group {
+          display: flex;
+          align-items: stretch;
+          flex: 0 0 auto;
+        }
+        .sort-dir,
+        .sort-field {
+          position: relative;
+          /* The search input's own padding and type step — matching these is
+             what makes the heights agree without either being stated. */
+          padding: var(--grim-space-4) var(--grim-space-5);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          background: var(--grim-color-card);
+          color: var(--grim-color-fg);
+          font-family: inherit;
+          font-size: var(--grim-text-md);
+          cursor: pointer;
+        }
+        .sort-dir {
+          display: inline-flex;
+          align-items: center;
+          border-radius: var(--grim-radius-lg) 0 0 var(--grim-radius-lg);
+        }
+        /* Pulled onto its neighbour's border so the seam is one line, not a
+           doubled one. Derived from the token, never a hand-written -1px. */
+        .sort-field {
+          border-radius: 0 var(--grim-radius-lg) var(--grim-radius-lg) 0;
+          margin-left: calc(-1 * var(--grim-border-width));
+        }
+        .sort-dir:hover,
+        .sort-field:hover {
+          border-color: var(--grim-color-accent);
+        }
+        /* Whichever half is hovered or focused owns the shared edge. */
+        .sort-dir:hover,
+        .sort-field:hover,
+        .sort-dir:focus-visible,
+        .sort-field:focus-visible {
+          z-index: 1;
+        }
+        .sort-dir:focus-visible,
+        .sort-field:focus-visible {
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: 1px;
+        }
         .chip {
           border: var(--grim-border-width) solid var(--grim-color-border);
           background: var(--grim-color-chip-bg);
@@ -918,7 +988,7 @@ function repoLabel(url: string): string {
         .chip small {
           color: var(--grim-color-muted);
         }
-        /* button-only: the "+N" overflow chip is a span and stays inert */
+        /* button-only: a chip rendered as a span is inert and takes no hover */
         button.chip:hover {
           border-color: var(--grim-color-accent);
         }
@@ -938,11 +1008,17 @@ function repoLabel(url: string): string {
         .card {
           display: flex;
           flex-direction: column;
-          gap: var(--grim-space-3);
+          gap: var(--grim-space-5);
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
           border-radius: var(--grim-radius-xl);
           padding: var(--grim-space-6) var(--grim-space-6);
+          /* Crops the kind watermark to the card's rounded edge, and gives
+             it a stacking context to sit behind in. Without `isolation` a
+             `z-index: -1` child escapes to the root and disappears under the
+             card's own background instead of showing through it. */
+          overflow: hidden;
+          isolation: isolate;
           /* Whole card navigates to the detail page via the stretched title
              link below; real controls inside re-stack above the overlay. */
           position: relative;
@@ -951,9 +1027,7 @@ function repoLabel(url: string): string {
         }
         /* Card highlight yields while an inner control is hovered, so its
            own hover state reads as the click target instead. */
-        .card:hover:not(
-            :has(.keywords :hover, .copy-group :hover, .source:hover)
-          ) {
+        .card:hover:not(:has(.keywords :hover, .copy-group :hover, .rating-group a:hover)) {
           border-color: var(--grim-color-accent);
         }
         /* Keyboard focus wears the hover treatment rather than an outline on
@@ -964,37 +1038,103 @@ function repoLabel(url: string): string {
           outline: none;
           border-color: var(--grim-color-accent);
         }
+        /* Makes the whole card the package link. Everything interactive
+           inside it therefore has to be lifted above this — `z-index: 0`
+           here, `1` on each control, so the contract is two stated numbers
+           rather than a tree-order tie that a markup edit can reverse. */
         .card h2 a::after {
           content: "";
           position: absolute;
           inset: 0;
+          z-index: 0;
         }
         .card .keywords,
-        .card .copy-group,
-        .card .source {
+        .card .copy-group {
           position: relative;
         }
+        /* Two rows — the name, then the address — with the logo spanning
+           both down the left. A grid rather than the flex row it was: the
+           name has to be able to shrink to nothing so it can ellipsis, and
+           the address has to line up under it rather than under the logo.
+           Nothing shares those rows: every badge that tried cost the name
+           its width on a narrow card. They live in `.card-tags` below. */
         .card-head {
-          display: flex;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
           align-items: center;
-          gap: var(--grim-space-4);
+          column-gap: var(--grim-space-4);
+        }
+        .card-head .card-logo {
+          grid-row: 1 / span 2;
+        }
+        /* The address line runs the full width under the name: the kind is
+           a word on it now, not a badge in the head, so nothing sits to its
+           right to make room for. */
+        .card-head .namespace {
+          grid-column: 2 / -1;
+          grid-row: 2;
+        }
+        .card-head h2 {
+          grid-column: 2;
+          grid-row: 1;
+        }
+        /* Level with the name, in the card's top-right corner. The only
+           thing that shares this row — the kind badge that used to sit here
+           went down to the address line, which is what stopped the name
+           being squeezed between two of them. */
+        .card-head .rating-group {
+          grid-column: 3;
+          grid-row: 1;
+          justify-self: end;
+        }
+        /* Texture, not an icon: oversized and hung off the card's own
+           bottom-right corner, so `overflow: hidden` crops it to the rounded
+           edge and only its inner quadrant is on the card at all. */
+        .card-watermark {
+          position: absolute;
+          z-index: -1;
+          /* On the element, never on the stroke colour. The glyph is
+             overlapping stroked paths; a translucent colour composites each
+             crossing twice and leaves the joins visibly darker than the
+             lines they join. Opacity here rasterizes the whole glyph at full
+             strength and blends that once, so the tint is flat. */
+          opacity: 0.14;
+          bottom: calc(-1 * var(--grim-space-7));
+          right: calc(-1 * var(--grim-space-7));
+          pointer-events: none;
         }
         .card h2 {
-          flex: 1;
           min-width: 0;
           margin: 0;
           font-size: var(--grim-text-lg);
+          /* Tight, so the address sits under the name rather than a line
+             away from it — the two are one label in two parts, and the
+             body's reading leading put a paragraph break between them. */
+          line-height: 1.2;
           font-family: ui-monospace, "SFMono-Regular", monospace;
-          word-break: break-word;
         }
+        /* One line, always. A package name is a single token, so wrapping it
+           gave a two-line head on a long name and a ragged grid; the ellipsis
+           keeps every card's head the same height, and the full name is on
+           the page this links to. Colour and underline come from the card,
+           not from the link default — the whole card is the link, so the
+           name is a heading that happens to be clickable. */
         .card h2 a {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
           color: inherit;
           text-decoration: none;
         }
+        /* Geometry, not a scale step: the tile is sized to the two rows it
+           spans — the name line plus the address line under it — so it reads
+           as one block beside them rather than a badge floating against the
+           first. `.logo-mark` is a percentage of this, so the placeholder
+           and the broken glyph follow on their own. */
         .card-logo {
-          flex-shrink: 0;
-          width: 28px;
-          height: 28px;
+          width: 36px;
+          height: 36px;
           border-radius: var(--grim-radius-md);
         }
         img.card-logo {
@@ -1007,7 +1147,8 @@ function repoLabel(url: string): string {
           justify-content: center;
           color: var(--grim-color-on-accent);
           font-weight: 700;
-          font-size: var(--grim-text-sm);
+          /* Up a step with the tile: `sm` left the letter adrift in 40px. */
+          font-size: var(--grim-text-lg);
           font-family: ui-monospace, "SFMono-Regular", monospace;
         }
         /* THE LOGO SLOT — one box, three states, no layout shift.
@@ -1106,78 +1247,175 @@ function repoLabel(url: string): string {
         .chip[class*="kind-"] {
           color: var(--grim-color-fg);
         }
+        /* A step below the name and quieter: where the package lives is
+           context for the name above it, not a second heading. */
         .namespace {
           margin: 0;
           color: var(--grim-color-muted);
-          font-size: var(--grim-text-sm);
-          font-family: ui-monospace, "SFMono-Regular", monospace;
-        }
-        .meta-row {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: var(--grim-space-3);
-        }
-        .pill {
           font-size: var(--grim-text-xs);
-          color: var(--grim-color-muted);
-          border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-pill);
-          /* Optical, as above — the smallest badge in the UI. */
-          padding: 0.03rem var(--grim-space-4);
-        }
-        .pill.version {
+          line-height: 1.3;
           font-family: ui-monospace, "SFMono-Regular", monospace;
         }
-        /* The only pill carrying a glyph — inline would baseline the arrow
-           low against the digits beside it. */
-        .pill.rating {
+        /* The rating is one control with two halves — the count, which opens
+           the forge thread, and the vote, which casts one — joined the way
+           the sort combo is. It was two badges with a dash between them,
+           which read as punctuation rather than as a control. */
+        .rating-group {
+          display: inline-flex;
+          align-items: stretch;
+          /* Above the card's full-card overlay (`.card h2 a::after`), so each
+             half takes its own click instead of opening the package page.
+             Stated rather than left to tree order: the overlay and these are
+             both positioned, and "later in the DOM wins" is the kind of tie
+             a later markup edit breaks silently. */
+          position: relative;
+          z-index: 1;
+        }
+        /* Same treatment `.pill` gives the version and licence badges beside
+           them, applied per half so the border can be shared. */
+        .rating-count,
+        .rating-vote {
           display: inline-flex;
           align-items: center;
           gap: var(--grim-space-1);
-        }
-        .updated {
           font-size: var(--grim-text-xs);
           color: var(--grim-color-muted);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          /* Optical, matching `.pill` — the smallest badge in the UI. */
+          padding: 0.03rem var(--grim-space-4);
+          text-decoration: none;
         }
-        .deprecated-strip {
+        /* Lifted individually as well as through the group: whichever of the
+           two ends up establishing a stacking context, the link is above the
+           card overlay and takes its own click. */
+        .rating-count,
+        .rating-vote {
+          position: relative;
+          z-index: 1;
+        }
+        .rating-count {
+          border-radius: var(--grim-radius-pill) 0 0 var(--grim-radius-pill);
+          /* Opaque, like its tinted other half. A bordered control with a
+             see-through interior let the kind watermark run straight through
+             the count — the one place on the card where a big glyph and a
+             small control land on the same corner. */
+          background: var(--grim-color-card);
+        }
+        /* An index with no VS Code extension configured shows the count
+           alone, and a lone half is a whole pill again. */
+        .rating-count:last-child {
+          border-radius: var(--grim-radius-pill);
+        }
+        /* Tinted rather than outlined differently: this is the half that
+           posts something, and a shade says so without a second border
+           colour competing with the hover state. Pulled onto its neighbour's
+           border so the seam is one line, derived from the token. */
+        .rating-vote {
+          border-radius: 0 var(--grim-radius-pill) var(--grim-radius-pill) 0;
+          margin-left: calc(-1 * var(--grim-border-width));
+          background: var(--grim-color-chip-bg);
+          /* Wider on the outside than the seam: the glyph sat against the
+             rounded edge, which reads as clipped rather than as inset. */
+          padding-inline: var(--grim-space-3) var(--grim-space-5);
+        }
+        a.rating-count:hover,
+        a.rating-vote:hover {
+          color: var(--grim-color-accent);
+          border-color: var(--grim-color-accent);
+          /* 2, not 1: both halves already sit at 1 so they clear the card
+             overlay, and the vote half is pulled onto the count's right
+             border by a negative margin. At equal z-index the later element
+             wins, so hovering the count lit an edge its neighbour was
+             covering — the accent appeared on three sides and stopped. */
+          z-index: 2;
+        }
+        /* Version and recency as one aside. Italic and a step below the rest
+           on purpose — it is a note about the card, not one of its facts, and
+           it sits opposite two buttons that should keep the eye. Bottom-
+           aligned rather than centred on them, since a centred aside reads as
+           a third control in the row. */
+        .card-meta {
           margin: 0;
-          font-size: var(--grim-text-sm);
-          color: var(--grim-color-deprecated);
+          align-self: flex-end;
+          font-size: var(--grim-text-2xs);
+          font-style: italic;
+          color: var(--grim-color-muted);
+          white-space: nowrap;
+        }
+        .card-version {
+          font-family: ui-monospace, "SFMono-Regular", monospace;
+          font-style: normal;
         }
         /* Long descriptions would stretch their whole grid row; clamp to 3
            lines so cards stay uniform. Full text lives on the detail page. */
+        /* Exactly two lines, whether it needs them or not.
+           `line-clamp` alone only caps the tall ones; a one-line description
+           still drew a shorter block, so every card in a row started its
+           keywords and its buttons at a different height. `min-height` is the
+           other half — two lines of this leading, reserved — and the two
+           together make the block a fixed size regardless of the text. */
         .description {
           margin: 0;
           font-size: var(--grim-text-md);
+          line-height: 1.45;
+          min-height: calc(2 * 1.45em);
           /* `auto` basis, not `0`: overflow:hidden drops the min-height:auto
              floor, so a 0-basis item can collapse in an auto-height column. */
-          flex: 1 1 auto;
+          flex: 0 0 auto;
           display: -webkit-box;
           -webkit-box-orient: vertical;
-          -webkit-line-clamp: 3;
-          line-clamp: 3;
+          -webkit-line-clamp: 2;
+          line-clamp: 2;
           overflow: hidden;
         }
+        /* One row, always. A card in an auto-fill grid has to keep its
+           height predictable, and a package with long keywords was wrapping
+           to a second line and pushing the foot down out of step with its
+           neighbours.
+
+           Clipped rather than counted: a "+N" chip sits at the end of the
+           row, so it is the first thing the clip eats, and it would be
+           claiming a number while the row silently hid more. The fade says
+           "there is more" without naming a figure, and the full list is on
+           the page the card links to. Same treatment the command field uses
+           for its overflow. */
+        /* One row, whatever it holds: `nowrap` plus `hidden` means a set of
+           keywords too wide for the card is cut off rather than wrapped onto
+           a second row that would unbalance the grid.
+
+           The fade is on the row, which is full-width — so it always sits at
+           the card's right edge, and on a row whose chips fit it falls
+           entirely on empty space and shows nothing. Overflow is exactly the
+           case where a chip reaches under it, which is why no measurement
+           and no JavaScript is needed to decide. */
         .keywords {
           display: flex;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
           gap: var(--grim-space-2);
+          overflow: hidden;
+          mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent);
+        }
+        /* Each chip keeps its own width; the row gives up, not the words. */
+        .chip.keyword {
+          flex: 0 0 auto;
         }
         .chip.keyword {
           font-size: var(--grim-text-2xs);
           padding: var(--grim-space-1) var(--grim-space-4);
           color: var(--grim-color-muted);
         }
-        .chip.keyword.overflow {
-          cursor: default;
-        }
         .card-foot {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: var(--grim-space-4);
-          margin-top: var(--grim-space-4);
+        }
+        /* The slack goes above the buttons, so they line up across a row
+           however tall the cards are. The foot is the last group on every
+           card — the keywords moved up under the head — so there is one
+           element to hang it on rather than one per layout. */
+        .card-foot {
+          margin-top: auto;
         }
         .copy-group {
           display: flex;
@@ -1304,10 +1542,6 @@ function repoLabel(url: string): string {
           padding: 0;
           gap: 0;
           text-decoration: none;
-        }
-        .source {
-          font-size: var(--grim-text-sm);
-          white-space: nowrap;
         }
         .empty {
           color: var(--grim-color-muted);

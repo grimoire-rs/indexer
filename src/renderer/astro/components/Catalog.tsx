@@ -1,11 +1,34 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 // Lucide (ISC) draws the UI; brand marks come from `@mdi/js`, which Lucide
 // deliberately does not carry. No SVG on this site is hand-written.
-import { ArrowBigUp, Check, FolderRoot, Globe, Image, ImageOff } from "lucide-preact";
+import {
+  ArrowBigUp,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
+  Check,
+  FolderRoot,
+  Globe,
+  Image,
+  ImageOff,
+} from "lucide-preact";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
+import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "./KindMark.js";
 import { withBase } from "../lib/base.js";
-import { lastUpdated, timeAgo, vscodeUrl, type CatalogPackage } from "../lib/catalog.js";
+import {
+  externalUrl,
+  lastUpdated,
+  timeAgo,
+  vscodeUrl,
+  vscodeVoteUrl,
+  type CatalogPackage,
+} from "../lib/catalog.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
@@ -17,6 +40,22 @@ function kindOrder(kind: string): number {
 }
 
 export type Sort = "name" | "updated" | "rating";
+export type Dir = "asc" | "desc";
+
+/**
+ * The direction each field is *worth* reading first in — A→Z for a name,
+ * newest and best-liked first for the two ranked keys.
+ *
+ * Picking a field selects its natural direction; the toggle beside the
+ * combo box reverses that. So "descending" is not a global default a reader
+ * has to correct on every mode, and the arrow always describes what the
+ * order actually is rather than which way a flag is set.
+ */
+export const NATURAL: Record<Sort, Dir> = {
+  name: "asc",
+  updated: "desc",
+  rating: "desc",
+};
 
 type Key = (a: CatalogPackage, b: CatalogPackage) => number;
 
@@ -46,7 +85,8 @@ function updatedAt(p: CatalogPackage): number | null {
  * that is not total is a browse order that reshuffles on rebuild.
  */
 const byName: Key = (a, b) =>
-  a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }) || a.ref.localeCompare(b.ref);
+  a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }) ||
+  a.ref.localeCompare(b.ref);
 
 /**
  * Newest first. No usable date is *unknown*, not epoch 0: dating an undated
@@ -60,7 +100,8 @@ const byUpdated: Key = (a, b) => descending(updatedAt(a), updatedAt(b));
  * a fresh index is all-unrated, and zeroes would leave every one of those
  * rows comparing equal with nothing left to break the tie.
  */
-const byRating: Key = (a, b) => descending(a.rating?.up ?? null, b.rating?.up ?? null);
+const byRating: Key = (a, b) =>
+  descending(a.rating?.up ?? null, b.rating?.up ?? null);
 
 /** Each mode as a chain of keys, most significant first. */
 const CHAINS: Record<Sort, Key[]> = {
@@ -74,10 +115,18 @@ const CHAINS: Record<Sort, Key[]> = {
 // any other row when the toggle brings them back. grim's own browse order
 // (`browse_sort.rs`) has no deprecated key either; keeping this comparator
 // silent on deprecation is what keeps the two in sync.
-export function compare(a: CatalogPackage, b: CatalogPackage, sort: Sort): number {
+export function compare(
+  a: CatalogPackage,
+  b: CatalogPackage,
+  sort: Sort,
+  dir: Dir = NATURAL[sort],
+): number {
   for (const key of CHAINS[sort]) {
     const d = key(a, b);
-    if (d !== 0) return d;
+    // Reversed means reversed all the way down, the ref tiebreak included.
+    // Every chain ends on a unique key, so no two rows compare equal and
+    // negating the whole answer leaves the order just as total as it was.
+    if (d !== 0) return dir === NATURAL[sort] ? d : -d;
   }
   return 0;
 }
@@ -87,11 +136,46 @@ export function compare(a: CatalogPackage, b: CatalogPackage, sort: Sort): numbe
 // is gone on purpose: every icon now comes from one set. `FolderRoot` and
 // `Globe` are the nearest Lucide equivalents and carry the same meaning.
 
+/**
+ * The reader's own preferences, kept out of the URL.
+ *
+ * The split is deliberate and matches grim: `q` and `kind` are *what you are
+ * looking at* — a keyword chip on a package page links to `/?q=<kw>`, so that
+ * half has to stay shareable — while sort, direction and deprecated
+ * visibility are *how you like the catalog arranged*, the same answer on
+ * every visit. grim keeps `show_deprecated` in its config file for exactly
+ * that reason.
+ *
+ * Both accessors swallow: reading `localStorage` throws outright, not
+ * returns null, in a browser set to block site data, and a catalog is not
+ * worth a blank page. A reader who blocks it browses without preferences.
+ */
+const PREF = "grim.catalog.";
+
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(PREF + key);
+  } catch {
+    return null;
+  }
+}
+
+function writePref(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(PREF + key);
+    else localStorage.setItem(PREF + key, value);
+  } catch {
+    // Nothing to do and nothing to report: preferences are a convenience.
+  }
+}
+
 /** Typing inside one of these means a bare keystroke is text, not a shortcut. */
 function isTyping(el: EventTarget | null): boolean {
   const node = el as HTMLElement | null;
   if (!node) return false;
-  return node.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName);
+  return (
+    node.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName)
+  );
 }
 
 /**
@@ -160,7 +244,9 @@ function CardLogo({ pkg }: { pkg: CatalogPackage }) {
       <span
         class="card-logo card-logo-fallback"
         aria-hidden="true"
-        style={{ background: `var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))` }}
+        style={{
+          background: `var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`,
+        }}
       >
         {pkg.name[0]?.toUpperCase()}
       </span>
@@ -210,7 +296,9 @@ function CopyButton({
       // an event is how a hydrated component reaches it without either side
       // importing the other.
       document.dispatchEvent(
-        new CustomEvent("grimoire:copied", { detail: { name, value: command } }),
+        new CustomEvent("grimoire:copied", {
+          detail: { name, value: command },
+        }),
       );
       setTimeout(() => setCopied(false), 1500);
     });
@@ -226,7 +314,13 @@ function CopyButton({
       tabIndex={-1}
       onClick={copy}
     >
-      {copied ? <Check size={14} /> : variant === "global" ? <Globe size={14} /> : <FolderRoot size={14} />}
+      {copied ? (
+        <Check size={14} />
+      ) : variant === "global" ? (
+        <Globe size={14} />
+      ) : (
+        <FolderRoot size={14} />
+      )}
     </button>
   );
 }
@@ -258,6 +352,8 @@ export default function Catalog({
   const [seeded, setSeeded] = useState(false);
   const [kind, setKind] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("name");
+  // Direction, not "reversed": what the arrow draws is the order itself.
+  const [dir, setDir] = useState<Dir>(NATURAL.name);
   // Deprecated packages are hidden until asked for: a retired package is
   // noise for someone browsing what to install, and the publisher already
   // said as much by deprecating it.
@@ -267,9 +363,12 @@ export default function Catalog({
   const gridRef = useRef<HTMLUListElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
 
-  const cardsOf = () => [...(gridRef.current?.querySelectorAll<HTMLElement>("li.card") ?? [])];
+  const cardsOf = () => [
+    ...(gridRef.current?.querySelectorAll<HTMLElement>("li.card") ?? []),
+  ];
   const chipsOf = () => [
-    ...(controlsRef.current?.querySelectorAll<HTMLElement>("button.chip") ?? []),
+    ...(controlsRef.current?.querySelectorAll<HTMLElement>("button.chip") ??
+      []),
   ];
 
   /** Move focus `delta` cards along, clamping at both ends rather than wrapping. */
@@ -297,18 +396,85 @@ export default function Catalog({
     input.select();
     input.scrollIntoView({
       block: "start",
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
     });
   };
 
-  // Apply `?q=…`, now that hydration has matched the server's markup and
-  // Preact owns the tree. A layout effect rather than a plain one: the
+  /**
+   * Put the reader's view into state — the query from the URL, the
+   * preferences from storage. Neither half was there before, and the missing
+   * preference half is what made a deprecated package unreachable by Back:
+   * you turned the toggle on, opened the package, came back, and the
+   * remounted catalog knew nothing about it, so the card you had just been
+   * looking at was hidden again.
+   *
+   * Unknown values are dropped rather than trusted at both doors: `kind`
+   * reaches a class name and `sort` selects a comparator, so neither follows
+   * a hand-typed URL or a hand-edited storage entry anywhere the controls
+   * cannot go.
+   */
+  const applyView = () => {
+    const params = new URLSearchParams(location.search);
+    const k = params.get("kind");
+    const s = readPref("sort");
+    const d = readPref("dir");
+    const field: Sort = s === "updated" || s === "rating" ? s : "name";
+    setQuery(params.get("q") ?? "");
+    setKind(k && KNOWN_KINDS.includes(k) ? k : null);
+    setSort(field);
+    setDir(d === "asc" || d === "desc" ? d : NATURAL[field]);
+    // A flag: stored at all means on.
+    setShowDeprecated(readPref("deprecated") !== null);
+  };
+
+  // Apply the URL's view, now that hydration has matched the server's markup
+  // and Preact owns the tree. A layout effect rather than a plain one: the
   // resulting render must land before the browser paints, or a `?q=` visitor
   // sees the whole catalog flash past on the way to their results.
   useLayoutEffect(() => {
-    setQuery(new URLSearchParams(location.search).get("q") ?? "");
+    applyView();
     setSeeded(true);
   }, []);
+
+  // Back and Forward within the catalog — a keyword chip on a package page
+  // links to `/?q=…`, so the reader can land here more than once without a
+  // reload, and `popstate` is the only notice of it.
+  useEffect(() => {
+    const onPop = () => applyView();
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
+  }, []);
+
+  // The query, into the URL — so it can be shared, and so Back lands on the
+  // search the reader left. `replaceState`, not `pushState`: a history entry
+  // per keystroke would make Back mean "undo one letter" rather than "the
+  // page I came from". Gated on `seeded`, since writing before the URL has
+  // been read would erase a deep link on arrival.
+  useEffect(() => {
+    if (!seeded) return;
+    const params = new URLSearchParams(location.search);
+    const set = (key: string, value: string | null) =>
+      value === null ? params.delete(key) : params.set(key, value);
+    set("q", query || null);
+    set("kind", kind);
+    const search = params.toString();
+    const next = `${location.pathname}${search ? `?${search}` : ""}${location.hash}`;
+    if (next !== `${location.pathname}${location.search}${location.hash}`) {
+      history.replaceState(history.state, "", next);
+    }
+  }, [seeded, query, kind]);
+
+  // The preferences, into storage — so the next visit opens the way this one
+  // ended. Each is stored only when it is not the default, so a reader who
+  // never touched a control leaves nothing behind.
+  useEffect(() => {
+    if (!seeded) return;
+    writePref("sort", sort === "name" ? null : sort);
+    writePref("dir", dir === NATURAL[sort] ? null : dir);
+    writePref("deprecated", showDeprecated ? "1" : null);
+  }, [seeded, sort, dir, showDeprecated]);
 
   // Base.astro hides the catalog before first paint when the URL carries a
   // query. Reveal it only once the filtered render is in the DOM — keyed on
@@ -328,7 +494,8 @@ export default function Catalog({
   // shares. Bound on the document so it works wherever the reader is.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey)
+        return;
       if (isTyping(event.target)) return;
       event.preventDefault();
       focusSearch();
@@ -360,7 +527,8 @@ export default function Catalog({
       const active = document.activeElement;
       // Also true for a control *inside* a card, which is still the card
       // being selected as far as the reader is concerned.
-      const card = active instanceof HTMLElement ? active.closest("li.card") : null;
+      const card =
+        active instanceof HTMLElement ? active.closest("li.card") : null;
       if (!query && kind === null && !card) return; // nothing selected: not our key
       event.preventDefault();
       setQuery("");
@@ -498,9 +666,9 @@ export default function Catalog({
       (p.keywords ?? []).join(" "),
     ].some((field) => field.toLowerCase().includes(q));
   });
-  const shown = (showDeprecated ? matching : matching.filter((p) => !p.deprecated)).sort((a, b) =>
-    compare(a, b, sort),
-  );
+  const shown = (
+    showDeprecated ? matching : matching.filter((p) => !p.deprecated)
+  ).sort((a, b) => compare(a, b, sort, dir));
 
   // A catalog with nothing deprecated gets no toggle — a control that can
   // only ever be a no-op is worse than its absence. An index that publishes
@@ -528,91 +696,125 @@ export default function Catalog({
           {/* Decorative: the shortcut is announced by aria-keyshortcuts, so
               repeating it here would be read twice. CSS hides it as soon as
               the field is focused or holds a query. */}
-          <kbd class="search-hint" aria-hidden="true">/</kbd>
+          <kbd class="search-hint" aria-hidden="true">
+            /
+          </kbd>
         </div>
-        <div class="chips" role="group" aria-label="Sort by">
+        {/* Beside the search field rather than among the chips: choosing an
+            order is not filtering, and it is built to the field's own
+            measurements — same height, same radius — so the two read as one
+            control strip. Both halves take an ordinary tab stop; a select
+            owns ArrowLeft/Right for its options, so neither can join the
+            chips' roving arrow ring. */}
+        <div class="sort-group" role="group" aria-label="Sort by">
+          {/* Left, because that is the order the pair reads in: "descending,
+              by rating". The bars-and-arrow glyph draws the order itself —
+              tall-to-short under a down arrow — rather than labelling a flag,
+              so it stays right whichever field is selected. */}
           <button
             type="button"
-            class={sort === "name" ? "chip active" : "chip"}
+            class="sort-dir"
             data-slot="filter-chip"
-            tabIndex={chipTabIndex}
-            onKeyDown={onChipKeyDown}
-            onClick={() => setSort("name")}
+            title={
+              dir === "asc"
+                ? "Ascending — click for descending"
+                : "Descending — click for ascending"
+            }
+            aria-label={
+              dir === "asc"
+                ? "Sorted ascending; sort descending"
+                : "Sorted descending; sort ascending"
+            }
+            onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
           >
-            name
+            {dir === "asc" ? (
+              <ArrowUpNarrowWide size={15} aria-hidden="true" />
+            ) : (
+              <ArrowDownWideNarrow size={15} aria-hidden="true" />
+            )}
           </button>
-          <button
-            type="button"
-            class={sort === "updated" ? "chip active" : "chip"}
+          <select
+            class="sort-field"
             data-slot="filter-chip"
-            tabIndex={chipTabIndex}
-            onKeyDown={onChipKeyDown}
-            onClick={() => setSort("updated")}
+            aria-label="Sort by"
+            value={sort}
+            onChange={(event) => {
+              const next = (event.currentTarget as HTMLSelectElement)
+                .value as Sort;
+              setSort(next);
+              // Picking a field takes that field's own direction. Carrying
+              // the previous one over lands the reader on "oldest first"
+              // because they had asked for Z→A a moment ago.
+              setDir(NATURAL[next]);
+            }}
           >
-            updated
-          </button>
-          {hasRatings && (
-            <button
-              type="button"
-              class={sort === "rating" ? "chip active" : "chip"}
-              data-slot="filter-chip"
-              tabIndex={chipTabIndex}
-              onKeyDown={onChipKeyDown}
-              onClick={() => setSort("rating")}
-            >
-              rating
-            </button>
-          )}
+            <option value="name">name</option>
+            <option value="updated">updated</option>
+            {hasRatings && <option value="rating">rating</option>}
+          </select>
         </div>
         {/* Divides sort from filter — two different questions sharing a row.
             Decorative only: each group already carries its own aria-label,
             so this is hidden rather than announced. */}
-        <span class="chip-sep" aria-hidden="true"></span>
-        <div class="chips" role="group" aria-label="Filter by kind">
-          <button
-            type="button"
-            class={kind === null ? "chip active" : "chip"}
-            data-slot="filter-chip"
-            tabIndex={chipTabIndex}
-            onKeyDown={onChipKeyDown}
-            onClick={() => setKind(null)}
-          >
-            all <small>{counted.length}</small>
-          </button>
-          {kinds.map(([k, count]) => (
+        {/* Its own line, always. The kind filters and the deprecated toggle
+            are one row and the search field and sort control are another;
+            without this wrapper a wide viewport fits all four on one line
+            and the toolbar stops reading as two questions. */}
+        <div class="filter-row">
+          <div class="chips" role="group" aria-label="Filter by kind">
             <button
-              key={k}
               type="button"
-              class={kind === k ? `chip active kind-${k}` : `chip kind-${k}`}
+              class={kind === null ? "chip active" : "chip"}
               data-slot="filter-chip"
               tabIndex={chipTabIndex}
               onKeyDown={onChipKeyDown}
-              onClick={() => setKind(kind === k ? null : k)}
+              onClick={() => setKind(null)}
             >
-              {k} <small>{count}</small>
+              all <small>{counted.length}</small>
             </button>
-          ))}
+            {kinds.map(([k, count]) => (
+              <button
+                key={k}
+                type="button"
+                class={kind === k ? `chip active kind-${k}` : `chip kind-${k}`}
+                data-slot="filter-chip"
+                tabIndex={chipTabIndex}
+                onKeyDown={onChipKeyDown}
+                onClick={() => setKind(kind === k ? null : k)}
+              >
+                {k} <small>{count}</small>
+              </button>
+            ))}
+          </div>
+          {hasDeprecated && (
+            // A toggle, not a filter: `aria-pressed` rather than the `active`
+            // class alone, so it is announced as on/off instead of selected.
+            //
+            // No count, unlike the kind chips. Theirs is a fixed property of
+            // the catalog; this one would be the number currently hidden, which
+            // is zero once the toggle is on — so it vanished exactly when
+            // pressed and the chip changed width under the pointer.
+            <button
+              type="button"
+              class={
+                showDeprecated
+                  ? "chip deprecated-toggle active"
+                  : "chip deprecated-toggle"
+              }
+              aria-pressed={showDeprecated}
+              title={
+                showDeprecated
+                  ? "Hide deprecated packages"
+                  : "Show deprecated packages"
+              }
+              tabIndex={chipTabIndex}
+              onKeyDown={onChipKeyDown}
+              onClick={() => setShowDeprecated((on) => !on)}
+            >
+              deprecated
+            </button>
+          )}
         </div>
-        {hasDeprecated && (
-          // A toggle, not a filter: `aria-pressed` rather than the `active`
-          // class alone, so it is announced as on/off instead of selected.
-          //
-          // No count, unlike the kind chips. Theirs is a fixed property of
-          // the catalog; this one would be the number currently hidden, which
-          // is zero once the toggle is on — so it vanished exactly when
-          // pressed and the chip changed width under the pointer.
-          <button
-            type="button"
-            class={showDeprecated ? "chip deprecated-toggle active" : "chip deprecated-toggle"}
-            aria-pressed={showDeprecated}
-            title={showDeprecated ? "Hide deprecated packages" : "Show deprecated packages"}
-            tabIndex={chipTabIndex}
-            onKeyDown={onChipKeyDown}
-            onClick={() => setShowDeprecated((on) => !on)}
-          >
-            deprecated
-          </button>
-        )}
       </div>
 
       {shown.length === 0 ? (
@@ -633,60 +835,138 @@ export default function Catalog({
               tabIndex={0}
               onKeyDown={onCardKeyDown}
             >
+              {/* The kind again, as texture: the same mark the card's kind
+                  wears in the VS Code extension, enlarged into the card's
+                  top-right corner. Decorative — the kind is written on the
+                  address line — so it is aria-hidden.
+
+                  Every mark is framed on its own bounding box (see
+                  `KindMark`), so they render at one apparent size rather
+                  than at whatever fraction of the 16-unit grid each codicon
+                  happens to use.
+
+                  The colour is the token at FULL strength; the fading is
+                  `opacity` on the element, in CSS. A translucent colour is
+                  not equivalent: any glyph whose paths overlap composites
+                  each crossing twice and comes out blotchy along its own
+                  joins. Element opacity flattens the mark first and blends
+                  the result once, which is the only way the tint is even.
+
+                  A deprecated package spends it on the warning instead. The
+                  kind is written either way, so the mark is free to carry the
+                  one thing that has no words — and being the only deprecation
+                  signal on the card, it is labelled rather than hidden. */}
+              {(() => {
+                const mark = p.deprecated
+                  ? DEPRECATED_MARK
+                  : KIND_MARKS[p.kind];
+                if (!mark) return null;
+                return (
+                  <KindMark
+                    glyph={mark}
+                    class="card-watermark"
+                    size={56}
+                    role={p.deprecated ? "img" : undefined}
+                    aria-label={p.deprecated ? "deprecated" : undefined}
+                    aria-hidden={p.deprecated ? undefined : "true"}
+                    style={{
+                      color: p.deprecated
+                        ? "var(--grim-color-deprecated)"
+                        : `var(--grim-color-kind-${p.kind}, var(--grim-color-muted))`,
+                    }}
+                  />
+                );
+              })()}
               <div class="card-head">
                 <CardLogo pkg={p} />
                 <h2 data-slot="package-name">
-                  <a href={withBase(`/p/${p.namespace}/${p.name}/`)} tabIndex={-1}>
+                  <a
+                    href={withBase(`/p/${p.namespace}/${p.name}/`)}
+                    tabIndex={-1}
+                  >
                     {p.name}
                   </a>
                 </h2>
-                {p.deprecated ? (
-                  <span class="badge deprecated" data-slot="package-kind">deprecated</span>
-                ) : (
-                  <span class={`badge kind-${p.kind}`} data-slot="package-kind">{p.kind}</span>
-                )}
-              </div>
-              <p class="namespace">{p.namespace}</p>
-              {(p.version || p.license || lastUpdated(p) || p.rating) && (
-                <div class="meta-row" data-slot="package-meta">
-                  {p.version && <span class="pill version">v{p.version}</span>}
-                  {p.license && <span class="pill license">{p.license}</span>}
-                  {/* A count and nothing more. The page is prerendered once
-                      for everyone, so it cannot know whether *you* voted —
-                      showing "not voted" to someone who has would be worse
-                      than showing nothing. */}
-                  {p.rating && (
-                    <span
-                      class="pill rating"
-                      title={`${p.rating.up} upvote${p.rating.up === 1 ? "" : "s"}`}
-                    >
-                      <ArrowBigUp size={13} aria-hidden="true" />
-                      {p.rating.up}
-                    </span>
-                  )}
-                  {/* The date the sidecar derived, not the artifact's own
-                      `created`: a package republished from the same commit
-                      keeps its date, and one with no commit date at all gets
-                      the day this index first saw its current digest. */}
-                  {(() => {
-                    const at = lastUpdated(p);
-                    return at && timeAgo(at) ? (
-                      <time class="updated" datetime={at} title={at}>
-                        updated {timeAgo(at)}
-                      </time>
-                    ) : null;
+                {/* A count and two ways to add to it — never a "you voted"
+                    state: the page is prerendered once for everyone, so it
+                    cannot know whether *you* did, and showing "not voted"
+                    to someone who has would be worse than showing nothing.
+
+                    Left, the count itself, linking to the forge thread the
+                    sidecar names. No forge offers a URL that casts a vote,
+                    so this opens the thread and the reader clicks the
+                    reaction there. Right, the extension's `/vote?repo=`
+                    route, which does cast one — behind its own disclosure
+                    modal, never on the strength of this link. */}
+                {p.rating &&
+                  (() => {
+                    const votes = `${p.rating.up} upvote${p.rating.up === 1 ? "" : "s"}`;
+                    // Registry-supplied, like every other outbound string
+                    // here: through the scheme allowlist before it is an
+                    // href, whatever the sidecar spelled.
+                    const thread = externalUrl(p.rating.url);
+                    const vote = vscodeVoteUrl(vscodeExtension, p.ref);
+                    return (
+                      <span class="rating-group">
+                        {thread ? (
+                          <a
+                            class="rating-count"
+                            href={thread}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            tabIndex={-1}
+                            title={`${votes} — open the thread to vote`}
+                            aria-label={`${p.name}: ${votes}. Open the voting thread`}
+                          >
+                            <ArrowBigUp size={13} aria-hidden="true" />
+                            {p.rating.up}
+                          </a>
+                        ) : (
+                          <span class="rating-count" title={votes}>
+                            <ArrowBigUp size={13} aria-hidden="true" />
+                            {p.rating.up}
+                          </span>
+                        )}
+                        {vote && (
+                          <a
+                            class="rating-vote"
+                            href={vote}
+                            tabIndex={-1}
+                            title="Upvote in VS Code"
+                            aria-label={`Upvote ${p.name} in VS Code`}
+                          >
+                            <BrandMark
+                              path={mdiMicrosoftVisualStudioCode}
+                              size={12}
+                            />
+                          </a>
+                        )}
+                      </span>
+                    );
                   })()}
-                </div>
-              )}
-              {p.deprecated && (
-                <p class="deprecated-strip">
-                  deprecated
-                  {p.replacedBy ? ` — replaced by ${p.replacedBy}` : ""}
+                {/* Kind, then where it lives — two things, dot-separated, in
+                    the same shape the foot's `version · updated` uses. The
+                    kind leads because it is what a reader filters on; the
+                    watermark in the corner says the same thing without
+                    words. Deprecation is deliberately NOT here: a third item
+                    filled the line, and the watermark carries it. */}
+                <p class="namespace">
+                  <span class="kind" data-slot="package-kind">
+                    {p.kind}
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                  {p.namespace}
                 </p>
-              )}
-              {p.description && <p class="description">{p.description}</p>}
+              </div>
+              {/* Under the head, above the description: what the package
+                  is tagged with. One row, never two — the row gives up its
+                  overflow rather than wrapping, and fades at its right end
+                  to say there is more. */}
               {p.keywords && p.keywords.length > 0 && (
                 <div class="keywords" data-slot="package-keywords">
+                  {/* Capped at five so a package with thirty keywords does
+                      not render thirty chips off the side of a clipped row.
+                      Which of the five actually fit is the row's business. */}
                   {p.keywords.slice(0, 5).map((kw) => (
                     <button
                       key={kw}
@@ -698,13 +978,9 @@ export default function Catalog({
                       {kw}
                     </button>
                   ))}
-                  {p.keywords.length > 5 && (
-                    <span class="chip keyword overflow">
-                      +{p.keywords.length - 5}
-                    </span>
-                  )}
                 </div>
               )}
+              {p.description && <p class="description">{p.description}</p>}
               <div class="card-foot">
                 <div class="copy-group">
                   {/* Global first, matching the hero's scope picker — the two
@@ -715,7 +991,10 @@ export default function Catalog({
                     variant="global"
                     name={`global add for ${p.name}`}
                   />
-                  <CopyButton command={`grim add ${p.ref}`} name={`project add for ${p.name}`} />
+                  <CopyButton
+                    command={`grim add ${p.ref}`}
+                    name={`project add for ${p.name}`}
+                  />
                   {vscodeUrl(vscodeExtension, p.ref) && (
                     <a
                       class="copy vscode"
@@ -728,17 +1007,37 @@ export default function Catalog({
                     </a>
                   )}
                 </div>
-                {p.repository && (
-                  <a
-                    class="source"
-                    href={p.repository}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    tabIndex={-1}
-                  >
-                    source
-                  </a>
-                )}
+                {/* Version and recency, on their own line under the buttons.
+                    Both answer the same question — how current is this — so
+                    they read as one stamp; alongside the buttons they were a
+                    third thing competing for the card's last row, which is
+                    where the vote badge now sits.
+
+                    The date is the one the sidecar derived, not the
+                    artifact's own `created`: a package republished from the
+                    same commit keeps its date, and one with no commit date
+                    at all gets the day this index first saw its current
+                    digest. Licence is gone from the card entirely; it
+                    matters when adopting a package, not when scanning for
+                    one, and the detail page states it. */}
+                {(() => {
+                  const at = lastUpdated(p);
+                  const ago = at && timeAgo(at) ? timeAgo(at) : null;
+                  if (!p.version && !ago) return null;
+                  return (
+                    <p class="card-meta" data-slot="package-meta">
+                      {p.version && (
+                        <span class="card-version">v{p.version}</span>
+                      )}
+                      {p.version && ago && <span aria-hidden="true"> · </span>}
+                      {ago && at && (
+                        <time datetime={at} title={at}>
+                          updated {ago}
+                        </time>
+                      )}
+                    </p>
+                  );
+                })()}
               </div>
             </li>
           ))}
