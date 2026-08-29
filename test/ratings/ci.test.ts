@@ -73,6 +73,7 @@ interface Step {
   uses?: string;
   run?: string;
   env?: Record<string, string>;
+  with?: Record<string, unknown>;
   "continue-on-error"?: boolean;
 }
 interface Job {
@@ -148,6 +149,21 @@ describe("the generated ratings job — GitHub", () => {
   it("re-tallies on a schedule, not only on a push", () => {
     expect((load("github", RATINGS).on as Record<string, unknown>).schedule).toBeDefined();
     expect((load("github").on as Record<string, unknown>).schedule).toBeUndefined();
+  });
+
+  // `.stats.json` is hidden, and upload-artifact drops hidden files by
+  // default. Observed live: the tally reported `created=12/12 tallied=12` and
+  // uploaded nothing, so `build` fell back to the seed and published an empty
+  // rating set while every job was green.
+  it("uploads the tally even though the sidecar is a dotfile", () => {
+    const steps = jobs(load("github", RATINGS)).ratings.steps ?? [];
+    const upload = steps.find((step) => (step.uses ?? "").includes("upload-artifact"));
+
+    expect(upload, "no artifact upload").toBeDefined();
+    expect(upload?.with?.path).toBe(STATS_FILE);
+    expect(upload?.with?.["include-hidden-files"]).toBe(true);
+    // A run that reported success and wrote nothing is a bug, not an empty tally.
+    expect(upload?.with?.["if-no-files-found"]).toBe("error");
   });
 
   it("prefers a fresh tally and falls back to the published sidecar", () => {
