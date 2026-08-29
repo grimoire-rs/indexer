@@ -18,7 +18,7 @@
       "command": "irm https://setup.example.test/ps1 | iex"
     }
   ],
-  "vscodeExtension": "acme.acme-vscode",
+  "vscodeExtension": "grimoire-rs.grimoire-vscode",
   "registry": {
     "alias": "dev",
     "index": "https://index.example.test"
