@@ -1088,8 +1088,14 @@ function repoLabel(url: string): string {
           justify-self: end;
         }
         /* Texture, not an icon: oversized and hung off the card's own
-           bottom-right corner, so `overflow: hidden` crops it to the rounded
-           edge and only its inner quadrant is on the card at all. */
+           bottom-right corner, so `overflow: hidden` clips it to the rounded
+           edge and only part of the glyph is on the card at all.
+           The overhang is a share of the glyph, not a length: `translate`
+           resolves its percentages against the element's own box, so the
+           card and the detail panel hang their marks out by the same
+           fraction even though the two are drawn at different sizes. An
+           inset percentage would not — those resolve against the container,
+           which is a different width on each page. */
         .card-watermark {
           position: absolute;
           z-index: -1;
@@ -1099,8 +1105,9 @@ function repoLabel(url: string): string {
              lines they join. Opacity here rasterizes the whole glyph at full
              strength and blends that once, so the tint is flat. */
           opacity: 0.14;
-          bottom: calc(-1 * var(--grim-space-7));
-          right: calc(-1 * var(--grim-space-7));
+          bottom: 0;
+          right: 0;
+          transform: translate(26%, 26%);
           pointer-events: none;
         }
         .card h2 {

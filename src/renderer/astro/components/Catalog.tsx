@@ -865,7 +865,7 @@ export default function Catalog({
                   <KindMark
                     glyph={mark}
                     class="card-watermark"
-                    size={56}
+                    size={112}
                     role={p.deprecated ? "img" : undefined}
                     aria-label={p.deprecated ? "deprecated" : undefined}
                     aria-hidden={p.deprecated ? undefined : "true"}

@@ -743,8 +743,11 @@ const headMarkColor = pkg.deprecated
     position: absolute;
     z-index: -1;
     opacity: 0.14;
-    bottom: calc(-1 * var(--grim-space-8));
-    right: calc(-1 * var(--grim-space-8));
+    bottom: 0;
+    right: 0;
+    /* Same 26% of its own box as the card's mark — see `.card-watermark`
+       in `Base.astro` for why this is a translate and not an inset. */
+    transform: translate(26%, 26%);
     pointer-events: none;
   }
   /* The vote rides the ribbon's right end — the panel's own row of
