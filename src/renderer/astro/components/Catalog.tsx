@@ -458,9 +458,26 @@ export default function Catalog({
    * shape that makes a layout thrash, and this runs per keystroke.
    */
   useLayoutEffect(() => {
+    // Undo whatever the last pass left on the chips before measuring
+    // anything. Two reasons, and both were visible: `getBoundingClientRect`
+    // reports the *translated* box, so a chip caught mid-slide would be
+    // measured where it is drawn rather than where it belongs and the next
+    // inversion would compound that error; and a chip whose play frame never
+    // ran is still carrying `transition: none` with an offset, which is a chip
+    // frozen off its seat. Clearing here is what unfreezes it.
+    //
+    // Mid-slide is not a rare case: the fit measurement above commits a second
+    // time whenever the rescore changes how many chips fit, and that commit
+    // lands between this one and its animation frame.
+    for (const el of railRefs.current.values()) {
+      el.style.transition = "";
+      el.style.translate = "";
+    }
     const previous = railRects.current;
     const current = new Map<string, DOMRect>();
     const moved: { el: HTMLElement; dx: number; dy: number }[] = [];
+    // A second pass, deliberately: every write above is flushed before the
+    // first read below, rather than interleaving them per chip.
     for (const [keyword, el] of railRefs.current) {
       const rect = el.getBoundingClientRect();
       current.set(keyword, rect);
@@ -482,7 +499,19 @@ export default function Catalog({
         el.style.translate = "";
       }
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      // Cancelling is not enough on its own. Nothing else takes these off, so
+      // a commit landing before the frame ran would leave every moved chip
+      // sitting at its inverted offset with transitions disabled — the rail
+      // stopping halfway and staying there. Deselecting the last keyword is
+      // the reliable way to see it: the rescore is at its largest, so the fit
+      // changes and the extra commit always lands.
+      for (const { el } of moved) {
+        el.style.transition = "";
+        el.style.translate = "";
+      }
+    };
   });
 
   /** Move focus `delta` cards along, clamping at both ends rather than wrapping. */
