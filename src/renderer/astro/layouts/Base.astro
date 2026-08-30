@@ -1486,11 +1486,11 @@ function repoLabel(url: string): string {
            the container rather than cutting square across it. */
         .table {
           display: grid;
-          /* kind | name | description | updated. The name is capped rather
-             than `max-content`: an unbounded name ate the description's
-             space, and past the cap both clip instead. The description is
-             the only track that grows. */
-          grid-template-columns: auto minmax(8rem, 14rem) 1fr auto;
+          /* kind | logo | name | description | updated. The name is capped
+             rather than `max-content`: an unbounded name ate the
+             description's space, and past the cap both clip instead. The
+             description is the only track that grows. */
+          grid-template-columns: auto auto minmax(8rem, 14rem) 1fr auto;
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
           /* `xl`, the content-surface step — the same one the card wears.
@@ -1504,7 +1504,7 @@ function repoLabel(url: string): string {
         /* One more track when the index publishes ratings. Decided once per
            index, never per filter — see `PackageTable`. */
         .table.rated {
-          grid-template-columns: auto minmax(8rem, 14rem) 1fr auto auto;
+          grid-template-columns: auto auto minmax(8rem, 14rem) 1fr auto auto;
         }
         .table .row {
           grid-column: 1 / -1;
@@ -1573,6 +1573,20 @@ function repoLabel(url: string): string {
         .t-kind svg {
           vertical-align: middle;
         }
+        /* The card's tile at a row's height. Geometry, not a scale step, and
+           measured against the text line beside it rather than against the
+           kind mark: 20px is the tile that reads as belonging to the name
+           without making the row taller than one line of type. `.logo-mark`
+           and the fallback letter are proportions of the tile, so both follow
+           on their own — only the letter needs a step down, since the card's
+           is sized for a 36px tile. */
+        .t-logo .card-logo {
+          width: 20px;
+          height: 20px;
+        }
+        .t-logo .card-logo-fallback {
+          font-size: var(--grim-text-2xs);
+        }
         /* The fallback for a kind this renderer has no mark for. */
         .t-kind-word {
           font-size: var(--grim-text-2xs);
@@ -1620,17 +1634,20 @@ function repoLabel(url: string): string {
         .t-kind {
           grid-column: 1;
         }
-        .t-name {
+        .t-logo {
           grid-column: 2;
         }
-        .t-desc {
+        .t-name {
           grid-column: 3;
         }
-        .t-updated {
+        .t-desc {
           grid-column: 4;
         }
-        .t-rating {
+        .t-updated {
           grid-column: 5;
+        }
+        .t-rating {
+          grid-column: 6;
         }
         /* Narrow viewports lose the description rather than scroll sideways:
            it is context for the name beside it, and the detail page states it
@@ -1639,19 +1656,19 @@ function repoLabel(url: string): string {
         @media (max-width: 40rem) {
           .table,
           .table.rated {
-            grid-template-columns: auto minmax(6rem, 1fr) auto;
+            grid-template-columns: auto auto minmax(6rem, 1fr) auto;
           }
           .table.rated {
-            grid-template-columns: auto minmax(6rem, 1fr) auto auto;
+            grid-template-columns: auto auto minmax(6rem, 1fr) auto auto;
           }
           .t-desc {
             display: none;
           }
           .t-updated {
-            grid-column: 3;
+            grid-column: 4;
           }
           .t-rating {
-            grid-column: 4;
+            grid-column: 5;
           }
         }
 
