@@ -933,6 +933,20 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .chip.deprecated-toggle {
           flex-shrink: 0;
         }
+        /* Lifts every keyword at once, and is only in the markup while there
+           is one to lift — so it never competes with the rail for room in the
+           common case. Muted until hovered: it undoes work, and it should not
+           read as another facet to pick. */
+        .chip.kw-clear {
+          flex-shrink: 0;
+          gap: var(--grim-space-2);
+          color: var(--grim-color-muted);
+        }
+        .chip.kw-clear:hover,
+        .chip.kw-clear:focus-visible {
+          border-color: var(--grim-color-accent);
+          color: var(--grim-color-fg);
+        }
         .kw-menu {
           flex-shrink: 0;
         }

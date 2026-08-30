@@ -531,6 +531,37 @@ describe("the keyword overflow menu", () => {
     expect(trigger!.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("offers a clear only while there is something to clear", async () => {
+    const host = mount();
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+    await settle();
+
+    // Nothing picked: the control is absent, not disabled — this row runs out
+    // of room before any other, and a permanently visible no-op costs a chip's
+    // width of it.
+    expect(host.querySelector("button.kw-clear")).toBeNull();
+
+    host.querySelector<HTMLElement>("button.chip.kw")!.click();
+    await vi.waitFor(() =>
+      expect(host.querySelector("button.kw-clear")).not.toBeNull(),
+    );
+    expect(host.querySelector("button.kw-clear")!.textContent).toContain("clear 1");
+
+    host.querySelector<HTMLElement>("button.kw-clear")!.click();
+    await vi.waitFor(() =>
+      expect(host.querySelector("button.kw-clear")).toBeNull(),
+    );
+    // Keywords only. Escape is what clears the search and the kinds with them;
+    // a button that quietly did the same would undo a filter nobody asked
+    // about.
+    expect(location.search).toBe("");
+    expect(
+      [...host.querySelectorAll<HTMLElement>("button.chip.kw")].every(
+        (chip) => chip.getAttribute("aria-pressed") === "false",
+      ),
+    ).toBe(true);
+  });
+
   it("is no longer a details element", () => {
     const host = mount();
     // `<details>` is what clipped: it can only position its panel inside the

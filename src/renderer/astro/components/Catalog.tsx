@@ -12,6 +12,7 @@ import {
   ArrowUpNarrowWide,
   LayoutGrid,
   List,
+  X,
 } from "lucide-preact";
 import { PackageCard } from "./PackageCard.js";
 import { PackageRow } from "./PackageRow.js";
@@ -1083,6 +1084,37 @@ export default function Catalog({
                 </div>
               </div>
             </div>
+          )}
+          {keywords.length > 0 && (
+            // Lifts every keyword at once. Only rendered while there is
+            // something to lift — a permanently visible control that does
+            // nothing most of the time is a chip's width spent on nothing, and
+            // this row is already the one that runs out of room first.
+            //
+            // Keywords only, deliberately. Escape clears the search and the
+            // kinds along with them, and a button that quietly did the same
+            // would undo a filter the reader did not ask about; the label
+            // names exactly what it lifts.
+            <button
+              type="button"
+              class="chip kw-clear"
+              data-slot="filter-chip"
+              title="Clear the keyword filters"
+              onKeyDown={onChipKeyDown}
+              onClick={(e) => {
+                setKeywords([]);
+                // This button is the last thing standing when it is pressed:
+                // clearing the facets unmounts it, and focus would land on
+                // `<body>`, sending a keyboard reader back to the top of the
+                // document. `detail === 0` is a click synthesized by Enter or
+                // Space, so a pointer user is left alone and a keyboard one
+                // gets the toolbar's own anchor instead of nothing.
+                if (e.detail === 0) searchRef.current?.focus();
+              }}
+            >
+              <X size={13} aria-hidden="true" />
+              clear {keywords.length}
+            </button>
           )}
           {hasDeprecated && (
             // A toggle, not a filter: `aria-pressed` rather than the `active`
