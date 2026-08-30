@@ -21,6 +21,8 @@ props `{ pkg }` → `{ pkg, compact }`.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-31
+
 ### Added
 
 - **`grim-indexer dev --host [addr]`.** Bare, it binds every interface; with a
@@ -69,6 +71,22 @@ props `{ pkg }` → `{ pkg, compact }`.
   failed, and `role="img"` with a label is what announces it. The
   initial-letter tile a package with no logo gets is unchanged: there the
   coloured ground is the mark.
+- **The dev server's URL is a legal URL when the server binds an IPv6
+  address.** An unbracketed literal reads its own colons as a port, so
+  `http://::1:4321/` threw `ERR_INVALID_URL` at the first `new URL` against it
+  and took `dev:smoke` down with a message naming neither the address nor the
+  host. Wildcard binds still become `localhost`; anything carrying a colon is
+  bracketed.
+- **The detail page's logo tile is a fixed square.** `aspect-ratio: 1` derived
+  its width from the height the box had *before* `align-self: stretch` grew it,
+  so it rendered 56x93 beside a logo and 56x70 beside a letter — portrait,
+  never square, and narrow enough to read as bounding the image rather than
+  framing it.
+- **The list row's glyphs sit on the row's centre.** `vertical-align: middle`
+  aligns to half the parent's x-height, about 2px under the line's true middle
+  at this step, and the upvote arrow's optical nudge added a third pixel the
+  same way. The kind and rating cells are flex boxes now and centre their
+  contents as boxes.
 - **Keyword chips could freeze part-way through the rail's slide.** The rail
   animates a rescore by inverting each chip with an inline `translate` and
   dropping it on the next animation frame. A rescore that also changes how many
@@ -247,5 +265,6 @@ props `{ pkg }` → `{ pkg, compact }`.
   boot can leave a `.index-*` holding Vite's `deps_temp_<hash>`, which the
   dependency optimizer recreates after the removal has already returned.
 
-[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/grimoire-rs/indexer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/grimoire-rs/indexer/compare/v0.4.4...v0.5.0
