@@ -849,10 +849,6 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           font-size: var(--grim-text-md);
           min-width: 0;
         }
-        .controls input[type="search"]:focus-visible {
-          outline: 2px solid var(--grim-color-accent);
-          outline-offset: 1px;
-        }
         /* The `/` shortcut, shown as the key it is. It is a hint for a field
            that is not yet in use, so it withdraws the moment the field is
            focused or holds a query — at which point it would only be
@@ -1026,11 +1022,6 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .sort-field:focus-visible {
           z-index: 1;
         }
-        .sort-dir:focus-visible,
-        .sort-field:focus-visible {
-          outline: 2px solid var(--grim-color-accent);
-          outline-offset: 1px;
-        }
         /* One box for every chip in the filter row — the kinds, the keywords,
            the deprecated toggle and the overflow menu's trigger alike. The
            line-height is stated rather than inherited because a `<summary>`
@@ -1143,10 +1134,6 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           font: inherit;
           font-size: var(--grim-text-sm);
         }
-        .kw-menu-search:focus-visible {
-          outline: 2px solid var(--grim-color-accent);
-          outline-offset: 1px;
-        }
         .kw-menu-list {
           display: flex;
           flex-direction: column;
@@ -1240,9 +1227,26 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .view-pick.active {
           z-index: 1;
         }
+
+        /* One focus ring for every bordered control in the toolbar, and it is
+           the card's: the border takes the accent and the outline sits
+           directly on it, so the two merge into one thicker edge.
+
+           An offset ring is what put two borders on the sort combo. Hover
+           already tints the border, so a ring standing 1px clear of it drew a
+           second line in the same colour — one state reading as two. Every
+           control here tints its border on hover or while active, so the
+           offset had to go from all of them together rather than from the one
+           that was reported. */
+        .chip:focus-visible,
+        .controls input[type="search"]:focus-visible,
+        .kw-menu-search:focus-visible,
+        .sort-dir:focus-visible,
+        .sort-field:focus-visible,
         .view-pick:focus-visible {
           outline: 2px solid var(--grim-color-accent);
-          outline-offset: 1px;
+          outline-offset: 0;
+          border-color: var(--grim-color-accent);
         }
 
         .grid {
