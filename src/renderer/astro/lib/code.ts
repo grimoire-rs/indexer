@@ -7,8 +7,8 @@
  * Shiki is what Astro already ships — the same highlighter VS Code renders
  * with — so nothing here adds a library; this only stops the two consumers
  * drifting onto different themes. The markdown pipeline reads it through
- * `astro.config`'s `shikiConfig`, and the `<Code>` component on the package
- * page takes it as a prop.
+ * `astro.config`'s `shikiConfig`, and `CodeBlock.astro` — what every
+ * hand-written snippet on the site goes through — passes it to `<Code>`.
  *
  * A *pair*, not one theme: with a single theme a block stays dark on a light
  * page. Given two, Shiki writes the light colour as an inline style and the

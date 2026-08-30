@@ -137,6 +137,8 @@ components/PackageCard.tsx    one grid card
 components/PackageRow.tsx     one table row
 components/CardLogo.tsx       the logo slot, with its three states
 components/CopyButton.tsx     a card's copy button
+components/CodeBlock.astro    a highlighted code block, copyable, with an
+                              optional VS Code button
 components/KindMark.tsx       the glyph for a package kind
 components/BrandMark.tsx      an @mdi/js brand glyph
 styles/tokens.css             the token sheet

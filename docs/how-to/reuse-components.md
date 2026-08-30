@@ -63,21 +63,55 @@ const { config } = data;
 Both bars are derived from *your* `install` and `registry` config, so the
 commands cannot drift from the ones the landing page shows.
 
-| Prop | Meaning |
-|---|---|
-| `choices` | The commands offered. One renders a bare field; more than one adds the picker. Empty is legal — a bar can be nothing but its action segment |
-| `noun` | What the copy toast calls it, after the choice name: `"install command"` becomes `"Linux install command"` |
-| `copyLabel` | Accessible name for the field |
-| `pickerTitle`, `pickerLabel` | Tooltip and accessible name for the picker |
-| `detect` | Preselect the visitor's own platform before first paint. Only meaningful when the choices *are* platforms |
+## Code blocks
 
-An `action` slot fills the trailing segment:
+`CommandBar` is for a command a reader copies and runs. Anything else you want
+to show as code — a config snippet, a workflow file, a JSON descriptor — is
+`CodeBlock`, which wears the site's own frame, the same Shiki theme pair as
+every rendered README, and the same copy button.
 
 ```astro
-<CommandBar choices={choices} noun="add command" copyLabel="Copy it">
-  <a slot="action" class="seg brand-link" href={deepLink}>…</a>
-</CommandBar>
+---
+import CodeBlock from "@grim/components/CodeBlock.astro";
+import { vscodeUrl } from "@grim/lib/catalog";
+import { data } from "@grim/lib/data";
+---
+
+<CodeBlock
+  code={`{
+  "registry": { "alias": "acme", "index": "https://index.acme.example" }
+}`}
+  lang="json"
+  name="config snippet"
+/>
+
+<CodeBlock
+  code="grim add acme/code-review"
+  name="add command"
+  vscodeHref={vscodeUrl(data.config.vscodeExtension, "acme/code-review")}
+  vscodeLabel="Open code-review in VS Code"
+/>
 ```
+
+| Prop | Meaning |
+|---|---|
+| `code` | The snippet, verbatim. What the copy button copies |
+| `lang` | Shiki language id. Default `sh` |
+| `name` | What the copy toast calls it, e.g. `"add command"` |
+| `vscodeHref` | Any URL for the trailing button. `null` or omitted draws none |
+| `vscodeLabel` | Accessible name for that button. Default `"Open in VS Code"` |
+
+`vscodeHref` is a plain URL, not an extension id, so any deep link works —
+`vscodeUrl`, `vscodeVoteUrl` and `addRegistryUrl` from `@grim/lib/catalog`, or
+one you write. All three return `null` when the index sets
+`vscodeExtension: null`, which is exactly what the prop wants for "no button".
+
+!!! note "The copy button is added by the layout, not by the component"
+    `Base.astro` puts one on every code block on the page, because a block
+    inside rendered markdown has no markup to hang one on. `CodeBlock` ships
+    the slot it lands in. That is why there is one button and one toast whether
+    the block came from a README or from your page — and why a block still
+    needs the layout's script to be copyable.
 
 ## The choice helpers
 
@@ -97,9 +131,11 @@ An `action` slot fills the trailing segment:
 | `@grim/components/CommandField.astro` | One copyable command, no picker |
 | `@grim/components/PickerMenu.astro` | The choice menu alone |
 | `@grim/components/KindMark.tsx` | The glyph for a package kind |
+| `@grim/components/BrandMark.tsx` | An `@mdi/js` brand glyph — the VS Code and platform marks |
+| `@grim/components/CodeBlock.astro` | A highlighted, copyable code block |
 | `@grim/lib/data` | `{ config, packages, css }`, the build-time payload |
 | `@grim/lib/base` | `withBase(url)` — prefixes the deployment base — and `linkAttrs(link)`, the `target`/`rel` a nav or footer entry gets |
-| `@grim/lib/catalog` | Presentational helpers: `timeAgo`, `lastUpdated`, `externalUrl`, `vscodeUrl` |
+| `@grim/lib/catalog` | Presentational helpers: `timeAgo`, `lastUpdated`, `externalUrl`, and the deep-link builders `vscodeUrl`, `vscodeVoteUrl`, `addRegistryUrl` |
 
 !!! warning "`@grim/lib/data` is build-time only"
     It inlines the whole catalog. Importing it from a component that hydrates

@@ -1,0 +1,74 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 The Grimoire Authors
+
+// A highlighted code block wearing the site's own copy affordance, and
+// optionally a link out to VS Code.
+//
+// It exists for the same reason `CommandBar.astro` does: an index's own page
+// under `theme/pages/` should be able to draw what the rest of the site draws
+// rather than a `<pre>` that looks almost like it. A setup guide showing a
+// config snippet, a publish guide showing a workflow — both want this, and
+// neither wants to restate the Shiki theme pair or the copy markup.
+//
+//   ---
+//   import CodeBlock from "@grim/components/CodeBlock.astro";
+//   import { vscodeUrl } from "@grim/lib/catalog";
+//   import { data } from "@grim/lib/data";
+//   ---
+//   <CodeBlock code="grim add acme/code-review" name="add command"
+//              vscodeHref={vscodeUrl(data.config.vscodeExtension, "acme/code-review")}
+//              vscodeLabel="Open in VS Code" />
+//
+// The copy button itself is NOT rendered here. `Base.astro` injects one into
+// every code block on the page — it has to, because a block inside rendered
+// markdown has no markup to hang one on — and it fills the `.code-actions`
+// slot below when it finds it. One button, one clipboard path, one toast, and
+// no second copy of the markup to drift.
+import { Code } from "astro:components";
+import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
+import { BrandMark } from "./BrandMark.tsx";
+import { SHIKI_THEMES } from "../lib/code";
+
+interface Props {
+  /** The snippet, verbatim. What the copy button copies. */
+  code: string;
+  /** Shiki language id. `sh` covers the commands this site mostly shows. */
+  lang?: string;
+  /** What the copy toast calls this, e.g. `"add command"`. */
+  name?: string;
+  /**
+   * Any URL for the trailing button — a `vscode://` deep link from
+   * `@grim/lib/catalog`'s builders, or one written by hand. Null or omitted
+   * draws no button, which is what an index with `vscodeExtension: null` gets
+   * from those builders.
+   */
+  vscodeHref?: string | null;
+  /** Accessible name for that button. */
+  vscodeLabel?: string;
+}
+
+const {
+  code,
+  lang = "sh",
+  name,
+  vscodeHref = null,
+  vscodeLabel = "Open in VS Code",
+} = Astro.props;
+---
+
+<div class="code-block" data-slot="code-block" data-copy-name={name}>
+  <Code code={code} lang={lang} themes={SHIKI_THEMES} />
+  {/* Present even when empty: it is where `Base.astro` puts the copy button,
+      and a block that renders one before the script runs would flash a second
+      one after it. */}
+  <span class="code-actions">
+    {
+      vscodeHref && (
+        <a class="code-vscode" href={vscodeHref} title={vscodeLabel} aria-label={vscodeLabel}>
+          <BrandMark path={mdiMicrosoftVisualStudioCode} size={15} />
+        </a>
+      )
+    }
+  </span>
+</div>

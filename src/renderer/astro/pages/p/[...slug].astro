@@ -21,6 +21,7 @@ import {
 import Base from "../../layouts/Base.astro";
 import VersionMenu from "../../components/VersionMenu.astro";
 import CommandBar from "../../components/CommandBar.astro";
+import CodeBlock from "../../components/CodeBlock.astro";
 import { BrandMark } from "../../components/BrandMark.tsx";
 import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "../../components/KindMark.tsx";
 import {
@@ -31,7 +32,6 @@ import {
   mdiMicrosoftVisualStudioCode,
 } from "@mdi/js";
 import { withBase } from "../../lib/base";
-import { SHIKI_THEMES } from "../../lib/code";
 import {
   compareVersions,
   deprecationNote,
@@ -47,7 +47,6 @@ import {
 import { addArtifactChoices } from "../../lib/commands";
 import { data } from "../../lib/data";
 import { getEntry, render } from "astro:content";
-import { Code } from "astro:components";
 
 export function getStaticPaths() {
   return data.packages.map((pkg) => ({
@@ -382,10 +381,10 @@ const headMarkColor = pkg.deprecated
                     ))}
                   </ul>
                 ) : (
-                  <Code
+                  <CodeBlock
                     code={JSON.stringify(contentsData, null, 2)}
                     lang="json"
-                    themes={SHIKI_THEMES}
+                    name="contents"
                   />
                 )}
               </div>

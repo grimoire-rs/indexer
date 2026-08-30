@@ -241,6 +241,7 @@ describe("the data-slot contract", () => {
     "catalog",
     "catalog-search",
     "catalog-toolbar",
+    "code-block",
     "deprecated-banner",
     "detail-body",
     "detail-header",

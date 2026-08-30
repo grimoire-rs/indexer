@@ -808,7 +808,30 @@ describe("config reaches the rendered HTML", () => {
     // markdown — there is no authored markup to hang a button on. It joins
     // the one clipboard path by carrying `data-copy`, like every other.
     expect(detailHtml).toContain('btn.className = "code-copy"');
-    expect(detailHtml).toContain('btn.dataset.copyName = "code block"');
+    // A block `CodeBlock.astro` rendered names itself; a markdown fence,
+    // which has no markup to name itself with, falls back.
+    expect(detailHtml).toContain('wrapper.dataset.copyName || "code block"');
+  });
+
+  // `CodeBlock.astro` is the reusable half of the above: an index's own page
+  // gets the site's code styling, the same copy button, and a VS Code link if
+  // it wants one. The detail page's contents descriptor is what renders it
+  // here — everything asserted below is markup the component shipped, not
+  // markup the injector built.
+  it("ships a reusable code block with an action slot", async () => {
+    const mcp = await readOut("p/registry.example/team/bare/index.html");
+    expect(mcp).toMatch(
+      /<div class="code-block" data-slot="code-block" data-copy-name="contents">/,
+    );
+    // The slot the injector fills, present before any script runs — so the
+    // button lands beside a VS Code link instead of on top of it.
+    expect(mcp).toContain('<span class="code-actions">');
+    // One wrapper, not two: the injector adopts this one rather than nesting
+    // a second positioning context around the same `<pre>`.
+    expect(mcp.match(/class="code-block"/g)).toHaveLength(1);
+    // Both buttons share one box, and the row is what is positioned.
+    expect(bundledCss).toMatch(/\.code-actions\{[^}]*position:absolute/);
+    expect(bundledCss).toMatch(/\.code-copy,\.code-vscode\{/);
   });
 
   it("attributes the renderer in the footer, and lets an index turn it off", async () => {

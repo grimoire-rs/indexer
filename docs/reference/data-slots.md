@@ -29,6 +29,7 @@ Your stylesheet is unlayered and everything the renderer ships is inside
 | `package-keywords` | A card's keyword chips |
 | `package-meta` | Version and updated stamp |
 | `install-command` | A copyable command field |
+| `code-block` | A code block rendered by `CodeBlock.astro`, with its copy and VS Code buttons |
 | `version-pill` | A version badge on a detail page |
 | `detail-header` | A detail page's head block |
 | `detail-body` | Its two-column body |

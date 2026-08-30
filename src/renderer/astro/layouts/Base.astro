@@ -279,10 +279,25 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 
       for (const pre of document.querySelectorAll("pre.astro-code")) {
-        const wrapper = document.createElement("div");
-        wrapper.className = "code-block";
-        pre.replaceWith(wrapper);
-        wrapper.append(pre);
+        // `CodeBlock.astro` already ships the wrapper and the action slot, so
+        // adopt them where they are there. Wrapping a second time would nest
+        // two positioning contexts and orphan whatever the component put in
+        // the slot.
+        const parent = pre.parentElement;
+        let wrapper = parent?.classList.contains("code-block") ? parent : null;
+        if (!wrapper) {
+          wrapper = document.createElement("div");
+          wrapper.className = "code-block";
+          pre.replaceWith(wrapper);
+          wrapper.append(pre);
+        }
+
+        let actions = wrapper.querySelector(".code-actions");
+        if (!actions) {
+          actions = document.createElement("span");
+          actions.className = "code-actions";
+          wrapper.append(actions);
+        }
 
         const btn = document.createElement("button");
         btn.type = "button";
@@ -292,9 +307,10 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         // `textContent`, not `innerText`: the block is not rendered yet at
         // this point, and `innerText` would collapse its whitespace.
         btn.dataset.copy = pre.textContent ?? "";
-        btn.dataset.copyName = "code block";
+        // A component-rendered block names itself; a markdown one cannot.
+        btn.dataset.copyName = wrapper.dataset.copyName || "code block";
         btn.innerHTML = CLIPBOARD_ICON + '<span class="sr-only" role="status"></span>';
-        wrapper.append(btn);
+        actions.append(btn);
       }
 
       for (const btn of document.querySelectorAll("[data-copy]")) {
@@ -1919,12 +1935,21 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .astro-code span:not([style*="background"]) {
           background-color: transparent !important;
         }
-        /* Reveals on hover or keyboard focus, so it is not a permanent
-           smudge over the first line of every block. */
-        .code-copy {
+        /* The corner the block's buttons sit in. It is a row rather than one
+           positioned button because `CodeBlock.astro` can add a second one —
+           a VS Code deep link — and the copy button `Base.astro` injects has
+           to land beside it without either knowing the other's width. */
+        .code-actions {
           position: absolute;
           top: 0.45rem;
           right: 0.45rem;
+          display: flex;
+          gap: var(--grim-space-2);
+        }
+        /* Reveals on hover or keyboard focus, so they are not a permanent
+           smudge over the first line of every block. */
+        .code-copy,
+        .code-vscode {
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -1935,6 +1960,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           border-radius: var(--grim-radius-inset);
           background: var(--grim-color-card);
           color: var(--grim-color-muted);
+          text-decoration: none;
           cursor: pointer;
           opacity: 0;
           transition:
@@ -1943,10 +1969,13 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
             border-color var(--grim-duration-fast) ease;
         }
         .code-block:hover .code-copy,
-        .code-copy:focus-visible {
+        .code-block:hover .code-vscode,
+        .code-copy:focus-visible,
+        .code-vscode:focus-visible {
           opacity: 1;
         }
-        .code-copy:hover {
+        .code-copy:hover,
+        .code-vscode:hover {
           color: var(--grim-color-accent);
           border-color: var(--grim-color-accent);
         }
@@ -1956,7 +1985,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           opacity: 1;
         }
         @media (prefers-reduced-motion: reduce) {
-          .code-copy {
+          .code-copy,
+          .code-vscode {
             transition: none;
           }
         }
