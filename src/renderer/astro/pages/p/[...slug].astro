@@ -614,9 +614,7 @@ const headMarkColor = pkg.deprecated
   }
   .detail-head {
     display: flex;
-    /* Stretch, so the logo can take the height of the whole text block
-       beside it rather than sitting centred against a third of it. */
-    align-items: stretch;
+    align-items: center;
     gap: var(--grim-space-6);
     background: var(--grim-color-card);
     border: var(--grim-border-width) solid var(--grim-color-border);
@@ -626,19 +624,17 @@ const headMarkColor = pkg.deprecated
   .detail-head-text {
     min-width: 0;
   }
+  /* One fixed square, the same on every package. Sizing it off the text
+     block beside it did not work: `aspect-ratio` derives the width from the
+     height the box has *before* `align-self: stretch` grows it, so the tile
+     came out 56px wide against a 93px-tall header — a portrait chip that
+     hugged the logo instead of framing it. A definite square has no such
+     ordering problem, and the background is then identical page to page. */
   .tile {
     flex: 0 0 auto;
-    align-self: stretch;
-    width: auto;
-    height: auto;
-    /* Square, sized by the text block it stands beside. Bounded at both
-       ends: a one-line header must not shrink it to a favicon, and a long
-       summary must not grow it into the page. */
-    aspect-ratio: 1;
-    min-height: 3.5rem;
-    max-height: 7rem;
+    width: 4.5rem;
+    height: 4.5rem;
     border-radius: var(--grim-radius-surface);
-    object-fit: cover;
   }
   .tile.letter {
     display: flex;
