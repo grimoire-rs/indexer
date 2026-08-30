@@ -1524,10 +1524,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            name beside it starts on one line down the whole list. The colour
            is set inline, from the kind's own token or the deprecation one. */
         .t-kind {
-          text-align: center;
-        }
-        .t-kind svg {
-          vertical-align: middle;
+          justify-content: center;
         }
         /* The card's tile at a row's height. Geometry, not a scale step, and
            measured against the text line beside it rather than against the
@@ -1561,23 +1558,33 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            wide cell — they are one reading, and the gap that separated them
            was the cell's width showing through. */
         .t-rating {
-          text-align: right;
+          justify-content: flex-end;
           color: var(--grim-color-muted);
         }
         .t-rating svg {
-          vertical-align: middle;
           margin-left: var(--grim-space-2);
-          /* Optical, not rhythm: the glyph's ink sits high in its own box, so
-             the middle of the box reads above the digits beside it. A pixel
-             down puts the two on the same visual line. */
-          translate: 0 1px;
+        }
+        /* The two cells that carry a glyph centre it as a box, not on the
+           text line. `vertical-align: middle` aligns to half the x-height,
+           which sits about 2px under the line's true middle at this step —
+           the eye reads that as the mark and the arrow sagging below the
+           words beside them. Neither cell owes anything to the row's
+           no-flex rule above: the kind is one mark and the rating is a
+           fixed-width count plus its arrow, so there is no text here for
+           `text-overflow` to elide. */
+        .t-kind,
+        .t-rating {
+          display: flex;
+          align-items: center;
         }
         /* The count carries the column's alignment, and the arrow after it
            inherits it: a fixed box, right-aligned, in tabular figures. Without
            the fixed box a three-digit count would push its own arrow right of
            the one above it. Geometry — it holds four digits at this step. */
         .t-votes {
-          display: inline-block;
+          /* Never shrunk to its digits: the box is what holds the arrow
+             after it in one place down the column. */
+          flex: none;
           width: 2rem;
           text-align: right;
           font-variant-numeric: tabular-nums;
