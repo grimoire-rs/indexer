@@ -1063,51 +1063,61 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
             transition: border-color var(--grim-duration-base) ease;
           }
         }
-        /* The overflow menu. A `<details>` for the same reasons the platform
-           picker is one — it opens, closes and takes Escape without a line of
-           script — and the panel is the `.os-menu` popover's measurements so
-           the two read as the same object in two places. */
+        /* The overflow menu. A popover, and it has to be one: `.filter-row`
+           above is a scroll container, and an absolutely-positioned panel
+           inside a scroll container is cropped to the row AND stretches the
+           row's scroll extent — which is where a menu that opened invisibly,
+           with a stray horizontal and vertical scrollbar to show for it, came
+           from. The top layer is outside every ancestor's `overflow`, and it
+           brings light dismiss and Escape, which the `<details>` this replaced
+           never had. Its seat is `placeKwMenu` in `Catalog.tsx`. */
         .kw-menu {
-          position: relative;
           display: flex;
         }
         /* The trigger wears `.chip`, so its box comes from there and cannot
            drift a pixel off the chips it sits beside. Only what a chip does
            not cover is stated here. */
-        .kw-menu > summary {
+        .kw-menu > button {
           display: inline-flex;
           align-items: center;
           color: var(--grim-color-muted);
-          /* Both spellings: the default triangle is a marker in Firefox and
-             a `::-webkit-details-marker` pseudo-element in older WebKit. */
-          list-style: none;
         }
-        .kw-menu > summary::-webkit-details-marker {
-          display: none;
-        }
-        .kw-menu > summary:hover,
-        .kw-menu > summary:focus-visible,
-        .kw-menu[open] > summary {
+        .kw-menu > button:hover,
+        .kw-menu > button:focus-visible,
+        .kw-menu > button[aria-expanded="true"] {
           border-color: var(--grim-color-accent);
           color: var(--grim-color-fg);
         }
+        /* `inset` and `margin` undo the UA's centring of a popover, so the
+           `left`/`top` the script writes are the whole position. `color` is
+           restated because the UA sets `CanvasText` on `[popover]` directly,
+           which beats what the panel would otherwise inherit. `display` is
+           deliberately absent: the UA's `display: none` for a closed popover
+           has to keep winning, so the flex box is declared on `:popover-open`
+           alone — an unconditional `display` here would show the menu shut. */
         .kw-menu-panel {
-          position: absolute;
-          top: calc(100% + var(--grim-space-2));
-          left: 0;
-          z-index: 5;
-          display: flex;
-          flex-direction: column;
-          gap: var(--grim-space-3);
+          position: fixed;
+          inset: auto;
+          margin: 0;
           /* The panel's own measurement: wide enough for the longest keyword
              a publisher is likely to write plus its count, and capped so a
              long vocabulary scrolls instead of running off the viewport. */
           width: 15rem;
           padding: var(--grim-space-3);
           background: var(--grim-color-card);
+          color: var(--grim-color-fg);
           border: var(--grim-border-width) solid var(--grim-color-border);
           border-radius: var(--grim-radius-control);
           box-shadow: var(--grim-shadow-raised);
+          /* The list inside is the thing that scrolls. Without this the UA's
+             own `overflow: auto` on `[popover]` adds a second scrollbar once
+             the script caps the panel's height. */
+          overflow: hidden;
+        }
+        .kw-menu-panel:popover-open {
+          display: flex;
+          flex-direction: column;
+          gap: var(--grim-space-3);
         }
         .kw-menu-search {
           width: 100%;
@@ -1131,6 +1141,11 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
              as a list rather than a page. */
           max-height: 15rem;
           overflow-y: auto;
+          /* And shorter still where the panel's own cap is tighter — a
+             flex item's automatic minimum size is its content, so without
+             `min-height` the list refuses to shrink and overflows the panel
+             the script just sized to the space below the trigger. */
+          min-height: 0;
         }
         .kw-menu-item {
           display: flex;

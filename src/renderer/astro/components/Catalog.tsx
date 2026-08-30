@@ -42,6 +42,13 @@ export type View = "cards" | "table";
 const KEYWORD_CHIP_LIMIT = 8;
 
 /**
+ * `popovertarget` needs an id, and the catalog is a singleton on its page —
+ * one island, one toolbar, one overflow menu — so this is a constant rather
+ * than something generated per mount.
+ */
+const KEYWORD_MENU_ID = "grim-keyword-overflow";
+
+/**
  * The direction each field is *worth* reading first in — A→Z for a name,
  * newest and best-liked first for the two ranked keys.
  *
@@ -328,6 +335,57 @@ export default function Catalog({
   const railRefs = useRef(new Map<string, HTMLElement>());
   const railRects = useRef(new Map<string, DOMRect>());
   const railRef = useRef<HTMLDivElement>(null);
+
+  const kwMenuRef = useRef<HTMLDivElement>(null);
+  const kwTriggerRef = useRef<HTMLButtonElement>(null);
+  // Drives the trigger's own `aria-expanded` and its open styling. The panel's
+  // visibility is the popover's business, not this flag's.
+  const [kwMenuOpen, setKwMenuOpen] = useState(false);
+
+  /**
+   * Seat the overflow menu under its trigger.
+   *
+   * The panel is a popover, so it lives in the top layer and is positioned
+   * against the viewport rather than against any ancestor — which is the whole
+   * point (`.filter-row` is a scroll container and used to crop it). That
+   * leaves the seat to us.
+   *
+   * It always opens downward: the toolbar sits at the top of the page, and a
+   * flip would only ever fire on a viewport short enough that the panel has
+   * nowhere to go either way. What does not fit becomes `max-height` and
+   * scrolls inside the list.
+   *
+   * Called twice per open, from `beforetoggle` and again from `toggle`. The
+   * first runs while the panel is still `display: none`, so its measured width
+   * is 0 and the horizontal clamp is a no-op — but the vertical seat is right,
+   * which is what stops it appearing in the wrong place for a frame. The
+   * second has a real width and finishes the clamp.
+   */
+  const placeKwMenu = () => {
+    const panel = kwMenuRef.current;
+    const trigger = kwTriggerRef.current;
+    if (!panel || !trigger) return;
+    const seat = trigger.getBoundingClientRect();
+    const gap = 8;
+    const width = panel.getBoundingClientRect().width;
+    panel.style.left = `${Math.max(gap, Math.min(seat.left, window.innerWidth - width - gap))}px`;
+    panel.style.top = `${seat.bottom + gap}px`;
+    panel.style.maxHeight = `${Math.max(120, window.innerHeight - seat.bottom - gap * 3)}px`;
+  };
+
+  // A fixed panel does not travel with the trigger, so it is re-seated rather
+  // than left behind. Only while open — there is nothing to follow otherwise.
+  useEffect(() => {
+    if (!kwMenuOpen) return;
+    const reseat = () => placeKwMenu();
+    // Capturing: the scroll may be any ancestor's, including `.filter-row`'s.
+    window.addEventListener("scroll", reseat, { capture: true, passive: true });
+    window.addEventListener("resize", reseat);
+    return () => {
+      window.removeEventListener("scroll", reseat, { capture: true });
+      window.removeEventListener("resize", reseat);
+    };
+  }, [kwMenuOpen]);
 
   /**
    * How many keyword chips actually fit on the row, measured.
@@ -961,14 +1019,42 @@ export default function Catalog({
             // catalog's keyword vocabulary is open-ended, and a few hundred
             // chips at once is a wall, not a control.
             //
-            // A `<details>` for the same reason the platform picker and the
-            // version menus are: it opens, closes and takes Escape on its
-            // own, with no popover library and no script.
-            <details class="kw-menu">
-              <summary class="chip" data-slot="filter-chip">
+            // A popover, and not by preference: the panel used to be an
+            // absolutely-positioned child of `.filter-row`, which is a scroll
+            // container, so it was cropped to the row and stretched the row's
+            // scroll extent — an invisible menu and two stray scrollbars. The
+            // top layer is outside every ancestor's `overflow`. Escape and
+            // light dismiss come with it; only the seat is ours to compute,
+            // and that is `placeKwMenu` above.
+            <div class="kw-menu">
+              <button
+                type="button"
+                class="chip"
+                data-slot="filter-chip"
+                ref={kwTriggerRef}
+                popovertarget={KEYWORD_MENU_ID}
+                aria-expanded={kwMenuOpen}
+              >
                 +{menuKeywords.length} more
-              </summary>
-              <div class="kw-menu-panel">
+              </button>
+              <div
+                class="kw-menu-panel"
+                id={KEYWORD_MENU_ID}
+                popover="auto"
+                ref={kwMenuRef}
+                // Both, and in this order: `beforetoggle` runs synchronously
+                // inside the show steps, so the panel is seated before it is
+                // ever painted; `toggle` runs after, when its width can
+                // actually be measured for the clamp.
+                onBeforeToggle={(e) => {
+                  setKwMenuOpen(e.newState === "open");
+                  placeKwMenu();
+                }}
+                onToggle={(e) => {
+                  setKwMenuOpen(e.newState === "open");
+                  placeKwMenu();
+                }}
+              >
                 <input
                   type="text"
                   class="kw-menu-search"
@@ -996,7 +1082,7 @@ export default function Catalog({
                   )}
                 </div>
               </div>
-            </details>
+            </div>
           )}
           {hasDeprecated && (
             // A toggle, not a filter: `aria-pressed` rather than the `active`

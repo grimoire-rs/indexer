@@ -834,6 +834,23 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).toMatch(/\.code-copy,\.code-vscode\{/);
   });
 
+  // The toolbar's filter row is a scroll container — it has to be, as a
+  // backstop for the kinds overflowing on their own — and an absolutely
+  // positioned panel inside one is cropped to it AND stretches its scroll
+  // extent. That is a menu that opens invisibly with two stray scrollbars to
+  // show for it. The top layer is the only place outside every ancestor's
+  // `overflow`, so the panel is a popover, positioned against the viewport.
+  it("opens the keyword overflow menu outside the toolbar's scroll container", () => {
+    expect(bundledCss).toMatch(/\.filter-row\{[^}]*overflow-x:auto/);
+    expect(bundledCss).toMatch(/\.kw-menu-panel\{[^}]*position:fixed/);
+    // Undoing the UA's centring of a popover, or `left`/`top` mean nothing.
+    expect(bundledCss).toMatch(/\.kw-menu-panel\{[^}]*inset:auto/);
+    // `display` on the base rule would beat the UA's `display:none` and show
+    // the menu while it is shut, so the flex box lives on the open state only.
+    expect(bundledCss).toMatch(/\.kw-menu-panel:popover-open\{[^}]*display:flex/);
+    expect(bundledCss).not.toMatch(/\.kw-menu-panel\{[^}]*position:absolute/);
+  });
+
   it("attributes the renderer in the footer, and lets an index turn it off", async () => {
     // New tab, and `noopener` with it — the opened page must not get a
     // handle on this one through `window.opener`.

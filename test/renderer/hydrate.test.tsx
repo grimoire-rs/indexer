@@ -476,3 +476,66 @@ describe("the keyword facet", () => {
     expect(back.querySelector("ul.grid")).toBeNull();
   });
 });
+
+/**
+ * The overflow menu's wiring.
+ *
+ * It is a popover, and it had to become one: the panel used to be an
+ * absolutely-positioned child of `.filter-row`, which is a scroll container,
+ * so opening it produced a cropped panel and two stray scrollbars instead of a
+ * menu. jsdom implements no part of the Popover API — no `showPopover`, no
+ * `:popover-open`, no top layer — so what the panel actually does when it
+ * opens is a browser question, and the CSS half of it is pinned in
+ * `build.test.ts`. What is checkable here is the half that silently rots: the
+ * `popovertarget` and the `id` agreeing, which is the whole mechanism.
+ */
+describe("the keyword overflow menu", () => {
+  // More distinct keywords than the rail's cap, so there is always something
+  // for the menu to hold whatever the (unmeasurable, in jsdom) rail fit is.
+  const MANY = Array.from({ length: 12 }, (_, i) => ({
+    namespace: "acme",
+    name: `pkg-${i}`,
+    kind: "skill",
+    ref: `r.test/acme/pkg-${i}`,
+    keywords: [`kw-${i}`],
+  })) as unknown as CatalogPackage[];
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
+  });
+
+  function mount(): HTMLElement {
+    history.replaceState({}, "", "/");
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={MANY} vscodeExtension={null} />, host);
+    return host;
+  }
+
+  it("points the trigger at the panel it opens", () => {
+    const host = mount();
+    const trigger = host.querySelector<HTMLElement>(".kw-menu > button.chip");
+    const panel = host.querySelector<HTMLElement>(".kw-menu-panel");
+
+    expect(trigger, "no overflow trigger — the fixture stopped overflowing").not.toBeNull();
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("popover")).toBe("auto");
+    // The one thing that silently breaks: a renamed id leaves a button that
+    // opens nothing, with no error anywhere.
+    expect(trigger!.getAttribute("popovertarget")).toBe(panel!.id);
+    expect(panel!.id).not.toBe("");
+    expect(trigger!.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("is no longer a details element", () => {
+    const host = mount();
+    // `<details>` is what clipped: it can only position its panel inside the
+    // scroll container it sits in.
+    expect(host.querySelector("details.kw-menu")).toBeNull();
+    expect(host.querySelector(".kw-menu > summary")).toBeNull();
+  });
+});
