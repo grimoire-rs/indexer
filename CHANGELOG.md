@@ -21,6 +21,67 @@ props `{ pkg }` → `{ pkg, compact }`.
 
 ## [Unreleased]
 
+### Added
+
+- **`grim-indexer dev --host [addr]`.** Bare, it binds every interface; with a
+  value, that address. Without it the server binds loopback only — Astro's own
+  default — which is unreachable from a dev container, a VM or a WSL guest,
+  where the port forwards and the connection then hangs against a socket that
+  is not listening for it. `npm run dev -- --host` takes the same two forms.
+  Bare `--host` puts the preview on your network; the CLI reference says so.
+- **`CodeBlock.astro`**, a reusable code block: the site's own frame, the same
+  Shiki theme pair every rendered README uses, the same copy button and toast,
+  and an optional VS Code button. Props
+  `{ code, lang?, name?, vscodeHref?, vscodeLabel? }`; `vscodeHref` is a plain
+  URL, so `vscodeUrl`, `vscodeVoteUrl`, `addRegistryUrl` and a hand-written
+  deep link all work. Worked example in
+  [Reuse shipped components](docs/how-to/reuse-components.md#code-blocks).
+- **`data-slot="code-block"`**, for it. Contract tier, like every other slot.
+- **A second argument on `registryAddCommand` and `registryScopeChoices`**,
+  the registry to build the command for — defaulting to the one in your config,
+  so nothing existing changes. It is what lets a setup page draw the "add
+  registry" bar for an index *other* than the site's own: a corporate index in
+  the hero and the public one further down.
+- **A clear button on the keyword filters**, in the catalog toolbar. Rendered
+  only while a keyword is picked, and it lifts the keywords alone — Escape is
+  still what clears the search and the kinds with them.
+
+### Fixed
+
+- **The keyword overflow menu opened invisibly.** Its panel was an absolutely
+  positioned child of the toolbar's filter row, which is a scroll container, so
+  the panel was cropped to the row and stretched the row's scroll extent — a
+  menu nobody could see, with a stray horizontal and vertical scrollbar to show
+  for it. It is a popover now, which puts it in the top layer, outside every
+  ancestor's `overflow`, and brings Escape and light dismiss with it. The
+  trigger is a `<button>` rather than a `<summary>`, so the toolbar's arrow-key
+  navigation now reaches it.
+- **The detail page's logo drifted down under a long description.** The header
+  centred the tile against the text beside it, so the same package's mark sat
+  at a different height on every page. It holds against the title now.
+- **Dropped the tinted square behind a package logo**, on the cards, the list
+  rows and the detail header alike. A logo is a designed mark already sitting
+  on its own ground, so the slot framed it twice — most visibly for the many
+  logos that are themselves a rounded square, which then sat inside a slightly
+  larger one. The slot still reserves the same box, so nothing shifts. The
+  dashed frame the broken-logo state drew goes with it — it read as a fault in
+  the layout rather than in the image; the slashed glyph is what says the logo
+  failed, and `role="img"` with a label is what announces it. The
+  initial-letter tile a package with no logo gets is unchanged: there the
+  coloured ground is the mark.
+- **Keyword chips could freeze part-way through the rail's slide.** The rail
+  animates a rescore by inverting each chip with an inline `translate` and
+  dropping it on the next animation frame. A rescore that also changes how many
+  chips fit commits a second time, and that commit cancelled the frame before
+  it ran — leaving every moved chip parked at its offset with transitions
+  disabled. Deselecting the last keyword hit it most often, because that
+  rescore is the largest. The offsets are now cleared before each measurement
+  and on cleanup, so an interrupted slide resolves instead of sticking.
+- **Switching between the cards and list views repainted the whole catalog.**
+  Off-screen cards are skipped until they are scrolled to. The two views share
+  no element types, so a switch still rebuilds every item — past a few hundred
+  packages the answer is windowing the list, and this is not that.
+
 ## [0.5.0] - 2026-08-30
 
 ### Added
