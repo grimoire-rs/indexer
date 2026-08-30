@@ -4,7 +4,7 @@ All notable changes to `@grimoire-rs/indexer` are recorded here, in
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> This file starts at Unreleased. Releases up to and including `v0.4.4` shipped
+> This file starts at `0.5.0`. Releases up to and including `v0.4.4` shipped
 > before it existed and are not reconstructed here — the git tags and
 > `git log v0.4.3..v0.4.4` are the record for those. Every release from the
 > next one on is written down here.
@@ -20,6 +20,8 @@ overrider can act on: the component's name, and the move itself as old → new �
 props `{ pkg }` → `{ pkg, compact }`.
 
 ## [Unreleased]
+
+## [0.5.0] - 2026-08-30
 
 ### Added
 
@@ -184,4 +186,5 @@ props `{ pkg }` → `{ pkg, compact }`.
   boot can leave a `.index-*` holding Vite's `deps_temp_<hash>`, which the
   dependency optimizer recreates after the removal has already returned.
 
-[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/grimoire-rs/indexer/compare/v0.4.4...v0.5.0
