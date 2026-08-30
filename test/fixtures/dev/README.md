@@ -19,8 +19,8 @@ a row in the table below; it never means adding a second index.
 | `bare` | mcp | Pointer only — no `enrich/` sidecar at all, as an index that never ran `enrich` |
 | `context7` | mcp | `contents.json` descriptor with no `members` → raw JSON render |
 | `bean-counter` | skill | Stats entry carrying only a `downloads` blob → unrated, and an unknown key that must survive the build |
-| `enterprise-compliance-policy-pack` | rule | Long name, long summary, twelve keywords → overflow |
-| `many-versions` | skill | Fourteen tags → version picker and cascade. Also the one **rated ref with no thread URL**: the count renders as plain text, not a link, and the badge keeps both ends round |
+| `enterprise-compliance-policy-pack` | rule | Long name, twelve keywords → overflow. Also the **long-description** case: a summary long enough to wrap several lines, beside a **3:1 wide** logo. Together they are what pins the detail header's logo alignment — centring the tile against the text pushed it down the header as the description grew |
+| `many-versions` | skill | Fourteen tags → version picker and cascade. Also the one **rated ref with no thread URL**: the count renders as plain text, not a link, and the badge keeps both ends round. Carries the **1:2.5 tall** logo, the other extreme against the square tile |
 | `changelog-only` | agent | Changelog but no README → the tab reports its own absence |
 | `gitlab.com/team/mirror` | rule | Second namespace, nested, GitLab `login` owner, non-`ghcr.io` host |
 
@@ -40,6 +40,14 @@ discussions for the `ghcr.io/acme/*` refs, a GitLab work item for
 `gitlab.com/team/mirror` — so clicking a count in the demo demonstrably
 leaves the site instead of landing on a fabricated 404. `many-versions`
 carries no URL at all, which is the other half of that state.
+
+The logos are deliberately **three different aspect ratios** — `code-review`
+and `starter-pack` square, `enterprise-compliance-policy-pack` 3:1 wide,
+`many-versions` 1:2.5 tall. The tile that frames them is a fixed square
+whatever they are (see `.tile` on the detail page), so a mark that is not
+square has to letterbox inside it rather than stretch, crop or resize the
+tile. With square logos only, the frame and the mark agree by accident and
+nothing shows when they stop agreeing.
 
 `deprecated` is the publisher's **message**, not a date — grim's own detail
 pane renders it as `Deprecated: <message>`. Both deprecated artifacts here

@@ -26,5 +26,6 @@
   "created": "2026-04-02T13:30:00+00:00",
   "updated": "2026-08-27T13:30:00+00:00",
   "hasReadme": true,
-  "hasChangelog": true
+  "hasChangelog": true,
+  "logo": "/logos/github.com/acme/many-versions.svg"
 }

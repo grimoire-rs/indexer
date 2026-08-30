@@ -1,6 +1,6 @@
 {
   "title": "enterprise-compliance-policy-pack",
-  "summary": "A single rule set covering retention, provenance, third-party review, export control and the annual attestation, written so an auditor can follow it without reading the code it governs.",
+  "summary": "A single rule set covering retention, provenance, third-party review, export control and the annual attestation, written so an auditor can follow it without reading the code it governs. It states what each control is for before it states what the control is, names the evidence that satisfies it, and says plainly which clauses are advisory and which block a release — so a reviewer with no context can tell a finding from a preference on the first pass.",
   "version": "12.4.0-rc.3",
   "license": "BUSL-1.1",
   "keywords": [
@@ -28,5 +28,6 @@
   "updated": "2026-08-25T09:00:00+00:00",
   "vendor": "Acme Compliance Services International",
   "authors": "The Acme Compliance Working Group",
-  "hasReadme": true
+  "hasReadme": true,
+  "logo": "/logos/github.com/acme/enterprise-compliance-policy-pack.svg"
 }
