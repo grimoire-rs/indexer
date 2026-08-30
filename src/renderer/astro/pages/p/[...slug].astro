@@ -7,8 +7,6 @@ import {
   BookOpen,
   Bug,
   ChevronRight,
-  FolderRoot,
-  Globe,
   History,
   House,
   Image,
@@ -22,8 +20,7 @@ import {
 } from "lucide-preact";
 import Base from "../../layouts/Base.astro";
 import VersionMenu from "../../components/VersionMenu.astro";
-import CommandField from "../../components/CommandField.astro";
-import PickerMenu from "../../components/PickerMenu.astro";
+import CommandBar from "../../components/CommandBar.astro";
 import { BrandMark } from "../../components/BrandMark.tsx";
 import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "../../components/KindMark.tsx";
 import {
@@ -47,6 +44,7 @@ import {
   vscodeVoteUrl,
   type CatalogPackage,
 } from "../../lib/catalog";
+import { addArtifactChoices } from "../../lib/commands";
 import { data } from "../../lib/data";
 import { getEntry, render } from "astro:content";
 import { Code } from "astro:components";
@@ -127,12 +125,8 @@ const vscode = vscodeUrl(config.vscodeExtension, pkg.ref);
 const addCommand = `grim add ${pkg.ref}`;
 
 // The same two-way scope choice the package cards offer and the hero's
-// registry bar draws, with the same two glyphs and the same order — global
-// first, because it needs no project open.
-const scopeChoices = [
-  { name: "Global", command: `grim add --global ${pkg.ref}`, Icon: Globe },
-  { name: "Project", command: addCommand, Icon: FolderRoot },
-];
+// registry bar draws, from the one helper all three read.
+const scopeChoices = addArtifactChoices(pkg.ref);
 
 // Every outbound string on this page was handed to the index by a registry
 // it does not control, so each one goes through the scheme allowlist before
@@ -239,16 +233,17 @@ const headMarkColor = pkg.deprecated
           )
         }
 
-        <div class="cmd-bar" data-os-switch data-os-noun={`add command for ${pkg.name}`}>
-          <PickerMenu choices={scopeChoices} title="Scope" label="Choose the scope" />
-          <CommandField
-            value={scopeChoices[0].command}
-            name={`${scopeChoices[0].name} add command for ${pkg.name}`}
-            label="Copy the add command"
-          />
+        <CommandBar
+          choices={scopeChoices}
+          noun={`add command for ${pkg.name}`}
+          copyLabel="Copy the add command"
+          pickerTitle="Scope"
+          pickerLabel="Choose the scope"
+        >
           {
             vscode && (
               <a
+                slot="action"
                 class="seg brand-link"
                 href={vscode}
                 title="Open in VS Code"
@@ -258,7 +253,7 @@ const headMarkColor = pkg.deprecated
               </a>
             )
           }
-        </div>
+        </CommandBar>
 
         <main class="detail-main">
           {/* The kind as texture behind the panel, the way a card wears it:

@@ -1,0 +1,66 @@
+---
+// One copyable command, optionally with a picker that swaps which command it
+// shows and a trailing action segment — the "install grim" and "add registry"
+// boxes on the landing page, and the "add this package" box on every detail
+// page. All three were the same twenty lines of markup written out three
+// times; this is that markup, once.
+//
+// It is also the component an index's own page most wants: a setup guide that
+// has to show `grim config registry add …` should draw the same bar the rest
+// of the site draws, not a code block that looks like one.
+//
+//   ---
+//   import CommandBar from "@grim/components/CommandBar.astro";
+//   import { installChoices } from "@grim/lib/commands";
+//   import { data } from "@grim/lib/data";
+//   ---
+//   <CommandBar choices={installChoices(data.config)} noun="install command"
+//               copyLabel="Copy the install command" pickerTitle="Platform"
+//               pickerLabel="Choose your platform" detect />
+//
+// The picker's behaviour — which glyph shows, what the field copies, what the
+// toast calls it — is the generic `[data-os-switch]` handler in `Base.astro`.
+// Nothing here ships a script.
+import PickerMenu from "./PickerMenu.astro";
+import CommandField from "./CommandField.astro";
+import type { Choice } from "../lib/commands";
+
+interface Props {
+  /**
+   * The commands this bar offers. One renders as a bare field; more than one
+   * adds the picker. **Empty is legal** — a bar can be nothing but its action
+   * segment, which is what the landing page shows when an index publishes a
+   * VS Code deep link but no copyable registry command.
+   */
+  choices: Choice[];
+  /**
+   * What the copy toast calls this, minus the choice's own name: `"install
+   * command"` becomes `"Linux install command"`. The picker rewrites it per
+   * pick, so it has to read as a noun phrase after any choice name.
+   */
+  noun: string;
+  /** Accessible name for the field, e.g. `"Copy the install command"`. */
+  copyLabel: string;
+  /** Picker tooltip, e.g. `"Platform"`. Unused with fewer than two choices. */
+  pickerTitle?: string;
+  /** Picker accessible name, e.g. `"Choose your platform"`. */
+  pickerLabel?: string;
+  /**
+   * Preselect the visitor's own platform before first paint. Only meaningful
+   * where the choices ARE platforms — see the inline script in `index.astro`,
+   * which is what reads this.
+   */
+  detect?: boolean;
+}
+const { choices, noun, copyLabel, pickerTitle = "", pickerLabel = "", detect = false } = Astro.props;
+const first = choices[0];
+---
+
+<div class="cmd-bar" data-os-switch data-os-detect={detect ? "" : undefined} data-os-noun={noun}>
+  {choices.length > 1 && <PickerMenu choices={choices} title={pickerTitle} label={pickerLabel} />}
+  {first && <CommandField value={first.command} name={`${first.name} ${noun}`} label={copyLabel} />}
+  {/* The trailing segment: a VS Code deep link on all three shipped bars, and
+      whatever an index's own page puts there. A slot rather than props, so
+      adding a second kind of action needs no change here. */}
+  <slot name="action" />
+</div>

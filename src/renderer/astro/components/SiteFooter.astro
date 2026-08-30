@@ -1,0 +1,64 @@
+---
+// The site footer: the raw-data pointer, whatever links this index adds, and
+// the attribution line.
+//
+// Split out for the same reason as `SiteHeader.astro`, and with the same
+// contract: no props, reads build-time config, styles live in `Base.astro`'s
+// global block. `theme/components/SiteFooter.astro` replaces it.
+import { linkAttrs, withBase } from "../lib/base";
+import { data } from "../lib/data";
+
+const { config } = data;
+// Shown as well as linked: on a subpath deployment the bare path is not where
+// the file is, so the label has to carry the prefix too.
+const allJson = withBase("/all.json");
+---
+
+<footer data-slot="site-footer">
+  <div class="shell">
+    <p>
+      Raw data: <a href={allJson}><code>{allJson}</code></a>{
+        config.footerNote ? ` · ${config.footerNote}` : ""
+      }
+    </p>
+    {/* Whatever this index has to link — a privacy notice, an imprint, a code
+        of conduct, a page it added under `theme/pages/`. Absent by default, so
+        a footer without them looks exactly as it did before.
+
+        `withBase` for the same reason the nav needs it: a site-root href is a
+        legal entry here, and on a project Pages deployment the site does not
+        live at the domain root. `linkAttrs` for the same reason too — one
+        list of links in two components, and a `nav` entry moved down here
+        must not silently change how it opens. */}
+    {
+      config.footerLinks.length > 0 && (
+        <p class="footer-links">
+          {config.footerLinks.map((link) => (
+            <a href={withBase(link.href)} {...linkAttrs(link)}>
+              {link.label}
+            </a>
+          ))}
+        </p>
+      )
+    }
+    {/* Opt-out, not opt-in: an index runner who does not want to say where the
+        software came from sets `attribution: false`, and this disappears.
+        Nothing else on the page changes.
+
+        "using", not "by": the index runner built this site — Grimoire is the
+        tool they built it with. */}
+    {
+      config.attribution && (
+        <p class="attribution">
+          Built with <span aria-hidden="true">♥</span><span class="sr-only">love</span> using{" "}
+          {/* New tab: this is the one link that leaves the index for an
+              unrelated site, and a visitor mid-browse should not lose their
+              place to it. */}
+          <a href="https://grimoire.rs" target="_blank" rel="noopener">
+            Grimoire
+          </a>
+        </p>
+      )
+    }
+  </div>
+</footer>

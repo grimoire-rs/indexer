@@ -16,6 +16,26 @@ import type { SiteConfig } from "../../src/config.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 
+/**
+ * Every shape `external` has to answer (C-008 / S-003), in one array so the
+ * header's `nav` and the footer's own links are checked against identical
+ * inputs — the footer is the half that changes, and a probe present in only
+ * one list would gate only the other.
+ *
+ * Both site-root entries name something the build really emits: a link that
+ * leads nowhere is C-011's subject and warns on stderr, and a fixture that
+ * trips that on every build teaches nothing.
+ */
+const LINK_PROBES = [
+  // Unset: inferred from the href's shape, which is what every config
+  // written before the field existed relies on.
+  { label: "docs", href: "https://docs.example.test" },
+  { label: "a package", href: "/p/github.com/acme/code-review/" },
+  // Set: the two cases the href's shape cannot express.
+  { label: "raw logo", href: "/logo.svg", external: true },
+  { label: "intranet", href: "https://intranet.example.test/", external: false },
+];
+
 const config: SiteConfig = {
   site: "https://index.example.test",
   brand: "acme package index",
@@ -35,9 +55,29 @@ const config: SiteConfig = {
   vscodeExtension: "acme.acme-vscode",
   registry: { alias: "acme", index: "https://index.example.test" },
   footerNote: "fixture footer note",
-  footerLinks: [{ label: "privacy", href: "https://acme.example.test/privacy" }],
+  nav: [...LINK_PROBES, { label: "github", href: "https://github.com/acme/index" }],
+  footerLinks: [{ label: "privacy", href: "https://acme.example.test/privacy" }, ...LINK_PROBES],
   customCss: "theme.css",
 };
+
+/** The header's nav, and the footer's own links — the two link lists. */
+const NAV = /<nav>([\s\S]*?)<\/nav>/;
+const FOOTER_LINKS = /<p class="footer-links">([\s\S]*?)<\/p>/;
+
+/**
+ * The opening `<a …>` tag pointing at `href`, inside `region`.
+ *
+ * Throwing when it is absent is half the assertion: `withBase` has to have
+ * applied, so a lookup for the base-prefixed href is what proves it did.
+ */
+function linkTag(html: string, region: RegExp, href: string): string {
+  const scope = region.exec(html)?.[1];
+  if (scope === undefined) throw new Error(`no ${String(region)} in this page`);
+  const quoted = href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tag = new RegExp(`<a [^>]*href="${quoted}"[^>]*>`).exec(scope);
+  if (!tag) throw new Error(`no link to ${href} in:\n${scope}`);
+  return tag[0];
+}
 
 /** Everything one build leaves behind, read back. */
 interface Built {
@@ -852,15 +892,37 @@ describe("config reaches the rendered HTML", () => {
   });
 });
 
-/** The body of `@layer grimoire { … }`, by brace matching. */
+/**
+ * Every `@layer grimoire { … }` body in the bundle, concatenated, by brace
+ * matching.
+ *
+ * All of them, not the first: `bundledCss` is a join of whatever
+ * `readdir` returned, so which layer block comes first is a function of how
+ * the renderer's components happen to chunk. Reading only the first made this
+ * assert "the tokens are in the layer" or "some component's scoped rules are
+ * in the layer" depending on that, and a refactor that moved no CSS at all
+ * flipped it from one to the other.
+ */
 function layerBody(css: string): string {
-  const open = css.indexOf("{", css.indexOf("@layer grimoire"));
-  let depth = 0;
-  for (let i = open; i < css.length; i++) {
-    if (css[i] === "{") depth++;
-    else if (css[i] === "}" && --depth === 0) return css.slice(open + 1, i);
+  const bodies: string[] = [];
+  let from = 0;
+  for (;;) {
+    const at = css.indexOf("@layer grimoire", from);
+    if (at < 0) return bodies.join("");
+    const open = css.indexOf("{", at);
+    let depth = 0;
+    let closed = -1;
+    for (let i = open; i < css.length; i++) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}" && --depth === 0) {
+        closed = i;
+        break;
+      }
+    }
+    if (closed < 0) throw new Error("unterminated @layer grimoire");
+    bodies.push(css.slice(open + 1, closed));
+    from = closed + 1;
   }
-  throw new Error("unterminated @layer grimoire");
 }
 
 /** Everything NOT inside an `@layer grimoire { … }` block. */
@@ -904,8 +966,10 @@ describe("theming", () => {
     // override would only win in one scheme.
     expect(body).toMatch(/:root\{[^}]*--grim-color-accent:/);
     expect(body).toMatch(/\[data-theme=("dark"|dark)\]\{[^}]*--grim-color-accent:/);
-    // …and nothing may declare a token outside it.
-    expect(bundledCss.replace(body, "")).not.toMatch(/--(accent|bg|fg|card|border):/);
+    // …and nothing may declare a token outside it. `outsideLayers` rather
+    // than subtracting `body`, which is now several blocks joined and so
+    // matches nothing to remove.
+    expect(outsideLayers(bundledCss)).not.toMatch(/--(accent|bg|fg|card|border):/);
   });
 
   it("lets a consumer override space and radius, not just colour", () => {
@@ -929,6 +993,56 @@ describe("theming", () => {
       indexHtml.indexOf('rel="stylesheet"'),
     );
     expect(indexHtml.indexOf("rgb(1 2 3)")).toBeGreaterThan(indexHtml.indexOf("@layer grimoire"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-008 / S-003 — `NavLink.external`.
+//
+// Two orthogonal axes, and conflating them is the defect this suite exists
+// to pin: `withBase` applies to every link unconditionally (it no-ops on
+// anything already absolute), while `external ?? !href.startsWith("/")`
+// decides the new-tab affordance and nothing else. Asserted against the
+// SUBPATH build, because that is the only one where a missing `withBase` is
+// visible at all.
+//
+// Header and footer both, every time: the footer is the half that changes,
+// so checking the header alone would gate nothing.
+// ---------------------------------------------------------------------------
+describe("in-tab or new-tab links", () => {
+  // Case 1 and case 2. The header keeps exactly the behaviour it had; the
+  // footer — which applied no such treatment at all — now matches it.
+  it("infers from the href shape when external is unset, header and footer alike", () => {
+    for (const region of [NAV, FOOTER_LINKS]) {
+      const internal = linkTag(sub.indexHtml, region, `${SUB_BASE}/p/github.com/acme/code-review/`);
+      expect(internal).not.toContain("target=");
+      expect(internal).not.toContain("rel=");
+
+      const external = linkTag(sub.indexHtml, region, "https://docs.example.test");
+      expect(external).toContain('target="_blank"');
+      expect(external).toContain('rel="noopener noreferrer"');
+    }
+  });
+
+  // Case 3. The one that breaks when the two axes are written as one branch:
+  // guarding `withBase` on "is this internal" drops the base path here.
+  it("still prefixes a site-root href that external forces into a new tab", () => {
+    for (const region of [NAV, FOOTER_LINKS]) {
+      const tag = linkTag(sub.indexHtml, region, `${SUB_BASE}/logo.svg`);
+      expect(tag).toContain('target="_blank"');
+      expect(tag).toContain('rel="noopener noreferrer"');
+    }
+  });
+
+  // Case 4, and the reason the field exists at all: an absolute URL that is
+  // still this site — an intranet mirror, a staging host — has no href shape
+  // that says so. `??`, not `||`: `false` here is a decision, not "unset".
+  it("keeps an absolute href in the tab when external is false", () => {
+    for (const region of [NAV, FOOTER_LINKS]) {
+      const tag = linkTag(sub.indexHtml, region, "https://intranet.example.test/");
+      expect(tag).not.toContain("target=");
+      expect(tag).not.toContain("rel=");
+    }
   });
 });
 

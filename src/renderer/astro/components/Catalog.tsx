@@ -5,33 +5,18 @@ import {
   useRef,
   useState,
 } from "preact/hooks";
-// Lucide (ISC) draws the UI; brand marks come from `@mdi/js`, which Lucide
-// deliberately does not carry. No SVG on this site is hand-written.
+// Lucide (ISC) draws the toolbar. The brand marks and kind glyphs moved out
+// with the card and the row that wear them.
 import {
-  ArrowBigUp,
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
-  Check,
-  FolderRoot,
-  Globe,
-  Image,
-  ImageOff,
   LayoutGrid,
   List,
 } from "lucide-preact";
-import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
-import { BrandMark } from "./BrandMark.js";
-import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "./KindMark.js";
-import { withBase } from "../lib/base.js";
+import { PackageCard } from "./PackageCard.js";
+import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
-import {
-  externalUrl,
-  lastUpdated,
-  timeAgo,
-  vscodeUrl,
-  vscodeVoteUrl,
-  type CatalogPackage,
-} from "../lib/catalog.js";
+import { lastUpdated, type CatalogPackage } from "../lib/catalog.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
@@ -222,139 +207,6 @@ function columnCount(cards: HTMLElement[]): number {
 }
 
 /**
- * The card's 28px logo slot, in its three states.
- *
- * The third one is the reason this is a component rather than inline JSX: a
- * package can declare a `logo` whose file is not actually served — the
- * enrich step failed, the asset was pruned, the path is stale — and the
- * browser's own broken-image glyph is both ugly and says nothing. So a
- * declared-but-unreachable logo degrades to a marked placeholder, which is
- * deliberately *not* the same as the initial-letter tile a package with no
- * logo at all gets: one is a fault worth seeing, the other is normal.
- *
- * The static detail page needs the same treatment but cannot use `onError`,
- * so it opts into the global handler in `Base.astro` instead — keep the two
- * placeholders looking alike.
- */
-function CardLogo({ pkg }: { pkg: CatalogPackage }) {
-  const [state, setState] = useState<"loading" | "ready" | "broken">("loading");
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  // The image is server-rendered, so the browser begins fetching it while
-  // parsing the HTML — long before this island hydrates. Two consequences,
-  // and the slot markup below answers both: `onError` can fire before any
-  // listener exists (the placeholder used to appear only sometimes), and a
-  // failed image paints the browser's broken glyph on the way (the flash on
-  // reload). Starting the image hidden means nothing is ever shown until it
-  // is known to be good.
-  //
-  // `complete` says the browser finished, not how it went. `decode()` is
-  // what separates the two: it rejects for a failure and resolves for a good
-  // image — including an SVG with no intrinsic size, where the usual
-  // `naturalWidth === 0` test reports a false failure. Gating on `complete`
-  // means it never starts a fetch, so `loading="lazy"` still holds off
-  // -screen cards.
-  useEffect(() => {
-    setState("loading");
-    const img = imgRef.current;
-    if (!img?.complete) return;
-    let live = true;
-    img.decode().then(
-      () => live && setState("ready"),
-      () => live && setState("broken"),
-    );
-    return () => {
-      live = false;
-    };
-  }, [pkg.logo]);
-
-  if (!pkg.logo) {
-    return (
-      <span
-        class="card-logo card-logo-fallback"
-        aria-hidden="true"
-        style={{
-          background: `var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`,
-        }}
-      >
-        {pkg.name[0]?.toUpperCase()}
-      </span>
-    );
-  }
-
-  return (
-    <span
-      class="card-logo logo-slot"
-      data-state={state}
-      role={state === "broken" ? "img" : undefined}
-      aria-label={state === "broken" ? "Logo image unavailable" : undefined}
-      title={state === "broken" ? "Logo image unavailable" : undefined}
-    >
-      {state === "broken" ? (
-        <ImageOff class="logo-mark" aria-hidden="true" />
-      ) : (
-        <Image class="logo-mark" aria-hidden="true" />
-      )}
-      <img
-        ref={imgRef}
-        src={withBase(pkg.logo)}
-        alt=""
-        loading="lazy"
-        onLoad={() => setState("ready")}
-        onError={() => setState("broken")}
-      />
-    </span>
-  );
-}
-
-function CopyButton({
-  command,
-  variant = "default",
-  name,
-}: {
-  command: string;
-  variant?: "default" | "global";
-  /** What the copy toast calls this, e.g. `"global install command"`. */
-  name?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(command).then(() => {
-      setCopied(true);
-      // The toast lives in Base.astro's inline script, outside this island —
-      // an event is how a hydrated component reaches it without either side
-      // importing the other.
-      document.dispatchEvent(
-        new CustomEvent("grimoire:copied", {
-          detail: { name, value: command },
-        }),
-      );
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-  return (
-    <button
-      type="button"
-      class={copied ? "copy copied" : "copy"}
-      title={command}
-      aria-label={`Copy: ${command}`}
-      // Out of the Tab sequence: the card is the stop, and the same command
-      // is copyable from the detail page Enter opens.
-      tabIndex={-1}
-      onClick={copy}
-    >
-      {copied ? (
-        <Check size={14} />
-      ) : variant === "global" ? (
-        <Globe size={14} />
-      ) : (
-        <FolderRoot size={14} />
-      )}
-    </button>
-  );
-}
-
-/**
  * The same packages as a list, for reading down a column rather than across
  * a grid.
  *
@@ -397,108 +249,14 @@ function PackageTable({
         rootRef.current = el;
       }}
     >
-      {packages.map((p) => {
-        const at = lastUpdated(p);
-        const ago = at && timeAgo(at) ? timeAgo(at) : null;
-        return (
-          <a
-            key={`${p.namespace}/${p.name}`}
-            class="row"
-            data-slot="package-row"
-            href={withBase(`/p/${p.namespace}/${p.name}/`)}
-            // The full identity, since the visible name is clipped and the
-            // namespace is not shown at all.
-            title={`${p.namespace}/${p.name}`}
-            onKeyDown={onKeyDown}
-          >
-            {/* The same tile the card shows, at a row's height. It goes in a
-                column of its own rather than beside the name so it stays a
-                slot the eye tracks down — and `CardLogo` already answers the
-                three states a logo has here (missing, loading, declared but
-                unreachable), so the column is never ragged. */}
-            <span class="t-logo">
-              <CardLogo pkg={p} />
-            </span>
-            {/* The kind as its mark, not as its word — the same glyph the
-                card wears in its corner and the same one the VS Code
-                extension puts on its cards, in the kind's own colour.
-
-                Which is also how deprecation is said here: a retired package
-                shows the warning mark in the deprecation colour instead of
-                its kind, exactly as the card's watermark does. The badge this
-                replaces was a second word in a cell with room for none, and
-                it widened the column for every row whether or not anything in
-                view was retired.
-
-                The word is not lost — it names the mark, so it is read out,
-                and the `title` sits on the cell rather than on the `<svg>`:
-                an SVG takes its tooltip from a `<title>` child, and a `title`
-                attribute on it does nothing at all. */}
-            {(() => {
-              const mark = p.deprecated ? DEPRECATED_MARK : KIND_MARKS[p.kind];
-              const label = p.deprecated ? `${p.kind}, deprecated` : p.kind;
-              return (
-                <span
-                  class="t-kind"
-                  data-slot="package-kind"
-                  title={label}
-                  style={{
-                    color: p.deprecated
-                      ? "var(--grim-color-deprecated)"
-                      : `var(--grim-color-kind-${p.kind}, var(--grim-color-muted))`,
-                  }}
-                >
-                  {mark ? (
-                    <KindMark
-                      glyph={mark}
-                      size={16}
-                      role="img"
-                      aria-label={label}
-                    />
-                  ) : (
-                    // An unknown kind has no mark, and inventing one would be
-                    // a claim. It keeps the word it always had.
-                    <span class="t-kind-word">{label}</span>
-                  )}
-                </span>
-              );
-            })()}
-            {/* The name alone. The namespace used to sit beside it and was
-                what pushed this cell onto a second line — and it is not worth
-                a column of its own here, where the kind already answers "what
-                is this" and the description answers "about what". It rides in
-                the row's tooltip instead, with the full name, which is also
-                what the ellipsis costs the reader. */}
-            <span class="t-name" data-slot="package-name">
-              {p.name}
-            </span>
-            <span class="t-desc">{p.description}</span>
-            <span class="t-updated" data-slot="package-meta">
-              {ago && at && (
-                <time datetime={at} title={at}>
-                  {ago}
-                </time>
-              )}
-            </span>
-            {hasRatings && (
-              // Count first, arrow after it, both held at the right edge.
-              // The count sits in a fixed right-aligned box, so the digits
-              // stack into a column and the arrow after them lands in the
-              // same place on every row whatever the count is. An unrated
-              // package keeps the empty cell: the column is a slot the eye
-              // tracks down, and a row that skips it breaks the run.
-              <span class="t-rating">
-                {p.rating && (
-                  <>
-                    <span class="t-votes">{p.rating.up}</span>
-                    <ArrowBigUp size={13} aria-hidden="true" />
-                  </>
-                )}
-              </span>
-            )}
-          </a>
-        );
-      })}
+      {packages.map((p) => (
+        <PackageRow
+          key={`${p.namespace}/${p.name}`}
+          pkg={p}
+          hasRatings={hasRatings}
+          onKeyDown={onKeyDown}
+        />
+      ))}
     </div>
   );
 }
@@ -1382,233 +1140,14 @@ export default function Catalog({
           }}
         >
           {shown.map((p) => (
-            // One Tab stop per card, in DOM order — which the grid lays out
-            // left to right, top to bottom. Every control inside is taken
-            // out of the sequence (`tabindex={-1}`) so tabbing crosses the
-            // catalog instead of wading through it; arrow keys move by row
-            // and column, and Enter opens the detail page, which carries the
-            // same install commands the card's buttons do.
-            <li
+            <PackageCard
               key={`${p.namespace}/${p.name}`}
-              class="card"
-              data-slot="package-card"
-              tabIndex={0}
+              pkg={p}
+              vscodeExtension={vscodeExtension}
+              activeKeywords={keywords}
+              onToggleKeyword={toggleKeyword}
               onKeyDown={onCardKeyDown}
-            >
-              {/* The kind again, as texture: the same mark the card's kind
-                  wears in the VS Code extension, enlarged into the card's
-                  top-right corner. Decorative — the kind is written on the
-                  address line — so it is aria-hidden.
-
-                  Every mark is framed on its own bounding box (see
-                  `KindMark`), so they render at one apparent size rather
-                  than at whatever fraction of the 16-unit grid each codicon
-                  happens to use.
-
-                  The colour is the token at FULL strength; the fading is
-                  `opacity` on the element, in CSS. A translucent colour is
-                  not equivalent: any glyph whose paths overlap composites
-                  each crossing twice and comes out blotchy along its own
-                  joins. Element opacity flattens the mark first and blends
-                  the result once, which is the only way the tint is even.
-
-                  A deprecated package spends it on the warning instead. The
-                  kind is written either way, so the mark is free to carry the
-                  one thing that has no words — and being the only deprecation
-                  signal on the card, it is labelled rather than hidden. */}
-              {(() => {
-                const mark = p.deprecated
-                  ? DEPRECATED_MARK
-                  : KIND_MARKS[p.kind];
-                if (!mark) return null;
-                return (
-                  <KindMark
-                    glyph={mark}
-                    class="card-watermark"
-                    size={112}
-                    role={p.deprecated ? "img" : undefined}
-                    aria-label={p.deprecated ? "deprecated" : undefined}
-                    aria-hidden={p.deprecated ? undefined : "true"}
-                    style={{
-                      color: p.deprecated
-                        ? "var(--grim-color-deprecated)"
-                        : `var(--grim-color-kind-${p.kind}, var(--grim-color-muted))`,
-                    }}
-                  />
-                );
-              })()}
-              <div class="card-head">
-                <CardLogo pkg={p} />
-                <h2 data-slot="package-name">
-                  <a
-                    href={withBase(`/p/${p.namespace}/${p.name}/`)}
-                    tabIndex={-1}
-                  >
-                    {p.name}
-                  </a>
-                </h2>
-                {/* A count and two ways to add to it — never a "you voted"
-                    state: the page is prerendered once for everyone, so it
-                    cannot know whether *you* did, and showing "not voted"
-                    to someone who has would be worse than showing nothing.
-
-                    Left, the count itself, linking to the forge thread the
-                    sidecar names. No forge offers a URL that casts a vote,
-                    so this opens the thread and the reader clicks the
-                    reaction there. Right, the extension's `/vote?repo=`
-                    route, which does cast one — behind its own disclosure
-                    modal, never on the strength of this link. */}
-                {p.rating &&
-                  (() => {
-                    const votes = `${p.rating.up} upvote${p.rating.up === 1 ? "" : "s"}`;
-                    // Registry-supplied, like every other outbound string
-                    // here: through the scheme allowlist before it is an
-                    // href, whatever the sidecar spelled.
-                    const thread = externalUrl(p.rating.url);
-                    const vote = vscodeVoteUrl(vscodeExtension, p.ref);
-                    return (
-                      <span class="rating-group">
-                        {thread ? (
-                          <a
-                            class="rating-count"
-                            href={thread}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            tabIndex={-1}
-                            title={`${votes} — open the thread to vote`}
-                            aria-label={`${p.name}: ${votes}. Open the voting thread`}
-                          >
-                            <ArrowBigUp size={13} aria-hidden="true" />
-                            {p.rating.up}
-                          </a>
-                        ) : (
-                          <span class="rating-count" title={votes}>
-                            <ArrowBigUp size={13} aria-hidden="true" />
-                            {p.rating.up}
-                          </span>
-                        )}
-                        {vote && (
-                          <a
-                            class="rating-vote"
-                            href={vote}
-                            tabIndex={-1}
-                            title="Upvote in VS Code"
-                            aria-label={`Upvote ${p.name} in VS Code`}
-                          >
-                            <BrandMark
-                              path={mdiMicrosoftVisualStudioCode}
-                              size={12}
-                            />
-                          </a>
-                        )}
-                      </span>
-                    );
-                  })()}
-                {/* Kind, then where it lives — two things, dot-separated, in
-                    the same shape the foot's `version · updated` uses. The
-                    kind leads because it is what a reader filters on; the
-                    watermark in the corner says the same thing without
-                    words. Deprecation is deliberately NOT here: a third item
-                    filled the line, and the watermark carries it. */}
-                <p class="namespace">
-                  <span class="kind" data-slot="package-kind">
-                    {p.kind}
-                  </span>
-                  <span aria-hidden="true"> · </span>
-                  {p.namespace}
-                </p>
-              </div>
-              {/* Under the head, above the description: what the package
-                  is tagged with. One row, never two — the row gives up its
-                  overflow rather than wrapping, and fades at its right end
-                  to say there is more. */}
-              {p.keywords && p.keywords.length > 0 && (
-                <div class="keywords" data-slot="package-keywords">
-                  {/* Capped at five so a package with thirty keywords does
-                      not render thirty chips off the side of a clipped row.
-                      Which of the five actually fit is the row's business. */}
-                  {/* Applies the keyword facet, not a text search. The two
-                      are not the same answer: `setQuery("cli")` also matched
-                      every description with the word in it, so the chip
-                      returned packages that are not tagged `cli` at all. */}
-                  {p.keywords.slice(0, 5).map((kw) => (
-                    <button
-                      key={kw}
-                      type="button"
-                      class={
-                        keywords.includes(kw)
-                          ? "chip keyword active"
-                          : "chip keyword"
-                      }
-                      aria-pressed={keywords.includes(kw)}
-                      tabIndex={-1}
-                      onClick={() => toggleKeyword(kw)}
-                    >
-                      {kw}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {p.description && <p class="description">{p.description}</p>}
-              <div class="card-foot">
-                <div class="copy-group">
-                  {/* Global first, matching the hero's scope picker — the two
-                      are the same choice in two places, so they lead with the
-                      same one. */}
-                  <CopyButton
-                    command={`grim add --global ${p.ref}`}
-                    variant="global"
-                    name={`global add for ${p.name}`}
-                  />
-                  <CopyButton
-                    command={`grim add ${p.ref}`}
-                    name={`project add for ${p.name}`}
-                  />
-                  {vscodeUrl(vscodeExtension, p.ref) && (
-                    <a
-                      class="copy vscode"
-                      href={vscodeUrl(vscodeExtension, p.ref)!}
-                      title="Open in VS Code"
-                      aria-label={`Open ${p.name} in VS Code`}
-                      tabIndex={-1}
-                    >
-                      <BrandMark path={mdiMicrosoftVisualStudioCode} />
-                    </a>
-                  )}
-                </div>
-                {/* Version and recency, on their own line under the buttons.
-                    Both answer the same question — how current is this — so
-                    they read as one stamp; alongside the buttons they were a
-                    third thing competing for the card's last row, which is
-                    where the vote badge now sits.
-
-                    The date is the one the sidecar derived, not the
-                    artifact's own `created`: a package republished from the
-                    same commit keeps its date, and one with no commit date
-                    at all gets the day this index first saw its current
-                    digest. Licence is gone from the card entirely; it
-                    matters when adopting a package, not when scanning for
-                    one, and the detail page states it. */}
-                {(() => {
-                  const at = lastUpdated(p);
-                  const ago = at && timeAgo(at) ? timeAgo(at) : null;
-                  if (!p.version && !ago) return null;
-                  return (
-                    <p class="card-meta" data-slot="package-meta">
-                      {p.version && (
-                        <span class="card-version">v{p.version}</span>
-                      )}
-                      {p.version && ago && <span aria-hidden="true"> · </span>}
-                      {ago && at && (
-                        <time datetime={at} title={at}>
-                          updated {ago}
-                        </time>
-                      )}
-                    </p>
-                  );
-                })()}
-              </div>
-            </li>
+            />
           ))}
         </ul>
       )}

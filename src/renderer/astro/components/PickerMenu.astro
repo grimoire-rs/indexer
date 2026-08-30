@@ -8,23 +8,14 @@
 // `Base.astro`'s `[data-os-switch]` handler moves it. That handler is generic
 // over bars, so this component ships no script of its own.
 //
-// Icons arrive one of two ways and both render to static SVG at build time:
-// `path` for a `@mdi/js` brand mark, `Icon` for a Lucide component. Lucide
-// carries no brand marks and MDI is not the set the rest of the site draws
-// with, so neither alone covers both bars.
+// Icons arrive one of two ways and both render to static SVG at build time —
+// see `Choice` in `../lib/commands`.
 import { ChevronDown } from "lucide-preact";
 import { BrandMark } from "./BrandMark.tsx";
+// The shape lives with the functions that build it, so a page importing
+// `installChoices` and a component rendering it cannot disagree about it.
+import type { Choice } from "../lib/commands";
 
-export interface Choice {
-  /** Shown in the menu, and matched against `data-os-glyph` when picking. */
-  name: string;
-  /** What the field shows and copies once this choice is picked. */
-  command: string;
-  /** `@mdi/js` path string. */
-  path?: string;
-  /** Lucide component, taking a `size` prop. */
-  Icon?: (props: { size?: number }) => unknown;
-}
 
 interface Props {
   choices: Choice[];

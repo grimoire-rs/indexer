@@ -1,0 +1,74 @@
+---
+// The site header: brand, nav, theme toggle.
+//
+// Its own file so an index can replace the header ALONE — `theme/components/
+// SiteHeader.astro` wins over this, and `Base.astro` still supplies the head,
+// the centered `main`, the copy toast and every default style. Replacing the
+// layout instead means owning all of that.
+//
+// It takes no props deliberately: everything it draws is build-time config,
+// which it reads the same way any page does. A replacement therefore has no
+// prop contract to match — it imports `data` and renders whatever it likes.
+//
+// The styles stay in `Base.astro`'s global block, which is `is:global` and so
+// reaches this markup wherever it lives. Nothing here to keep in step.
+import { Moon, Sun } from "lucide-preact";
+import { linkAttrs, withBase } from "../lib/base";
+import { data } from "../lib/data";
+
+const { config } = data;
+// The mark is styled separately, so it only applies when it really is the
+// leading run of the brand — otherwise the header renders the plain text.
+const brandRest =
+  config.brandMark && config.brand.startsWith(config.brandMark)
+    ? config.brand.slice(config.brandMark.length)
+    : null;
+// `config.nav` arrives resolved: `resolveConfig` synthesized the docs/forge
+// pair for an index that configured no nav, and named the forge host itself.
+---
+
+<header data-slot="site-header">
+  <div class="shell header-row">
+    <a class="brand" href={withBase("/")} data-slot="brand">
+      {/* Decorative: the brand text is right beside it, so announcing the
+          logo too would read the index's name twice. */}
+      {config.logo && <img class="brand-logo" src={withBase(config.logo)} alt="" />}
+      {
+        brandRest === null ? (
+          config.brand
+        ) : (
+          <Fragment>
+            <span class="brand-mark">{config.brandMark}</span>
+            {brandRest}
+          </Fragment>
+        )
+      }
+    </a>
+    <nav>
+      {/* Two independent questions, and they used to be one branch. Every
+          href gets `withBase`: a page added under `theme/pages/` is linked
+          as `/setup/`, on project Pages the site does not live at the domain
+          root, and `withBase` already leaves an absolute URL alone — so
+          there is nothing here to guard. Whether the link opens in a new tab
+          is `linkAttrs`, which reads `external` and falls back to the href's
+          shape. An internal link must not open a tab, or browsing the
+          index's own guide pages litters the visitor's. */}
+      {
+        config.nav.map((link) => (
+          <a href={withBase(link.href)} {...linkAttrs(link)}>
+            {link.label}
+          </a>
+        ))
+      }
+      {/* Stroked, not filled, and inheriting the nav's own colour, so the
+          toggle reads as a third nav item rather than a control bolted beside
+          them. Rendered statically — no client directive, so no JavaScript
+          ships for the icons. The click handler lives in `Base.astro`, with
+          the rest of the document's scripts. */}
+      <button id="theme-toggle" type="button" aria-label="Toggle theme">
+        <Moon class="when-light" size={16} aria-hidden="true" />
+        <Sun class="when-dark" size={16} aria-hidden="true" />
+      </button>
+    </nav>
+  </div>
+</header>

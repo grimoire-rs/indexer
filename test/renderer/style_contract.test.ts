@@ -256,6 +256,7 @@ describe("the data-slot contract", () => {
     "package-table",
     "site-footer",
     "site-header",
+    "site-notice",
     "version-pill",
   ];
 

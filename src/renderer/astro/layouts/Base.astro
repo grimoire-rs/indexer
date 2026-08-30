@@ -7,7 +7,13 @@
 // The tokens themselves live in `../styles/tokens.css`, which declares the
 // same layer. That file is the contract; this one only spends it.
 import "../styles/tokens.css";
-import { Moon, Sun } from "lucide-preact";
+// Header and footer are separate components so an index can replace one of
+// them without owning this file — the head, the centered `main`, the copy
+// toast and the whole style block below are what it would otherwise inherit
+// the hard way. Their styles stay here: the block is `is:global`, so it
+// reaches their markup wherever it lives.
+import SiteHeader from "../components/SiteHeader.astro";
+import SiteFooter from "../components/SiteFooter.astro";
 import { withBase } from "../lib/base";
 import { data } from "../lib/data";
 
@@ -20,33 +26,6 @@ const { config, css } = data;
 // `og:image` falls back to the logo before the favicon: a favicon is drawn to
 // read at 16px, and a link preview is not that.
 const { title, description, image = config.logo ?? config.favicon } = Astro.props;
-// Shown as well as linked: on a subpath deployment the bare path is not
-// where the file is, so the label has to carry the prefix too.
-const allJson = withBase("/all.json");
-// The mark is styled separately, so it only applies when it really is the
-// leading run of the brand — otherwise the header renders the plain text.
-const brandRest =
-  config.brandMark && config.brand.startsWith(config.brandMark)
-    ? config.brand.slice(config.brandMark.length)
-    : null;
-
-/**
- * Name the forge `repoUrl` actually points at, rather than assuming one.
- * `repoUrl` is free-form config: an index hosted on GitLab was previously
- * labelled "GitHub" in its own header. An unrecognized host is named
- * outright — honest, and already lowercase, which is the house style for
- * this nav.
- */
-const FORGES = ["github", "gitlab", "bitbucket", "codeberg", "sourcehut"];
-function repoLabel(url: string): string {
-  let host: string;
-  try {
-    host = new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "repo";
-  }
-  return FORGES.find((forge) => host.includes(forge)) ?? host;
-}
 ---
 
 <html lang="en">
@@ -139,88 +118,25 @@ function repoLabel(url: string): string {
     </script>
   </head>
   <body>
-    <header data-slot="site-header">
-      <div class="shell header-row">
-        <a class="brand" href={withBase("/")} data-slot="brand">
-          {/* Decorative: the brand text is right beside it, so announcing the
-              logo too would read the index's name twice. */}
-          {config.logo && <img class="brand-logo" src={withBase(config.logo)} alt="" />}
-          {
-            brandRest === null ? (
-              config.brand
-            ) : (
-              <Fragment>
-                <span class="brand-mark">{config.brandMark}</span>
-                {brandRest}
-              </Fragment>
-            )
-          }
-        </a>
-        <nav>
-          {config.docsUrl && <a href={config.docsUrl}>docs</a>}
-          {
-            config.repoUrl && (
-              <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">
-                {repoLabel(config.repoUrl)}
-              </a>
-            )
-          }
-          {/* Stroked, not filled, and inheriting the nav's own colour, so the
-              toggle reads as a third nav item rather than a control bolted
-              beside them. Rendered statically — no client directive, so no
-              JavaScript ships for the icons. */}
-          <button id="theme-toggle" type="button" aria-label="Toggle theme">
-            <Moon class="when-light" size={16} aria-hidden="true" />
-            <Sun class="when-dark" size={16} aria-hidden="true" />
-          </button>
-        </nav>
-      </div>
-    </header>
+    <SiteHeader />
+
+    {/* Whatever this index has to say on every page. Its own element rather
+        than a line inside `main`, so a consumer can make it full-bleed by
+        restyling one slot — the inner `shell` keeps it aligned with the page
+        until they do. */}
+    {
+      config.notice && (
+        <div class="notice" data-slot="site-notice">
+          <p class="shell">{config.notice}</p>
+        </div>
+      )
+    }
 
     <main class="shell">
       <slot />
     </main>
 
-    <footer data-slot="site-footer">
-      <div class="shell">
-        <p>
-          Raw data: <a href={allJson}><code>{allJson}</code></a>{
-            config.footerNote ? ` · ${config.footerNote}` : ""
-          }
-        </p>
-        {/* Whatever this index has to link — a privacy notice, an imprint, a
-            code of conduct. Absent by default, so a footer without them looks
-            exactly as it did before. */}
-        {
-          config.footerLinks.length > 0 && (
-            <p class="footer-links">
-              {config.footerLinks.map((link) => (
-                <a href={link.href}>{link.label}</a>
-              ))}
-            </p>
-          )
-        }
-        {/* Opt-out, not opt-in: an index runner who does not want to say
-            where the software came from sets `attribution: false`, and this
-            disappears. Nothing else on the page changes.
-
-            "using", not "by": the index runner built this site — Grimoire is
-            the tool they built it with. */}
-        {
-          config.attribution && (
-            <p class="attribution">
-              Built with <span aria-hidden="true">♥</span><span class="sr-only">love</span> using{" "}
-              {/* New tab: this is the one link that leaves the index for an
-                  unrelated site, and a visitor mid-browse should not lose
-                  their place to it. */}
-              <a href="https://grimoire.rs" target="_blank" rel="noopener">
-                Grimoire
-              </a>
-            </p>
-          )
-        }
-      </div>
-    </footer>
+    <SiteFooter />
 
     {/* One toast for the whole page, outside every scrolling container so a
         copy from a card at the bottom lands in the same place as one from
@@ -232,7 +148,11 @@ function repoLabel(url: string): string {
     </div>
 
     <script is:inline>
-      document.getElementById("theme-toggle").addEventListener("click", () => {
+      // Optional: an index repo that replaces `SiteHeader.astro` is free to
+      // ship a header with no toggle, and this block runs on every page
+      // regardless. Unguarded, that one dereference threw and took every
+      // script below it with it — copy buttons, picker wiring, toast.
+      document.getElementById("theme-toggle")?.addEventListener("click", () => {
         const root = document.documentElement;
         const next = root.dataset.theme === "dark" ? "light" : "dark";
         root.dataset.theme = next;
@@ -294,6 +214,26 @@ function repoLabel(url: string): string {
             summary?.focus();
           });
         }
+      }
+
+      // Preselect the host platform in every bar that asked for it. Lives
+      // here rather than in `index.astro` because `detect` has to mean the
+      // same thing wherever a bar is drawn — a page under `theme/pages/`
+      // rendering `<CommandBar detect />` gets this, and used to get the
+      // configured first choice however the visitor arrived. A platform the
+      // bar does not offer leaves that first choice alone.
+      //
+      // The landing page ALSO runs this in its own script, right beside the
+      // hero: this one sits past the whole catalog, late enough for the
+      // browser to paint a Linux command at someone on Windows first. Both
+      // runs pick the same choice and `__grimPick` is idempotent, so the
+      // duplicate costs nothing and the early one is what a visitor sees.
+      for (const bar of document.querySelectorAll("[data-os-detect]")) {
+        const host = window.__grimHostOs();
+        const match = [...bar.querySelectorAll("[data-os-pick]")].find(
+          (p) => p.dataset.osName === host,
+        );
+        if (match) window.__grimPick(bar, match);
       }
 
       // One toast for every copy on the page. The in-place check confirms
@@ -419,6 +359,20 @@ function repoLabel(url: string): string {
           justify-content: space-between;
           padding-block: var(--grim-space-5);
           gap: var(--grim-space-6);
+        }
+        /* Deliberately neutral, not the amber of `--grim-color-banner-*`:
+           that palette says "warning", and this line is whatever the index
+           has to state on every page. An index that wants it loud restyles
+           `[data-slot="site-notice"]` — one selector, no new token. */
+        .notice {
+          border-bottom: var(--grim-border-width) solid var(--grim-color-border);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-muted);
+          font-size: var(--grim-text-sm);
+        }
+        .notice p {
+          margin: 0;
+          padding-block: var(--grim-space-4);
         }
         .brand {
           display: inline-flex;

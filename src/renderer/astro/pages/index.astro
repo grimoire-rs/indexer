@@ -1,19 +1,12 @@
 ---
 import Base from "../layouts/Base.astro";
 import Catalog from "../components/Catalog.tsx";
-import CommandField from "../components/CommandField.astro";
-import PickerMenu from "../components/PickerMenu.astro";
+import CommandBar from "../components/CommandBar.astro";
 import { BrandMark } from "../components/BrandMark.tsx";
-import { FolderRoot, Globe } from "lucide-preact";
 import { addRegistryUrl } from "../lib/catalog";
+import { installChoices, registryAddCommand, registryScopeChoices } from "../lib/commands";
 import { data } from "../lib/data";
-import {
-  mdiApple,
-  mdiConsole,
-  mdiMicrosoftVisualStudioCode,
-  mdiMicrosoftWindows,
-  mdiPenguin,
-} from "@mdi/js";
+import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 
 const { config, packages } = data;
 
@@ -28,50 +21,11 @@ const marketplace = config.vscodeExtension
   ? `https://marketplace.visualstudio.com/items?itemName=${config.vscodeExtension}`
   : null;
 
-// The "add this index" ergonomic (`helm repo add`): the one command a
-// visitor needs to point their own grim at *this* index. Absent `registry`
-// config means the index has no public URL to hand out, so the block is
-// omitted rather than guessed.
-const addCommand = config.registry
-  ? `grim config registry add ${config.registry.alias} --index ${config.registry.index}`
-  : null;
-
-// One installer row usually covers several platforms ("Linux / macOS"), and
-// the toggle reads better as the platforms themselves than as the config's
-// row labels — so a row expands into one button per platform it names, all
-// pointing at the same command. A row naming none (a custom label) keeps a
-// single generic button, so an unrecognized platform is never dropped.
-//
-// `mdiPenguin`, not `mdiLinux`: Tux's own silhouette is a solid mass that
-// reads as an indistinct blob at 16px, where the plainer penguin keeps its
-// outline. Still a brand mark from the same set, so it sits beside Apple
-// and Windows without a weight change.
-const PLATFORMS = [
-  { match: /linux/i, name: "Linux", path: mdiPenguin },
-  { match: /mac|darwin|osx|apple/i, name: "macOS", path: mdiApple },
-  { match: /win/i, name: "Windows", path: mdiMicrosoftWindows },
-];
-const installChoices = config.install.flatMap((row) => {
-  const hits = PLATFORMS.filter((p) => p.match.test(row.os));
-  return hits.length > 0
-    ? hits.map((p) => ({ name: p.name, path: p.path, command: row.command }))
-    : [{ name: row.os, path: mdiConsole, command: row.command }];
-});
-
-// Registry scope, the same two-way choice the package cards offer and drawn
-// with the same two Lucide glyphs. Global leads: someone arriving from an
-// index website wants this index available everywhere, not wired into
-// whichever directory happens to be open — and it is also the scope that
-// works with no project at all.
-// `--global` leads rather than trails: it is a top-level flag, and appended
-// after a long `--index <url>` it fell off the end of the line, so switching
-// scope looked like it changed nothing at all.
-const scopeChoices = addCommand
-  ? [
-      { name: "Global", command: `grim --global ${addCommand.slice("grim ".length)}`, Icon: Globe },
-      { name: "Project", command: addCommand, Icon: FolderRoot },
-    ]
-  : [];
+// All three derivations live in `lib/commands` rather than here, so a page an
+// index adds under `theme/pages/` can draw these same bars — see CommandBar.
+const install = installChoices(config);
+const addCommand = registryAddCommand(config);
+const scopeChoices = registryScopeChoices(config);
 ---
 
 <Base title={config.brand} description={config.description}>
@@ -93,26 +47,22 @@ const scopeChoices = addCommand
         reading what this index is. Two labelled rows of one shape — the
         command, then the ways to act on it, inside a single border. */}
     {
-      (installChoices.length > 0 || addCommand || addRegistry) && (
+      (install.length > 0 || addCommand || addRegistry) && (
         <div class="hero-side">
-          {installChoices.length > 0 && (
+          {install.length > 0 && (
             <Fragment>
               <span class="side-label">install grim</span>
-              <div class="cmd-bar" data-os-switch data-os-detect data-os-noun="install command">
-                {installChoices.length > 1 && (
-                  <PickerMenu
-                    choices={installChoices}
-                    title="Platform"
-                    label="Choose your platform"
-                  />
-                )}
-                <CommandField
-                  value={installChoices[0].command}
-                  name={`${installChoices[0].name} install command`}
-                  label="Copy the install command"
-                />
+              <CommandBar
+                choices={install}
+                noun="install command"
+                copyLabel="Copy the install command"
+                pickerTitle="Platform"
+                pickerLabel="Choose your platform"
+                detect
+              >
                 {marketplace && (
                   <a
+                    slot="action"
                     class="seg brand-link"
                     href={marketplace}
                     target="_blank"
@@ -123,25 +73,22 @@ const scopeChoices = addCommand
                     <BrandMark path={mdiMicrosoftVisualStudioCode} />
                   </a>
                 )}
-              </div>
+              </CommandBar>
             </Fragment>
           )}
           {(addCommand || addRegistry) && (
             <Fragment>
               <span class="side-label">add registry</span>
-              <div class="cmd-bar" data-os-switch data-os-noun="registry add command">
-                {scopeChoices.length > 0 && (
-                  <PickerMenu choices={scopeChoices} title="Scope" label="Choose the scope" />
-                )}
-                {scopeChoices.length > 0 && (
-                  <CommandField
-                    value={scopeChoices[0].command}
-                    name={`${scopeChoices[0].name} registry add command`}
-                    label="Copy the registry add command"
-                  />
-                )}
+              <CommandBar
+                choices={scopeChoices}
+                noun="registry add command"
+                copyLabel="Copy the registry add command"
+                pickerTitle="Scope"
+                pickerLabel="Choose the scope"
+              >
                 {addRegistry && (
                   <a
+                    slot="action"
                     class="seg brand-link"
                     href={addRegistry}
                     title="Add this index via VS Code"
@@ -150,7 +97,7 @@ const scopeChoices = addCommand
                     <BrandMark path={mdiMicrosoftVisualStudioCode} />
                   </a>
                 )}
-              </div>
+              </CommandBar>
             </Fragment>
           )}
         </div>
@@ -158,11 +105,17 @@ const scopeChoices = addCommand
     }
   </div>
 
-  {/* Right after the bar, on purpose: the layout's picker script sits at the
-      end of the document, past the whole catalog, and the browser can paint
-      before it runs — long enough to show a Linux command to someone on
-      Windows. Here it lands in the same parse as the hero. A platform the
-      bar does not offer leaves the configured first choice alone. */}
+  {/* A deliberate duplicate of the layout's own preselect loop, kept for
+      one reason: that one sits at the end of the document, past the whole
+      catalog, and the browser can paint before it runs — long enough to
+      show a Linux command to someone on Windows. This lands in the same
+      parse as the hero.
+
+      The layout's copy is what makes `detect` work on a page under
+      `theme/pages/`, which has no script of its own; both runs pick the same
+      choice and `__grimPick` is idempotent, so running twice here costs a
+      few microseconds and nothing else. A platform the bar does not offer
+      leaves the configured first choice alone. */}
   <script is:inline>
     for (const bar of document.querySelectorAll("[data-os-detect]")) {
       const host = window.__grimHostOs();
