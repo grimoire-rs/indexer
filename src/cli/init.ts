@@ -21,7 +21,7 @@ import {
   type Forge,
   type PublishTrigger,
 } from "../ci.js";
-import { CONFIG_FILE, validateSite } from "../config.js";
+import { CONFIG_FILE, validateSite, validateUrlShape } from "../config.js";
 import { fromTemplate } from "../templates.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 
@@ -220,10 +220,29 @@ function badName(value: string): string | null {
   return null;
 }
 
-/** What `SiteConfig.logo` accepts — checked here so a typo fails now, not at build time. */
+/**
+ * What `SiteConfig.logo` accepts — borrowed from `config.ts` for the reason
+ * `badSiteUrl` gives above, and checked here so a typo fails now rather than
+ * at build time.
+ *
+ * The copy this replaces read `/^(\/|https?:\/\/)/i`, which accepted
+ * `//evil.test/x.svg`, `/\evil.test/x.svg`, a tab-smuggled `/\t/evil.test/x`
+ * and `https://good.test@evil.test/x` — every one of them off-origin. The
+ * owner authors `index.config.json`, so this is a typo guard rather than a
+ * trust boundary; the reason to share one guard is that three copies of the
+ * rule had stopped agreeing about what a site-root path is, and `config.ts`
+ * documents each shape it refuses.
+ */
 function badLogo(value: string): string | null {
-  if (value === "" || /^(\/|https?:\/\/)/i.test(value)) return null;
-  return "must be a site-root path (/logo.svg) or an http(s) URL";
+  // Blank is "no logo": the answer is omitted from `index.config.json`
+  // entirely, so the shared guard never sees an empty string.
+  if (value === "") return null;
+  try {
+    validateUrlShape(value, "logo", true);
+    return null;
+  } catch (err) {
+    return (err as Error).message;
+  }
 }
 
 /**
@@ -898,11 +917,22 @@ function plan(
 
   const files = [
     { path: "index/.gitkeep", content: "" },
+    // The overlay has to be scaffolded or nobody finds the feature, and this
+    // is the only thing that says where a page goes. A README rather than the
+    // `.gitkeep` it replaces, because what someone needs before they overwrite
+    // a component — which parts of the overlay are promised — is not
+    // discoverable from a directory listing, and stating it only in the
+    // tsconfig comment put it where nobody reads it in time. Both files
+    // reserve `theme/` for git equally well; only one of them answers that.
+    from("theme/README.md", "theme/README.md"),
     { path: "index.config.json", content: siteConfig(answers) },
     { path: POLICY_FILE, content: indexPolicy(answers) },
     from("gitignore", ".gitignore"),
     from("gitattributes", ".gitattributes"),
     from("package.json", "package.json"),
+    // Editor-only: it is what makes `@grim/*` resolve while a theme page is
+    // being written. The build never reads it.
+    from("tsconfig.json", "tsconfig.json"),
     from("README.md", "README.md"),
   ];
 

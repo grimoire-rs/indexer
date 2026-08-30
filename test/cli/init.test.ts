@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 
 import yaml from "js-yaml";
+import ts from "typescript";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { run } from "../../src/cli/main.js";
@@ -84,6 +85,11 @@ describe("init --quick", () => {
 
     for (const file of [
       "index/.gitkeep",
+      // Where a page this index adds lives, what says which parts of the
+      // overlay are promised, and the tsconfig that makes `@grim/*` resolve
+      // in an editor while one is being written.
+      "theme/README.md",
+      "tsconfig.json",
       "index.config.json",
       "index-policy.json",
       ".gitignore",
@@ -184,6 +190,44 @@ describe("init --quick", () => {
     const config = JSON.parse(read("index.config.json"));
     expect(config.logo).toBe("/logo.svg");
     expect("favicon" in config).toBe(false);
+  });
+
+  // C-017. `badLogo` carried a verbatim copy of the `logo` regex in
+  // `config.ts`, and neither had the fix `validateLinks` got, so it accepted
+  // every rejected form below. `index.config.json` is owner-authored, so this
+  // is a paste guard rather than a trust boundary - the defect is that three
+  // copies of one rule had stopped agreeing about what a site-root path is.
+  //
+  // Both directions are asserted here, in one table, because that is the
+  // whole contract: an allowlist with its rejections pinned and its accepts
+  // left to a neighbouring test is the shape someone later "tightens" into
+  // refusing everything. `writes the brand logo to \`logo\`, never \`favicon\``
+  // does pass `/logo.svg`, but it is a test about which key the answer lands
+  // in and would keep passing against a guard that accepted anything.
+  it("accepts only the two --logo shapes that resolve on this origin", async () => {
+    for (const [logo, code] of [
+      // Reads as a site-root path to a human and to `startsWith("/")`; both
+      // resolve to another origin, `\\` because WHATWG treats it as a path
+      // separator.
+      ["//evil.test/x.svg", 65],
+      ["/\\evil.test/x.svg", 65],
+      // The one the regex fix on this branch did not catch: the URL parser
+      // DELETES tab, CR and LF before parsing, so this is `//evil.test/x.svg`
+      // by the time a browser resolves it. `badLogo` inherits the whitespace
+      // check only by calling the shared guard.
+      ["/\t/evil.test/x.svg", 65],
+      // Reads as the real host, fetches the other.
+      ["https://good.test@evil.test/x.svg", 65],
+      // And the two that must keep working.
+      ["/logo.svg", 0],
+      ["https://cdn.test/x.svg", 0],
+    ] as Array<[string, number]>) {
+      const target = path.join(dir, `logo-${Buffer.from(logo).toString("hex")}`);
+      expect(await run(initArgs(target, "--logo", logo)), logo).toBe(code);
+      if (code === 0) {
+        expect(JSON.parse(fs.readFileSync(path.join(target, "index.config.json"), "utf8")).logo, logo).toBe(logo);
+      }
+    }
   });
 
   it("writes the registry-host allowlist the gate reads", async () => {
@@ -728,5 +772,113 @@ describe("scaffolded CI", () => {
         expect(yaml.load(text), `${file} parses`).toBeTruthy();
       }
     }
+  });
+});
+
+// The scaffolded tsconfig is editor-only - `grim-indexer build` compiles
+// `theme/**` through its own Astro config and never reads it. That makes it
+// the easiest file in the scaffold to "tidy" and the most expensive one to
+// get wrong, because both failures below are silent in this repository and
+// only surface in somebody else's.
+describe("scaffolded tsconfig", () => {
+  // The regression, twice: an `extends` pointing into node_modules cannot be
+  // resolved in a repository that has not run `npm install` yet, Astro's JSX
+  // transform silently falls back to React, and every scaffolded build dies
+  // with `Cannot read properties of undefined (reading 'context')` - an error
+  // naming preact, never this file. A comment in the template is what guarded
+  // it last time and a comment is not a gate.
+  it("never extends a config a fresh clone cannot resolve", async () => {
+    expect(await run(initArgs(dir))).toBe(0);
+
+    expect(Object.keys(JSON.parse(read("tsconfig.json")))).not.toContain("extends");
+  });
+
+  // What reads these specifiers last is Vite, so `bundler` (TS-MOD-01). Left
+  // unset, `module` implies CommonJS and with it `node10` resolution, which
+  // is TS5107-deprecated on TypeScript 6 and hard-removed in 7 - so the file
+  // an index owner opens their editor against stops loading on a TypeScript
+  // bump they made for unrelated reasons (TS-MOD-02).
+  it("resolves the way the build that ignores it does", async () => {
+    expect(await run(initArgs(dir))).toBe(0);
+
+    const { compilerOptions } = JSON.parse(read("tsconfig.json"));
+    expect(compilerOptions.module).toBe("esnext");
+    expect(compilerOptions.moduleResolution).toBe("bundler");
+
+    // The one specifier the whole file exists to make resolve.
+    expect(compilerOptions.paths["@grim/*"]).toEqual([
+      "./node_modules/@grimoire-rs/indexer/dist/renderer/astro/*",
+    ]);
+
+    // This assertion used to pin `baseUrl: "."` as half of that contract,
+    // which was wrong: `baseUrl` is TS5101-deprecated on TypeScript 6 and
+    // removed in 7, so the scaffolded file did not load under the compiler
+    // this repo pins - and the `paths` target above resolves against the
+    // tsconfig's own directory without it. Inverted rather than deleted, so
+    // it blocks the next agent re-adding `baseUrl` while "fixing" path
+    // resolution.
+    expect(compilerOptions).not.toHaveProperty("baseUrl");
+
+    // Nothing runs `tsc -p` on this config, but nothing stops an owner doing
+    // it either, and without `noEmit` that writes a theme/x.js beside every
+    // theme/x.ts - which the file's own comment says cannot happen.
+    expect(compilerOptions.noEmit).toBe(true);
+  });
+
+  // Both regressions above got past a suite that only read this file's
+  // CONTENTS: the `extends` one and, after it was fixed, `baseUrl`. Loading
+  // the config is what catches the class rather than each instance. Both
+  // halves of the union are load-bearing - `cfg.errors` alone misses TS5101,
+  // `getOptionsDiagnostics()` alone misses TS6053 - so do not simplify it to
+  // one.
+  it("loads under the pinned compiler with no option diagnostics", async () => {
+    expect(await run(initArgs(dir))).toBe(0);
+
+    // Without an input the compiler reports TS18003, which is about this
+    // fixture and not about the config under test.
+    fs.writeFileSync(path.join(dir, "theme", "x.ts"), "export {};\n");
+
+    const cfg = ts.getParsedCommandLineOfConfigFile(
+      path.join(dir, "tsconfig.json"),
+      {},
+      {
+        ...ts.sys,
+        onUnRecoverableConfigFileDiagnostic: (d) => {
+          throw new Error(`TS${d.code}`);
+        },
+      },
+    );
+    if (!cfg) throw new Error("the scaffolded tsconfig did not parse at all");
+
+    const program = ts.createProgram({ rootNames: cfg.fileNames, options: cfg.options });
+    const diagnostics = [...cfg.errors, ...program.getOptionsDiagnostics()];
+
+    expect(
+      diagnostics.map((d) => `TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`),
+    ).toEqual([]);
+  });
+});
+
+describe("scaffolded theme/", () => {
+  // An empty `.gitkeep` reserves the directory and says nothing. The thing a
+  // person opening `theme/` has to know before they build on it is which
+  // parts of the overlay are promised and which move in a minor, and that is
+  // not discoverable from a directory listing - so a placeholder that only
+  // says "put pages here" fails this on purpose.
+  it("explains the overlay rather than only reserving the directory", async () => {
+    expect(await run(initArgs(dir))).toBe(0);
+
+    expect(exists("theme/pages/.gitkeep"), "the placeholder it replaces").toBe(false);
+    expect(exists("theme/README.md")).toBe(true);
+
+    const readme = read("theme/README.md");
+    for (const tier of ["Contract", "Unstable", "Yours"]) {
+      expect(readme, `names the ${tier} tier`).toMatch(new RegExp(`\\b${tier}\\b`));
+    }
+    // And links the page carrying the full table, because the tiers move and
+    // a copy in a scaffolded repo cannot be updated from here.
+    expect(readme, "links the overlay reference").toMatch(
+      /https:\/\/grimoire-rs\.github\.io\/indexer\/\S*theme-overlay/,
+    );
   });
 });

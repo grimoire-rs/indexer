@@ -5,7 +5,10 @@ dist/
 # favicon `index.config.json` names live there, and the build copies it into
 # `dist/`. Ignoring it means the site references files the deploy never had.
 
-# Renderer scratch dir - removed on a clean build, left behind by a killed one.
+# Renderer scratch dir - removed on a clean build, left behind by a killed one,
+# and occasionally by a `dev` interrupted within a second of printing its URL:
+# Vite's dependency optimizer recreates node_modules/.vite/deps_temp_<hash>/
+# inside it after the removal has already returned. Harmless, safe to delete.
 .index-*/
 
 # The ratings sidecar. CI seeds it from the live site, the tally merges over

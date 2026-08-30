@@ -1,0 +1,47 @@
+{
+  "//": [
+    "For your editor, not for a build: `grim-indexer build` compiles theme/**",
+    "through its own Astro config and never reads this file. It exists so that",
+    "`import CommandField from \"@grim/components/CommandField.astro\"` resolves",
+    "while you are writing the page, instead of showing as a missing module.",
+    "",
+    "`@grim/*` is the renderer's own Astro source tree. Anything you import",
+    "from it you can also REPLACE, by putting a file of the same path under",
+    "theme/ - theme/components/CommandField.astro wins over the shipped one.",
+    "Page routes and this specifier are contract; component paths and props",
+    "are not yet, so pin the indexer version if you override one. The three",
+    "tiers in full are in theme/README.md.",
+    "",
+    "`module` and `moduleResolution` are set rather than left to default,",
+    "because the default is not neutral: an unset `module` implies CommonJS,",
+    "and CommonJS implies `node10` resolution - deprecated on TypeScript 6",
+    "(TS5107) and hard-removed in 7, so a TypeScript bump you made for an",
+    "unrelated reason stops this file loading. The pair below is what actually",
+    "reads these specifiers: Vite, inside the renderer's Astro build. Nothing",
+    "here is ever emitted - `noEmit` says so rather than leaving it to who",
+    "runs it, or `tsc -p .` drops a theme/x.js beside every theme/x.ts - so",
+    "`bundler` costs no `.js` import extensions.",
+    "",
+    "No `baseUrl`: it is TS5101-deprecated on TypeScript 6 and removed in 7,",
+    "and the `paths` target below resolves against this file's own directory",
+    "without it.",
+    "",
+    "Deliberately self-contained - no `extends`. This file sits above the",
+    "directory the renderer builds in, so a tsconfig that cannot be PARSED",
+    "breaks the build rather than the editor, and an `extends` pointing into",
+    "node_modules cannot be parsed until npm install has run. Adding one",
+    "after that works; adding one before is a build that fails with an error",
+    "naming preact, not this file."
+  ],
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "@grim/*": ["./node_modules/@grimoire-rs/indexer/dist/renderer/astro/*"]
+    },
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
+  },
+  "include": ["theme/**/*"]
+}

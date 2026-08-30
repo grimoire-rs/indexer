@@ -4,6 +4,10 @@ A [Grimoire](https://github.com/grimoire-rs/grimoire) package index - a
 static site listing the skills, rules, agents, mcp servers, and bundles
 available in `{{registryHost}}`, served at {{baseUrl}}.
 
+It is built by [`@grimoire-rs/indexer`](https://grimoire-rs.github.io/indexer/),
+which documents everything below in more depth - the config schema, the
+contribution gate, and how to theme the site.
+
 ## Layout
 
 | Path | Purpose |
@@ -11,7 +15,9 @@ available in `{{registryHost}}`, served at {{baseUrl}}.
 | `index/<host>/<namespace>/<package>/metadata.json` | One entry per package - the source of truth |
 | `index.config.json` | Site identity, branding, and the `ci` block the workflows are rendered from |
 | `index-policy.json` | Committed allowlist of registry hosts contributions may point at |
+| `theme/` | Your own pages and component overrides, laid over the renderer's sources - start at `theme/README.md` |
 | `package.json` / `package-lock.json` | The renderer this index runs, pinned |
+| `tsconfig.json` | Editor-only - it makes `@grim/*` resolve while you write a theme file; the build never reads it |
 | `dist/` | Build output (`all.json`, per-path copies, the rendered site) - not committed |
 
 ## Getting set up
