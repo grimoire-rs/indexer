@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { devSite, THEME_DIR } from "../../src/renderer/index.js";
+import { devSite, THEME_DIR, urlHost } from "../../src/renderer/index.js";
 import type { SiteConfig } from "../../src/config.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -258,4 +258,30 @@ describe("watchTheme", () => {
     await expect(server.stop()).resolves.toBeUndefined();
     expect(await exists(path.join(root, THEME_DIR, "pages/kept.astro"))).toBe(true);
   }, 120_000);
+});
+
+describe("urlHost", () => {
+  // A runner whose dev server bound `::1` produced `http://::1:4321/`, and
+  // `new URL("p/x/", that)` threw `ERR_INVALID_URL` — the colons read as a
+  // port. The smoke test failed with `TypeError: Invalid URL` and the address
+  // nowhere in the message, so the bug looked like anything but a host string.
+  it("brackets an IPv6 literal so the result parses as a URL", () => {
+    expect(urlHost("::1")).toBe("[::1]");
+    expect(urlHost("fe80::1")).toBe("[fe80::1]");
+    // The assertion that would actually have caught it: the composed URL has
+    // to survive the parser the smoke test hands it to.
+    expect(new URL("p/github.com/acme/x/", `http://${urlHost("::1")}:4321/`).href).toBe(
+      "http://[::1]:4321/p/github.com/acme/x/",
+    );
+  });
+
+  it("resolves a wildcard bind to a host something can actually fetch", () => {
+    expect(urlHost("::")).toBe("localhost");
+    expect(urlHost("0.0.0.0")).toBe("localhost");
+  });
+
+  it("leaves an IPv4 address and a hostname alone", () => {
+    expect(urlHost("127.0.0.1")).toBe("127.0.0.1");
+    expect(urlHost("localhost")).toBe("localhost");
+  });
 });

@@ -1014,6 +1014,22 @@ function watchTheme(root: string, src: string): { close(): Promise<void> } | nul
  * does: Vite resolves the staged `node_modules` on every request. `stop()`
  * undoes both.
  */
+/**
+ * The host half of a URL for whatever address the dev server's socket bound to.
+ *
+ * Two things `server.address` can report are not usable as a URL host. `::`
+ * and `0.0.0.0` are wildcards meaning "every interface" — nothing fetches
+ * those, and `localhost` is what the operator actually types. And a bare IPv6
+ * literal is not a legal host: unbracketed, `new URL()` reads its colons as a
+ * port and throws `ERR_INVALID_URL`, which is how a runner that binds `::1`
+ * turned a passing smoke test into `TypeError: Invalid URL` with the address
+ * nowhere in the message.
+ */
+export function urlHost(address: string): string {
+  if (address === "::" || address === "0.0.0.0") return "localhost";
+  return address.includes(":") ? `[${address}]` : address;
+}
+
 export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
   const inputs = await resolveInputs(opts);
   const staged = await stage(opts.root, opts.outDir, opts.srcDir);
@@ -1026,7 +1042,7 @@ export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
     // there is no overlay to mirror, and Vite already watches that tree.
     const themeWatcher = opts.srcDir ? null : watchTheme(opts.root, staged.src);
     const { address, port } = server.address;
-    const host = address === "::" || address === "0.0.0.0" ? "localhost" : address;
+    const host = urlHost(address);
     // No trailing slash on a subpath base: Astro's dev router registers the
     // base itself as the landing route, and `/index-repo/` 404s where
     // `/index-repo` renders. (`base` is already "/" for a domain-rooted
