@@ -124,7 +124,7 @@ always **override-only** — declared nowhere, only read with a fallback to the
 semantic tier:
 
 ```css
-border-radius: var(--grim-card-radius, var(--grim-radius-lg));
+border-radius: var(--grim-card-radius, var(--grim-radius-control));
 ```
 
 The component segment is mandatory: bare property-name hooks are safe only

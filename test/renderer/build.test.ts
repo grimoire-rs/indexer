@@ -762,7 +762,7 @@ describe("config reaches the rendered HTML", () => {
     const mcp = await readOut("p/registry.example/team/bare/index.html");
     expect(mcp).toMatch(/<pre class="astro-code[^"]*"[^>]*style="[^"]*--shiki-dark:/);
 
-    expect(bundledCss).toMatch(/\.astro-code\{[^}]*border-radius:var\(--grim-radius-lg\)/);
+    expect(bundledCss).toMatch(/\.astro-code\{[^}]*border-radius:var\(--grim-radius-control\)/);
     expect(bundledCss).toMatch(/:root\[data-theme=dark\][^{]*\.astro-code[^{]*\{[^}]*--shiki-dark/);
     // Injected, because the blocks come out of Shiki inside rendered
     // markdown — there is no authored markup to hang a button on. It joins
@@ -914,10 +914,10 @@ describe("theming", () => {
     // two families are declared once, in `:root`, and are read by rules in
     // both the global block and a scoped component block.
     expect(indexHtml).toContain("--grim-space-6: 7.77rem");
-    expect(indexHtml).toContain("--grim-radius-lg: 61px");
+    expect(indexHtml).toContain("--grim-radius-control: 61px");
     // Reaching them means the rules read the token rather than a literal.
     expect(bundledCss).toMatch(/var\(--grim-space-6\)/);
-    expect(bundledCss).toMatch(/var\(--grim-radius-lg\)/);
+    expect(bundledCss).toMatch(/var\(--grim-radius-control\)/);
   });
 
   it("emits the user CSS unlayered, after the bundled stylesheet", () => {

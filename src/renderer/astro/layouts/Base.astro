@@ -522,7 +522,7 @@ function repoLabel(url: string): string {
         }
         .hero code {
           background: var(--grim-color-chip-bg);
-          border-radius: var(--grim-radius-sm);
+          border-radius: var(--grim-radius-code);
           padding: var(--grim-space-1) var(--grim-space-3);
           /* `em`, not a type token: inline code sizes against the prose it
              sits in, so it must follow whatever that text is set at. */
@@ -537,7 +537,7 @@ function repoLabel(url: string): string {
           min-width: 0;
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-lg);
+          border-radius: var(--grim-radius-control);
         }
         /* No `overflow: hidden` — that would clip the platform menu. The end
            segments round themselves instead (8px border box, 1px border).
@@ -693,7 +693,7 @@ function repoLabel(url: string): string {
           list-style: none;
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-lg);
+          border-radius: var(--grim-radius-control);
           box-shadow: var(--grim-shadow-raised);
         }
         .os-menu li button {
@@ -702,7 +702,7 @@ function repoLabel(url: string): string {
           gap: var(--grim-space-4);
           width: 100%;
           border: none;
-          border-radius: var(--grim-radius-md);
+          border-radius: var(--grim-radius-inset);
           background: none;
           padding: var(--grim-space-3) var(--grim-space-4);
           color: var(--grim-color-fg);
@@ -736,12 +736,12 @@ function repoLabel(url: string): string {
            The summary is named explicitly rather than left to inherit. */
         .cmd-bar > :first-child,
         .cmd-bar > :first-child > summary {
-          border-start-start-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
-          border-end-start-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
+          border-start-start-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
+          border-end-start-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
         }
         .cmd-bar > :last-child {
-          border-start-end-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
-          border-end-end-radius: calc(var(--grim-radius-lg) - var(--grim-border-width));
+          border-start-end-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
+          border-end-end-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
         }
 
         /* Attribution sits opposite the raw-data line, on the same row where
@@ -786,7 +786,7 @@ function repoLabel(url: string): string {
           padding: var(--grim-space-4) var(--grim-space-5);
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-xl);
+          border-radius: var(--grim-radius-surface);
           box-shadow: var(--grim-shadow-overlay);
           /* Out of the layout and unhittable until shown, so it never eats a
              click aimed at whatever is beneath it. */
@@ -868,7 +868,7 @@ function repoLabel(url: string): string {
           /* 2.4rem is the hint's measured width, not a rhythm step. */
           padding-right: 2.4rem;
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-lg);
+          border-radius: var(--grim-radius-control);
           background: var(--grim-color-card);
           color: var(--grim-color-fg);
           font-size: var(--grim-text-md);
@@ -890,7 +890,7 @@ function repoLabel(url: string): string {
           pointer-events: none;
           border: var(--grim-border-width) solid var(--grim-color-border);
           border-bottom-width: 2px;
-          border-radius: var(--grim-radius-md);
+          border-radius: var(--grim-radius-inset);
           background: var(--grim-color-chip-bg);
           color: var(--grim-color-muted);
           font-family: ui-monospace, "SFMono-Regular", monospace;
@@ -1018,12 +1018,12 @@ function repoLabel(url: string): string {
         .sort-dir {
           display: inline-flex;
           align-items: center;
-          border-radius: var(--grim-radius-lg) 0 0 var(--grim-radius-lg);
+          border-radius: var(--grim-radius-control) 0 0 var(--grim-radius-control);
         }
         /* Pulled onto its neighbour's border so the seam is one line, not a
            doubled one. Derived from the token, never a hand-written -1px. */
         .sort-field {
-          border-radius: 0 var(--grim-radius-lg) var(--grim-radius-lg) 0;
+          border-radius: 0 var(--grim-radius-control) var(--grim-radius-control) 0;
           margin-left: calc(-1 * var(--grim-border-width));
         }
         .sort-dir:hover,
@@ -1131,14 +1131,14 @@ function repoLabel(url: string): string {
           padding: var(--grim-space-3);
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-lg);
+          border-radius: var(--grim-radius-control);
           box-shadow: var(--grim-shadow-raised);
         }
         .kw-menu-search {
           width: 100%;
           padding: var(--grim-space-3) var(--grim-space-4);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-md);
+          border-radius: var(--grim-radius-inset);
           background: var(--grim-color-bg);
           color: var(--grim-color-fg);
           font: inherit;
@@ -1164,7 +1164,7 @@ function repoLabel(url: string): string {
           gap: var(--grim-space-4);
           width: 100%;
           border: none;
-          border-radius: var(--grim-radius-md);
+          border-radius: var(--grim-radius-inset);
           background: none;
           padding: var(--grim-space-3) var(--grim-space-4);
           color: var(--grim-color-fg);
@@ -1216,10 +1216,10 @@ function repoLabel(url: string): string {
           cursor: pointer;
         }
         .view-pick:first-child {
-          border-radius: var(--grim-radius-lg) 0 0 var(--grim-radius-lg);
+          border-radius: var(--grim-radius-control) 0 0 var(--grim-radius-control);
         }
         .view-pick:last-child {
-          border-radius: 0 var(--grim-radius-lg) var(--grim-radius-lg) 0;
+          border-radius: 0 var(--grim-radius-control) var(--grim-radius-control) 0;
           margin-left: calc(-1 * var(--grim-border-width));
         }
         .view-pick:hover {
@@ -1255,7 +1255,7 @@ function repoLabel(url: string): string {
           gap: var(--grim-space-5);
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-xl);
+          border-radius: var(--grim-radius-surface);
           padding: var(--grim-space-6) var(--grim-space-6);
           /* Crops the kind watermark to the card's rounded edge, and gives
              it a stacking context to sit behind in. Without `isolation` a
@@ -1390,7 +1390,7 @@ function repoLabel(url: string): string {
         .card-logo {
           width: 36px;
           height: 36px;
-          border-radius: var(--grim-radius-md);
+          border-radius: var(--grim-radius-inset);
         }
         img.card-logo {
           object-fit: contain;
@@ -1488,7 +1488,12 @@ function repoLabel(url: string): string {
           grid-template-columns: auto minmax(8rem, 14rem) 1fr auto;
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-lg);
+          /* `xl`, the content-surface step — the same one the card wears.
+             The two are one list in two shapes, so a reader switching between
+             them should see the corner stay put. It was `lg`, the control
+             step, which put the table's corners with the sort pair's rather
+             than with the cards'. */
+          border-radius: var(--grim-radius-surface);
           overflow: hidden;
         }
         /* One more track when the index publishes ratings. Decided once per
@@ -1529,12 +1534,12 @@ function repoLabel(url: string): string {
            so a hover fill or a focus ring on either follows the rounding
            instead of cutting straight across it. */
         .table .row:first-child {
-          border-start-start-radius: var(--grim-radius-lg);
-          border-start-end-radius: var(--grim-radius-lg);
+          border-start-start-radius: var(--grim-radius-surface);
+          border-start-end-radius: var(--grim-radius-surface);
         }
         .table .row:last-child {
-          border-end-start-radius: var(--grim-radius-lg);
-          border-end-end-radius: var(--grim-radius-lg);
+          border-end-start-radius: var(--grim-radius-surface);
+          border-end-end-radius: var(--grim-radius-surface);
         }
         /* Exactly one line per cell, always. Even rows are the whole reason
            to prefer this view to the cards: a cell that wraps makes its row
@@ -1867,7 +1872,7 @@ function repoLabel(url: string): string {
           border: var(--grim-border-width) solid var(--grim-color-border);
           background: var(--grim-color-chip-bg);
           color: var(--grim-color-fg);
-          border-radius: var(--grim-radius-md);
+          border-radius: var(--grim-radius-inset);
           padding: var(--grim-space-2) var(--grim-space-4);
           font-size: var(--grim-text-sm);
           font-family: ui-monospace, "SFMono-Regular", monospace;
@@ -1903,7 +1908,7 @@ function repoLabel(url: string): string {
           margin: 0;
           padding: var(--grim-space-6) var(--grim-space-6);
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-lg);
+          border-radius: var(--grim-radius-control);
           overflow-x: auto;
           font-size: var(--grim-text-sm);
           line-height: 1.5;
@@ -1942,7 +1947,7 @@ function repoLabel(url: string): string {
           height: 1.9rem;
           padding: 0;
           border: var(--grim-border-width) solid var(--grim-color-border);
-          border-radius: var(--grim-radius-md);
+          border-radius: var(--grim-radius-inset);
           background: var(--grim-color-card);
           color: var(--grim-color-muted);
           cursor: pointer;

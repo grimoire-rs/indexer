@@ -14,7 +14,7 @@
 :root {
   --grim-color-accent: rgb(1 2 3);
   --grim-space-6: 7.77rem;
-  --grim-radius-lg: 61px;
+  --grim-radius-control: 61px;
 }
 [data-theme="dark"] {
   --grim-color-accent: rgb(4 5 6);

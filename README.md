@@ -293,7 +293,7 @@ stale.
 | Colour | `--grim-color-*` — surface, accent, package kind, state |
 | Space | `--grim-space-1` … `-9`, a sparse scale whose steps grow apart |
 | Type | `--grim-text-2xs` … `-2xl` |
-| Radius | `--grim-radius-sm` … `-xl`, `-pill` |
+| Radius | `--grim-radius-code`, `-inset`, `-control`, `-surface`, `-pill` — named for the job, not the size |
 | Border, motion, elevation | `--grim-border-width`, `--grim-duration-*`, `--grim-shadow-*` |
 
 **Colour is the only family that differs per scheme**, so it is the only one
@@ -325,6 +325,15 @@ There is deliberately no component-override API (`--grim-card-radius` and
 friends). With the layer and the slots, it would reach nothing the CSS above
 cannot already reach, and it would freeze a per-slot prop contract that is
 not worth promising this early.
+
+> **If your `theme.css` overrides a radius**, the five steps were renamed:
+> `--grim-radius-sm`/`-md`/`-lg`/`-xl` are now `--grim-radius-code`,
+> `-inset`, `-control` and `-surface`. `-pill` is unchanged. The values did
+> not move; only the names did. Every other family names the *role* a value
+> plays rather than its size, and the radius scale was the one that did not —
+> so nothing said which step a new surface should take, and the package list
+> ended up wearing the control step next to cards wearing the surface one. An
+> override under an old name is silently ignored, like any unknown property.
 
 > **If you wrote a `theme.css` against `0.4.0` or earlier**, it no longer
 > applies — silently, without an error. The tokens were unnamespaced

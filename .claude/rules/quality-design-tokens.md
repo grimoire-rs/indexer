@@ -113,7 +113,7 @@ the same case.
 
 Derived values are the opposite: write the derivation, never a second
 literal. A nested radius is
-`calc(var(--grim-radius-lg) - var(--grim-border-width))`; a border overlap is
+`calc(var(--grim-radius-control) - var(--grim-border-width))`; a border overlap is
 `calc(-1 * var(--grim-border-width))`; a full-bleed margin is the negation of
 the padding token it must cancel. A hand-computed `7px` or `-1px` silently
 stops tracking the moment the token it was derived from moves.

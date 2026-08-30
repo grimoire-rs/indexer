@@ -98,11 +98,33 @@
     --grim-text-xl: 1.5rem;
     --grim-text-2xl: 1.6rem;
 
-    /* ---- Radius ---------------------------------------------------- */
-    --grim-radius-sm: 4px;
-    --grim-radius-md: 6px;
-    --grim-radius-lg: 8px;
-    --grim-radius-xl: 10px;
+    /* ---- Radius ----------------------------------------------------
+       Five steps, named for the job each one does. They were `sm`/`md`/
+       `lg`/`xl` — magnitudes, which is what every other family here is
+       deliberately not — and the cost was exactly what you would expect:
+       nothing said which step a new surface should take, so the package
+       list ended up wearing the control step beside cards wearing the
+       surface one, and the two corners disagreed.
+
+         code     an inline run of code
+         inset    a control INSIDE another control — a menu item, an icon
+                  button, the logo tile, the key hint in the search field
+         control  a control or a popover: the search field, the install
+                  bar, the sort pair, the view toggle, every menu panel
+         surface  a content surface: a package card, the package list, the
+                  detail page's panels
+         pill     anything whose shape is its category — chips, badges,
+                  the version marker
+
+       Pick by matching the job, never by eyeballing the corner: the same
+       radius on a shorter box reads as more curve, so two surfaces that
+       look different are usually the same step, and two that look alike
+       are not necessarily. A corner that is genuinely wrong beside another
+       is almost always two surfaces of one job wearing different steps. */
+    --grim-radius-code: 4px;
+    --grim-radius-inset: 6px;
+    --grim-radius-control: 8px;
+    --grim-radius-surface: 10px;
     --grim-radius-pill: 999px;
 
     /* ---- Border ----------------------------------------------------
