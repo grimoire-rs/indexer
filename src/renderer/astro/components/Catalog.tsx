@@ -419,15 +419,6 @@ function PackageTable({
             <span class="t-logo">
               <CardLogo pkg={p} />
             </span>
-            {/* The name alone. The namespace used to sit beside it and was
-                what pushed this cell onto a second line — and it is not worth
-                a column of its own here, where the kind already answers "what
-                is this" and the description answers "about what". It rides in
-                the row's tooltip instead, with the full name, which is also
-                what the ellipsis costs the reader. */}
-            <span class="t-name" data-slot="package-name">
-              {p.name}
-            </span>
             {/* The kind as its mark, not as its word — the same glyph the
                 card wears in its corner and the same one the VS Code
                 extension puts on its cards, in the kind's own colour.
@@ -472,6 +463,15 @@ function PackageTable({
                 </span>
               );
             })()}
+            {/* The name alone. The namespace used to sit beside it and was
+                what pushed this cell onto a second line — and it is not worth
+                a column of its own here, where the kind already answers "what
+                is this" and the description answers "about what". It rides in
+                the row's tooltip instead, with the full name, which is also
+                what the ellipsis costs the reader. */}
+            <span class="t-name" data-slot="package-name">
+              {p.name}
+            </span>
             <span class="t-desc">{p.description}</span>
             <span class="t-updated" data-slot="package-meta">
               {ago && at && (

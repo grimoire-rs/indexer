@@ -1486,15 +1486,13 @@ function repoLabel(url: string): string {
            the container rather than cutting square across it. */
         .table {
           display: grid;
-          /* logo | name | kind | description | updated. The tile leads
-             because it is what identifies a package at a glance, the name
-             says which one, and the kind qualifies it — so the two that
-             answer "which package" sit together rather than with a mark
-             between them. The name is capped rather than `max-content`: an
-             unbounded name ate the description's space, and past the cap
-             both clip instead. The description is the only track that
-             grows. */
-          grid-template-columns: auto minmax(8rem, 14rem) auto 1fr auto;
+          /* logo | kind | name | description | updated. The two fixed-width
+             marks lead, so the names start on one line down the whole list
+             and the eye runs the column it actually reads. The name is
+             capped rather than `max-content`: an unbounded name ate the
+             description's space, and past the cap both clip instead. The
+             description is the only track that grows. */
+          grid-template-columns: auto auto minmax(8rem, 14rem) 1fr auto;
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
           /* `xl`, the content-surface step — the same one the card wears.
@@ -1508,7 +1506,7 @@ function repoLabel(url: string): string {
         /* One more track when the index publishes ratings. Decided once per
            index, never per filter — see `PackageTable`. */
         .table.rated {
-          grid-template-columns: auto minmax(8rem, 14rem) auto 1fr auto auto;
+          grid-template-columns: auto auto minmax(8rem, 14rem) 1fr auto auto;
         }
         .table .row {
           grid-column: 1 / -1;
@@ -1638,10 +1636,10 @@ function repoLabel(url: string): string {
         .t-logo {
           grid-column: 1;
         }
-        .t-name {
+        .t-kind {
           grid-column: 2;
         }
-        .t-kind {
+        .t-name {
           grid-column: 3;
         }
         .t-desc {
@@ -1660,10 +1658,10 @@ function repoLabel(url: string): string {
         @media (max-width: 40rem) {
           .table,
           .table.rated {
-            grid-template-columns: auto minmax(6rem, 1fr) auto auto;
+            grid-template-columns: auto auto minmax(6rem, 1fr) auto;
           }
           .table.rated {
-            grid-template-columns: auto minmax(6rem, 1fr) auto auto auto;
+            grid-template-columns: auto auto minmax(6rem, 1fr) auto auto;
           }
           .t-desc {
             display: none;
