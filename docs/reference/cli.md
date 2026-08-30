@@ -48,9 +48,20 @@ Serve the index locally through the same renderer `build` uses.
 |---|---|
 | `--out-dir <dir>` | Output directory (default `dist`) |
 | `--port <n>` | Port to listen on |
+| `--host [addr]` | Bind beyond loopback. Bare, every interface; with a value, that address |
 
 Mirrors `theme/**` edits into the running server. See
 [Preview locally](../how-to/preview-locally.md).
+
+Without `--host` the server binds loopback only, which is Astro's own default.
+That is unreachable from a dev container, a VM or a WSL guest: the port forwards
+and the connection then hangs against a socket that is not listening for it.
+
+!!! warning "`--host` puts the preview on your network"
+    Bare, it binds every interface, so anyone who can reach your machine can
+    read the site — and a dev server serves the index repo it is pointed at.
+    Name an address (`--host 127.0.0.1`, or the guest-facing one) where that
+    matters.
 
 ## `grim-indexer build`
 

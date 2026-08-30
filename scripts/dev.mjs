@@ -23,11 +23,24 @@ const FIXTURE = path.join(repo, "test/fixtures/dev");
 /** Scratch index root. Gitignored, and reused so Vite's cache survives. */
 const SCRATCH = path.join(repo, ".dev");
 
+// `parseArgs` has no optional-value option type — an option is `boolean` or
+// `string`, never either — so a bare `--host` is rewritten to `--host=true`
+// before parsing. That is the form `grim-indexer dev --host` and `astro dev
+// --host` both take, and it has to work here too: `task dev` never goes
+// through `src/cli/*`, it calls `devSite` from this file.
+const argv = process.argv.slice(2).map((arg, i, all) => {
+  if (arg !== "--host") return arg;
+  const next = all[i + 1];
+  return next === undefined || next.startsWith("-") ? "--host=true" : arg;
+});
+
 const { values } = parseArgs({
+  args: argv,
   options: {
     root: { type: "string" },
     config: { type: "string" },
     port: { type: "string", default: "4321" },
+    host: { type: "string" },
     smoke: { type: "boolean", default: false },
     help: { type: "boolean", short: "h" },
   },
@@ -35,7 +48,7 @@ const { values } = parseArgs({
 
 if (values.help) {
   console.log(`
-usage: npm run dev -- [--root <index-repo>] [--port <n>] [--smoke]
+usage: npm run dev -- [--root <index-repo>] [--port <n>] [--host [addr]] [--smoke]
 
   --root   an index repo to render (a checkout of grimoire-rs/index, or your
            own). Default: test/fixtures/dev, the bundled dev index — one
@@ -48,6 +61,9 @@ usage: npm run dev -- [--root <index-repo>] [--port <n>] [--smoke]
              echo '{"install":[],"registry":null}' > /tmp/bare.json
              npm run dev -- --config /tmp/bare.json
   --port   dev server port (default 4321).
+  --host   expose the server beyond loopback. Bare, it binds every interface,
+           which is what a dev container, a VM or a WSL guest needs before a
+           forwarded port reaches anything; with a value it binds that address.
   --smoke  boot, assert the pages render, tear down, exit. The regression
            check for this script; it does not live in the vitest suite
            because Astro's dev server does not route correctly nested
@@ -122,6 +138,8 @@ const server = await devSite({
   // The working tree, not the built copy — this is what makes edits live.
   srcDir: path.join(repo, "src/renderer/astro"),
   port: Number(values.port),
+  // `"true"` is the rewritten bare form above; anything else is an address.
+  host: values.host === "true" ? true : values.host,
 });
 
 if (values.smoke) {

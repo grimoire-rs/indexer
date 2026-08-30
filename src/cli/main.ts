@@ -186,9 +186,16 @@ export async function run(argv: string[]): Promise<number> {
     .description("serve this index locally with a live preview")
     .option("--out-dir <dir>", "output directory", "dist")
     .option("--port <n>", "port to listen on")
-    .action(async (root: string, opts: { outDir?: string; port?: string }) => {
-      code = await dev(root, opts);
-    });
+    // `[addr]` and not `<addr>`: bare `--host` means every interface, the same
+    // thing it means to `astro dev`, whose own banner is what tells a reader
+    // stuck behind a dev container or a WSL port forward to reach for it.
+    // Commander hands back `true` for the bare form and the string otherwise.
+    .option("--host [addr]", "expose the server on a network address (bare: all interfaces)")
+    .action(
+      async (root: string, opts: { outDir?: string; port?: string; host?: string | boolean }) => {
+        code = await dev(root, opts);
+      },
+    );
 
   program
     .command("enrich")

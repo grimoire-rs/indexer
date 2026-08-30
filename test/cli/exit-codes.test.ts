@@ -63,6 +63,16 @@ describe("usage errors exit 64", () => {
     }
   });
 
+  // Same shape as `--port`, and the same reason for rejecting early: an
+  // address Astro cannot bind surfaces as a config dump naming no flag. Only
+  // what cannot be an address is refused here — whether it EXISTS on this
+  // machine is the kernel's answer, and arrives as a bind error.
+  it("dev --host that cannot be an address", async () => {
+    for (const host of ["", "   ", "http://0.0.0.0", "1.2.3.4/24", "a b"]) {
+      expect(await run(["node", "grim-indexer", "dev", dir, "--host", host]), host).toBe(64);
+    }
+  });
+
   it("validate with no forge to detect", async () => {
     vi.stubEnv("GITHUB_ACTIONS", "");
     vi.stubEnv("GITLAB_CI", "");

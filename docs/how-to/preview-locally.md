@@ -48,9 +48,29 @@ npx @grimoire-rs/indexer dev ../some-other-index
 npx @grimoire-rs/indexer dev ../some-other-index --port 4400
 ```
 
-`dev` takes `--out-dir` and `--port` and nothing else — `npx @grimoire-rs/indexer
-dev --help` is the list. There is no `--config`: point `dev` at a copy of the
-repo with the config you want to try.
+`dev` takes `--out-dir`, `--port` and `--host` and nothing else — `npx
+@grimoire-rs/indexer dev --help` is the list. There is no `--config`: point
+`dev` at a copy of the repo with the config you want to try.
+
+## From a container, a VM or WSL
+
+The server binds loopback by default, so a forwarded port reaches a socket that
+is not listening on it and the browser hangs rather than failing. `--host` is
+the fix, and bare it means every interface:
+
+```sh
+npx @grimoire-rs/indexer dev --host          # every interface
+npx @grimoire-rs/indexer dev --host 10.0.2.15  # one address
+```
+
+The printed URL is built from the address the socket actually reports, so a
+named address shows up in it while the bare form still prints `localhost` — a
+wildcard bind has no one address to name, and loopback is correct from the
+machine running the server. Reach it from outside by that machine's own
+address on the same port.
+
+Bare `--host` puts the preview on your network for as long as it runs. See the
+[CLI reference](../reference/cli.md#grim-indexer-dev).
 
 ## Ratings
 

@@ -44,6 +44,13 @@ export interface DevSiteOptions extends BuildSiteOptions {
    */
   srcDir?: string;
   port?: number;
+  /**
+   * Astro `server.host`. `true` binds every interface, a string binds that
+   * address, and omitting it keeps Astro's loopback-only default — which is
+   * unreachable from a dev container, a VM or a WSL guest whose forwarded port
+   * then connects to nothing.
+   */
+  host?: string | boolean;
 }
 
 /** A running dev server. `stop()` also removes the staged directory. */
@@ -1037,7 +1044,7 @@ export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
   const cwd = process.cwd();
   process.chdir(staged.dir);
   try {
-    const server = await dev({ ...astro, server: { port: opts.port } });
+    const server = await dev({ ...astro, server: { port: opts.port, host: opts.host } });
     // Only meaningful for a staged copy — with a caller-supplied `srcDir`
     // there is no overlay to mirror, and Vite already watches that tree.
     const themeWatcher = opts.srcDir ? null : watchTheme(opts.root, staged.src);

@@ -13,6 +13,8 @@ import { resolveOutDir } from "./out_dir.js";
 export interface DevFlags {
   outDir?: string;
   port?: string;
+  /** `true` for a bare `--host` (every interface), or the address to bind. */
+  host?: string | boolean;
 }
 
 /**
@@ -29,10 +31,34 @@ function resolvePort(port: string | undefined): number | undefined {
   return value;
 }
 
+/**
+ * What `--host` binds to, in the shape Astro's `server.host` takes: `true` for
+ * every interface, a string for one address, `undefined` to leave the default
+ * loopback bind alone.
+ *
+ * Only the shapes that cannot be an address are rejected here — an empty value,
+ * and anything carrying whitespace or a `/`, which is what `--host
+ * http://0.0.0.0` and a pasted URL look like. Whether the address exists on
+ * this machine is the kernel's answer, not this function's, and it arrives as a
+ * bind error naming the address.
+ */
+export function resolveHost(host: string | boolean | undefined): string | boolean | undefined {
+  if (host === undefined || typeof host === "boolean") return host;
+  const value = host.trim();
+  if (value === "" || /[\s/]/.test(value)) {
+    throw new CliError(
+      `--host ${JSON.stringify(host)}: must be a hostname or IP address, or bare for all interfaces`,
+      EXIT.usage,
+    );
+  }
+  return value;
+}
+
 export async function dev(root: string, flags: DevFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
   const outDir = resolveOutDir(rootDir, flags.outDir);
   const port = resolvePort(flags.port);
+  const host = resolveHost(flags.host);
 
   const [{ loadConfig }, { compileIndex }, { devSite }] = await Promise.all([
     import("../config.js"),
@@ -42,7 +68,7 @@ export async function dev(root: string, flags: DevFlags): Promise<ExitCode> {
 
   const config = await loadConfig(rootDir);
   const { count, namespaces } = await compileIndex({ root: rootDir, outDir });
-  const server = await devSite({ root: rootDir, outDir, config, port });
+  const server = await devSite({ root: rootDir, outDir, config, port, host });
 
   console.log(`\n  ${server.url}\n`);
   console.log(`  ${count} package(s) across ${namespaces.length} namespace(s)`);
