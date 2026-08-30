@@ -13,6 +13,7 @@
   "files": [
     "dist",
     "templates",
+    "CHANGELOG.md",
     "NOTICE"
   ],
   "exports": {
@@ -31,7 +32,8 @@
     "dev:smoke": "npm run build && node scripts/dev.mjs --smoke",
     "test": "vitest run",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
@@ -52,7 +54,8 @@
     "astro": "^7.1.4",
     "commander": "^15.0.0",
     "lucide-preact": "^1.27.0",
-    "preact": "^10.29.7"
+    "preact": "^10.29.7",
+    "preact-render-to-string": "^6.7.0"
   },
   "repository": {
     "type": "git",
