@@ -1,0 +1,11 @@
+#:schema https://grimoire.rs/schemas/grimoire-config.schema.json
+[options]
+clients = ["claude"]
+
+[bundles]
+typescript-essentials = "ghcr.io/ocx-sh/lore/typescript-essentials:latest"
+
+[skills]
+
+[rules]
+css-theming = "ghcr.io/ocx-sh/lore/css-theming:latest"

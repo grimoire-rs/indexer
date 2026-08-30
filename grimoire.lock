@@ -1,0 +1,41 @@
+skill = []
+agent = []
+
+[metadata]
+lock_version = 1
+declaration_hash_version = 1
+declaration_hash = "sha256:a3ada35b110bb9769d7875630eddcdfe75a9c8b7429bb5e502c0011d543e3297"
+generated_by = "grim 0.13.0"
+generated_at = "2026-08-30T13:54:12Z"
+
+[[rule]]
+name = "css-theming"
+pinned = "ghcr.io/ocx-sh/lore/css-theming@sha256:b744c16f3c39111e0ea75c2d7609e00b02a745b79fe4bde1d1272ac5a99f64b4"
+
+[[rule]]
+name = "typescript-packaging"
+pinned = "ghcr.io/ocx-sh/lore/typescript-packaging@sha256:aea500feedc681d161c96daf504d7e68638733e473dd0b8778ac72832190c503"
+bundle = "ghcr.io/ocx-sh/lore/typescript-essentials"
+bundle_tag = "latest"
+
+[[rule]]
+name = "typescript-quality"
+pinned = "ghcr.io/ocx-sh/lore/typescript-quality@sha256:88bcbc2540b71653ae9ea31760369e1e4eb8f7128fc09299325feb1467913b77"
+bundle = "ghcr.io/ocx-sh/lore/typescript-essentials"
+bundle_tag = "latest"
+
+[[bundle]]
+name = "typescript-essentials"
+repo = "ghcr.io/ocx-sh/lore/typescript-essentials"
+tag = "latest"
+pinned = "ghcr.io/ocx-sh/lore/typescript-essentials@sha256:6c982240b307a4d5521311b0744d3fbf1796e9ec75c75924402f50e9eafb3662"
+
+[[bundle.member]]
+kind = "rule"
+name = "typescript-packaging"
+id = "ghcr.io/ocx-sh/lore/typescript-packaging:latest"
+
+[[bundle.member]]
+kind = "rule"
+name = "typescript-quality"
+id = "ghcr.io/ocx-sh/lore/typescript-quality:latest"
