@@ -833,12 +833,20 @@ function repoLabel(url: string): string {
           visibility: hidden;
         }
 
+        /* Three stacked rows, not one wrapping line: the search field, then
+           the filters, then what they left plus the controls that arrange it.
+           A wrapping row put a different set on each line at each viewport
+           width, so the toolbar read as a different object on every screen. */
         .controls {
           display: flex;
-          flex-wrap: wrap;
-          align-items: center;
+          flex-direction: column;
+          align-items: stretch;
           gap: var(--grim-space-5);
-          margin-bottom: var(--grim-space-7);
+          /* Close, because the last row of the toolbar belongs to the list
+             below rather than to the toolbar above it — it says what the
+             filters left and how it is arranged. Proximity is what groups
+             them; `.meta-row` opens the gap on its other side to match. */
+          margin-bottom: var(--grim-space-3);
         }
         /* Wide basis, not full width: the field and the sort control share
            the first line and the kind chips wrap to the next, and on a narrow
@@ -849,7 +857,6 @@ function repoLabel(url: string): string {
         .search-field {
           position: relative;
           display: flex;
-          flex: 1 1 22rem;
           /* Breathing room above the field when `/` scrolls it to the top of
              the viewport, so it does not sit flush against the edge. */
           scroll-margin-top: 1.25rem;
@@ -895,26 +902,85 @@ function repoLabel(url: string): string {
         .search-field:has(input:not(:placeholder-shown)) .search-hint {
           display: none;
         }
-        /* Row two of the toolbar, whole. `flex-basis: 100%` is what forces
-           the break — the search field's basis is only as wide as it needs
-           to be now, so without this the filters ride up beside it. */
+        /* One line, always. Wrapping was the defect: at a narrow width the
+           row dropped `deprecated` onto a second line, because no chip can
+           shrink below its own longest word and the rail's chip count is a
+           constant rather than a viewport reading. So the KEYWORD group is
+           the single flexible child and scrolls; the kinds and the toggle
+           keep their size and their place. */
         .filter-row {
-          flex: 1 1 100%;
           display: flex;
-          flex-wrap: wrap;
           align-items: center;
           gap: var(--grim-space-3);
+          flex-wrap: nowrap;
+          /* Backstop for the extreme case where the kinds alone overflow. */
+          overflow-x: auto;
         }
         .chips {
           display: flex;
-          flex-wrap: wrap;
+          align-items: center;
           gap: var(--grim-space-3);
         }
-        /* Held at the far end of the chip row: it answers a different
-           question from sort and kind — what the catalog is withholding,
-           not how to arrange it. */
+        .chips.kind-chips {
+          flex-shrink: 0;
+        }
+        /* The one child that absorbs the row's slack — which is also what
+           pushes the overflow menu and the deprecated toggle to the far end,
+           without an `auto` margin that would put them out of reach once the
+           row does overflow.
+
+           `hidden`, never `auto`: a scrollbar here put the chips behind a
+           gesture nobody looks for and, worse, let the rail grow past the row
+           so the overflow menu it was supposed to sit beside was pushed off
+           the end entirely. What does not fit is decided by measurement (see
+           `railFit`) and drawn as nothing. */
+        .chips.kw-rail {
+          flex: 1 1 auto;
+          min-width: 0;
+          overflow: hidden;
+        }
+        /* Past the measured fit. `visibility`, not `display`: the chip keeps
+           its box, so the measurement that excluded it stays true instead of
+           freeing the width that would let it back in. It is in the overflow
+           menu, which is where the reader reaches it. */
+        .chip.kw.clipped {
+          visibility: hidden;
+        }
+        .filter-divider {
+          flex-shrink: 0;
+          align-self: stretch;
+          width: var(--grim-border-width);
+          background: var(--grim-color-border);
+        }
+        /* Answers a different question from sort and kind — what the catalog
+           is withholding, not how to arrange it — so it sits apart, at the
+           end of the row. */
         .chip.deprecated-toggle {
-          margin-left: auto;
+          flex-shrink: 0;
+        }
+        .kw-menu {
+          flex-shrink: 0;
+        }
+        /* Row three: the answer on the left, the controls that arrange it on
+           the right. */
+        .meta-row {
+          display: flex;
+          align-items: center;
+          gap: var(--grim-space-4);
+          flex-wrap: wrap;
+          /* On top of the stack's own gap: it takes this row away from the
+             filters and leaves it sitting on the list it describes. */
+          margin-top: var(--grim-space-5);
+        }
+        /* Bottom-aligned, not centred: it is a caption for the list below
+           it, and centring it against two bordered controls left it floating
+           between the two rows belonging to neither. */
+        .result-count {
+          margin: 0;
+          margin-right: auto;
+          align-self: end;
+          color: var(--grim-color-muted);
+          font-size: var(--grim-text-sm);
         }
         /* Pressed state borrows the deprecation colour rather than the
            accent, so "deprecated entries are in view" is signalled by the
@@ -935,17 +1001,18 @@ function repoLabel(url: string): string {
           align-items: stretch;
           flex: 0 0 auto;
         }
+        /* Sized to their own row, not to the search field. They used to sit
+           beside it and had to match its height to read as one strip; on a
+           line of their own that height is just bulk. */
         .sort-dir,
         .sort-field {
           position: relative;
-          /* The search input's own padding and type step — matching these is
-             what makes the heights agree without either being stated. */
-          padding: var(--grim-space-4) var(--grim-space-5);
+          padding: var(--grim-space-2) var(--grim-space-4);
           border: var(--grim-border-width) solid var(--grim-color-border);
           background: var(--grim-color-card);
           color: var(--grim-color-fg);
           font-family: inherit;
-          font-size: var(--grim-text-md);
+          font-size: var(--grim-text-sm);
           cursor: pointer;
         }
         .sort-dir {
@@ -975,13 +1042,22 @@ function repoLabel(url: string): string {
           outline: 2px solid var(--grim-color-accent);
           outline-offset: 1px;
         }
+        /* One box for every chip in the filter row — the kinds, the keywords,
+           the deprecated toggle and the overflow menu's trigger alike. The
+           line-height is stated rather than inherited because a `<summary>`
+           and a `<button>` do not agree on their own, and a row of chips that
+           disagree by a pixel reads as sloppy rather than as a group. */
         .chip {
+          display: inline-flex;
+          align-items: center;
           border: var(--grim-border-width) solid var(--grim-color-border);
           background: var(--grim-color-chip-bg);
           color: var(--grim-color-fg);
           border-radius: var(--grim-radius-pill);
           padding: var(--grim-space-2) var(--grim-space-5);
           font-size: var(--grim-text-sm);
+          line-height: 1.4;
+          white-space: nowrap;
           transition: border-color var(--grim-duration-base) ease;
           cursor: pointer;
         }
@@ -995,6 +1071,174 @@ function repoLabel(url: string): string {
         .chip.active {
           border-color: var(--grim-color-accent);
           background: var(--grim-color-accent-soft);
+        }
+        /* The keyword rail reorders on every click — it is rescored against
+           what is on screen — and the chips slide rather than jump. The FLIP
+           effect in `Catalog.tsx` sets an inline `translate` back to where
+           each chip was and drops it on the next frame; this transition is
+           what plays that back. Without a declared duration the invert would
+           simply stick. */
+        .chip.kw {
+          transition:
+            border-color var(--grim-duration-base) ease,
+            translate var(--grim-duration-slow) ease-out;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .chip.kw {
+            transition: border-color var(--grim-duration-base) ease;
+          }
+        }
+        /* The overflow menu. A `<details>` for the same reasons the platform
+           picker is one — it opens, closes and takes Escape without a line of
+           script — and the panel is the `.os-menu` popover's measurements so
+           the two read as the same object in two places. */
+        .kw-menu {
+          position: relative;
+          display: flex;
+        }
+        /* The trigger wears `.chip`, so its box comes from there and cannot
+           drift a pixel off the chips it sits beside. Only what a chip does
+           not cover is stated here. */
+        .kw-menu > summary {
+          display: inline-flex;
+          align-items: center;
+          color: var(--grim-color-muted);
+          /* Both spellings: the default triangle is a marker in Firefox and
+             a `::-webkit-details-marker` pseudo-element in older WebKit. */
+          list-style: none;
+        }
+        .kw-menu > summary::-webkit-details-marker {
+          display: none;
+        }
+        .kw-menu > summary:hover,
+        .kw-menu > summary:focus-visible,
+        .kw-menu[open] > summary {
+          border-color: var(--grim-color-accent);
+          color: var(--grim-color-fg);
+        }
+        .kw-menu-panel {
+          position: absolute;
+          top: calc(100% + var(--grim-space-2));
+          left: 0;
+          z-index: 5;
+          display: flex;
+          flex-direction: column;
+          gap: var(--grim-space-3);
+          /* The panel's own measurement: wide enough for the longest keyword
+             a publisher is likely to write plus its count, and capped so a
+             long vocabulary scrolls instead of running off the viewport. */
+          width: 15rem;
+          padding: var(--grim-space-3);
+          background: var(--grim-color-card);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-lg);
+          box-shadow: var(--grim-shadow-raised);
+        }
+        .kw-menu-search {
+          width: 100%;
+          padding: var(--grim-space-3) var(--grim-space-4);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-md);
+          background: var(--grim-color-bg);
+          color: var(--grim-color-fg);
+          font: inherit;
+          font-size: var(--grim-text-sm);
+        }
+        .kw-menu-search:focus-visible {
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: 1px;
+        }
+        .kw-menu-list {
+          display: flex;
+          flex-direction: column;
+          /* Ten rows and then a scrollbar — a measured height, not a rhythm
+             step: it is the row's own height times the count that still reads
+             as a list rather than a page. */
+          max-height: 15rem;
+          overflow-y: auto;
+        }
+        .kw-menu-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--grim-space-4);
+          width: 100%;
+          border: none;
+          border-radius: var(--grim-radius-md);
+          background: none;
+          padding: var(--grim-space-3) var(--grim-space-4);
+          color: var(--grim-color-fg);
+          font: inherit;
+          font-size: var(--grim-text-sm);
+          text-align: left;
+          cursor: pointer;
+        }
+        .kw-menu-item:hover,
+        .kw-menu-item:focus-visible {
+          background: var(--grim-color-chip-bg);
+        }
+        .kw-menu-item small {
+          color: var(--grim-color-muted);
+        }
+        .kw-menu-empty {
+          margin: 0;
+          padding: var(--grim-space-3) var(--grim-space-4);
+          color: var(--grim-color-muted);
+          font-size: var(--grim-text-sm);
+        }
+        /* Cards or list, beside the sort control because it answers the same
+           question — how the catalog is arranged. Built to the sort group's
+           measurements, and the second button is pulled onto the first's
+           border so the seam is one line rather than a doubled one. */
+        .view-toggle {
+          display: flex;
+          align-items: stretch;
+          flex: 0 0 auto;
+          /* The row centres its items, which left these two shorter than the
+             search field and the sort control beside them: a flex container
+             raises no strut, so a button holding nothing but a 15px icon is
+             15px tall plus its padding, while the select next to it is a text
+             line tall. Stretching to the line's own height is what makes the
+             three agree without any of them stating a height — `.sort-group`
+             gets the same result from its own `align-items: stretch`, since
+             the select inside it is the tall one. */
+          align-self: stretch;
+        }
+        .view-pick {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: var(--grim-space-2) var(--grim-space-4);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          background: var(--grim-color-card);
+          color: var(--grim-color-muted);
+          cursor: pointer;
+        }
+        .view-pick:first-child {
+          border-radius: var(--grim-radius-lg) 0 0 var(--grim-radius-lg);
+        }
+        .view-pick:last-child {
+          border-radius: 0 var(--grim-radius-lg) var(--grim-radius-lg) 0;
+          margin-left: calc(-1 * var(--grim-border-width));
+        }
+        .view-pick:hover {
+          border-color: var(--grim-color-accent);
+        }
+        .view-pick.active {
+          border-color: var(--grim-color-accent);
+          background: var(--grim-color-accent-soft);
+          color: var(--grim-color-fg);
+        }
+        /* Whichever half is hovered, focused or current owns the shared edge. */
+        .view-pick:hover,
+        .view-pick:focus-visible,
+        .view-pick.active {
+          z-index: 1;
+        }
+        .view-pick:focus-visible {
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: 1px;
         }
 
         .grid {
@@ -1030,12 +1274,16 @@ function repoLabel(url: string): string {
         .card:hover:not(:has(.keywords :hover, .copy-group :hover, .rating-group a:hover)) {
           border-color: var(--grim-color-accent);
         }
-        /* Keyboard focus wears the hover treatment rather than an outline on
-           top of it — one affordance, whichever way the card was reached.
-           The border-colour change is still a visible focus indicator, which
-           is the part that may not be dropped. */
+        /* Keyboard focus reads as a thicker edge, not a second decoration:
+           the border takes the accent and a 2px outline sits directly
+           outside it, so the two merge into one ring that follows the card's
+           radius. Matched to the list view's focus ring, which is the same
+           2px — a card and a row are the same Tab stop in two shapes, and a
+           focus indicator that changes weight between them reads as two
+           different states. */
         .card:focus-visible {
-          outline: none;
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: 0;
           border-color: var(--grim-color-accent);
         }
         /* Makes the whole card the package link. Everything interactive
@@ -1220,6 +1468,183 @@ function repoLabel(url: string): string {
             transition: none;
           }
         }
+        /* The list view: a grid of row anchors, not a `<table>`.
+           No headers, deliberately — a header row that cannot sort is a
+           header row that looks like it sorts, and sorting lives in the
+           toolbar. With the headers gone there are no column semantics left
+           to justify the element, and what remains is a list of links.
+           `subgrid` keeps the columns aligned without the markup.
+
+           The container owns the border, the radius and the clip; the rows
+           own the rules between them. That is what makes the corners round
+           in every state — a row's hover fill and focus ring are clipped to
+           the container rather than cutting square across it. */
+        .table {
+          display: grid;
+          /* kind | name | description | updated. The name is capped rather
+             than `max-content`: an unbounded name ate the description's
+             space, and past the cap both clip instead. The description is
+             the only track that grows. */
+          grid-template-columns: auto minmax(8rem, 14rem) 1fr auto;
+          background: var(--grim-color-card);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-lg);
+          overflow: hidden;
+        }
+        /* One more track when the index publishes ratings. Decided once per
+           index, never per filter — see `PackageTable`. */
+        .table.rated {
+          grid-template-columns: auto minmax(8rem, 14rem) 1fr auto auto;
+        }
+        .table .row {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: subgrid;
+          align-items: center;
+          gap: var(--grim-space-5);
+          padding: var(--grim-space-3) var(--grim-space-5);
+          color: inherit;
+          text-decoration: none;
+          font-size: var(--grim-text-sm);
+          transition: background-color var(--grim-duration-base) ease;
+        }
+        /* The rule belongs between rows, not under the last one — which the
+           container's own border already draws. */
+        .table .row + .row {
+          border-top: var(--grim-border-width) solid var(--grim-color-border);
+        }
+        .table .row:hover {
+          background: var(--grim-color-chip-bg);
+        }
+        /* Inset, so the ring stays inside the row: an outline sits outside
+           the border box and the container's `overflow: hidden` would clip
+           it to a stray line on the first and last rows. Pulled in by its
+           own width, which is the a11y floor rather than a style. */
+        .table .row:focus-visible {
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: -2px;
+          background: var(--grim-color-accent-soft);
+        }
+        /* The two rows that meet the container's corners carry its radius,
+           so a hover fill or a focus ring on either follows the rounding
+           instead of cutting straight across it. */
+        .table .row:first-child {
+          border-start-start-radius: var(--grim-radius-lg);
+          border-start-end-radius: var(--grim-radius-lg);
+        }
+        .table .row:last-child {
+          border-end-start-radius: var(--grim-radius-lg);
+          border-end-end-radius: var(--grim-radius-lg);
+        }
+        /* Exactly one line per cell, always. Even rows are the whole reason
+           to prefer this view to the cards: a cell that wraps makes its row
+           taller than its neighbours, and a column the eye can no longer run
+           down is a list doing the cards' job badly. */
+        .table .row > * {
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          /* Every cell is one text line and no cell is a flex box, so all
+             five have the same height and the same baseline — the icons ride
+             that line on `vertical-align` rather than being centred as boxes
+             of their own. Cell-by-cell centring is what left the marks and
+             the words a pixel apart; this makes them the same line. It is
+             also what keeps `text-overflow` working, which a flex container
+             would have silently dropped. */
+          line-height: 1.6;
+        }
+        /* One glyph wide, and the same width whatever the kind is — so every
+           name beside it starts on one line down the whole list. The colour
+           is set inline, from the kind's own token or the deprecation one. */
+        .t-kind {
+          text-align: center;
+        }
+        .t-kind svg {
+          vertical-align: middle;
+        }
+        /* The fallback for a kind this renderer has no mark for. */
+        .t-kind-word {
+          font-size: var(--grim-text-2xs);
+          color: var(--grim-color-muted);
+        }
+        .t-name {
+          color: var(--grim-color-fg);
+          font-weight: 600;
+        }
+        .t-desc,
+        .t-updated {
+          color: var(--grim-color-muted);
+        }
+        /* Last column, held at the right edge: the count, then its arrow.
+           The two sit next to each other rather than at opposite sides of a
+           wide cell — they are one reading, and the gap that separated them
+           was the cell's width showing through. */
+        .t-rating {
+          text-align: right;
+          color: var(--grim-color-muted);
+        }
+        .t-rating svg {
+          vertical-align: middle;
+          margin-left: var(--grim-space-2);
+          /* Optical, not rhythm: the glyph's ink sits high in its own box, so
+             the middle of the box reads above the digits beside it. A pixel
+             down puts the two on the same visual line. */
+          translate: 0 1px;
+        }
+        /* The count carries the column's alignment, and the arrow after it
+           inherits it: a fixed box, right-aligned, in tabular figures. Without
+           the fixed box a three-digit count would push its own arrow right of
+           the one above it. Geometry — it holds four digits at this step. */
+        .t-votes {
+          display: inline-block;
+          width: 2rem;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        /* Every cell names its own column rather than being auto-placed.
+           Auto-placement fills tracks in document order, so the moment a cell
+           is dropped — which the narrow layout below does to the description
+           — every cell after it slides one track left and the columns stop
+           meaning what they did. Naming them makes dropping one safe. */
+        .t-kind {
+          grid-column: 1;
+        }
+        .t-name {
+          grid-column: 2;
+        }
+        .t-desc {
+          grid-column: 3;
+        }
+        .t-updated {
+          grid-column: 4;
+        }
+        .t-rating {
+          grid-column: 5;
+        }
+        /* Narrow viewports lose the description rather than scroll sideways:
+           it is context for the name beside it, and the detail page states it
+           in full. The remaining cells move up a track with it, so no empty
+           column and no stray gap is left behind. */
+        @media (max-width: 40rem) {
+          .table,
+          .table.rated {
+            grid-template-columns: auto minmax(6rem, 1fr) auto;
+          }
+          .table.rated {
+            grid-template-columns: auto minmax(6rem, 1fr) auto auto;
+          }
+          .t-desc {
+            display: none;
+          }
+          .t-updated {
+            grid-column: 3;
+          }
+          .t-rating {
+            grid-column: 4;
+          }
+        }
+
         .badge {
           flex-shrink: 0;
           font-size: var(--grim-text-2xs);
@@ -1410,6 +1835,11 @@ function repoLabel(url: string): string {
           font-size: var(--grim-text-2xs);
           padding: var(--grim-space-1) var(--grim-space-4);
           color: var(--grim-color-muted);
+        }
+        /* A card chip applies the keyword facet, so it can be the one already
+           applied — it says so rather than staying muted like the rest. */
+        .chip.keyword.active {
+          color: var(--grim-color-fg);
         }
         .card-foot {
           display: flex;

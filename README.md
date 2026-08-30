@@ -315,10 +315,11 @@ To target one element rather than retheme globally, use its `data-slot`:
 The slots are `brand`, `catalog`, `catalog-search`, `catalog-toolbar`,
 `deprecated-banner`, `detail-body`, `detail-header`, `detail-rail`,
 `filter-chip`, `install-command`, `package-card`, `package-keywords`,
-`package-kind`, `package-meta`, `package-name`, `site-footer`, `site-header`
-and `version-pill`. Those names are stable; **class names are not** — they
-are internal and unversioned, so `@layer` will make a rule targeting one
-win, but nothing promises the class is still there next release.
+`package-kind`, `package-meta`, `package-name`, `package-row`,
+`package-table`, `site-footer`, `site-header` and `version-pill`. Those
+names are stable; **class names are not** — they are internal and
+unversioned, so `@layer` will make a rule targeting one win, but nothing
+promises the class is still there next release.
 
 There is deliberately no component-override API (`--grim-card-radius` and
 friends). With the layer and the slots, it would reach nothing the CSS above

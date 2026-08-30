@@ -6,7 +6,8 @@
   "description": "Ships history and no introduction.",
   "repository": "https://github.com/acme/changelog-only",
   "keywords": [
-    "fixture"
+    "fixture",
+    "docs"
   ],
   "owner": {
     "github": "acme",

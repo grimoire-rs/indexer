@@ -6,7 +6,9 @@
   "description": "Published often, and it shows.",
   "repository": "https://github.com/acme/many-versions",
   "keywords": [
-    "versions"
+    "versions",
+    "rust",
+    "cli"
   ],
   "owner": {
     "github": "acme",

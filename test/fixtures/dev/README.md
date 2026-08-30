@@ -27,6 +27,14 @@ a row in the table below; it never means adding a second index.
 `.stats.json` also rates `ghcr.io/acme/gone`, which no `metadata.json`
 mentions — the catalog must invent no card for it.
 
+Keywords **overlap on purpose** — `quality`, `docs`, `cli` and `rust` each
+span several artifacts. The catalog's keyword rail picks its chips by
+splitting power, so a vocabulary of singletons renders a rail that is
+technically correct and demonstrates nothing: every candidate ties, and no
+click ever visibly rescores the rest. The overlaps are what make the rail
+reorder, and `enterprise-compliance-policy-pack`'s twelve keywords are what
+keep the `+N more` menu worth opening.
+
 Every rating URL points at a real page in the production shape — GitHub
 discussions for the `ghcr.io/acme/*` refs, a GitLab work item for
 `gitlab.com/team/mirror` — so clicking a count in the demo demonstrably

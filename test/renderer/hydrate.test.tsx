@@ -284,3 +284,195 @@ describe("the view round-trips", () => {
     expect(location.search).toBe("");
   });
 });
+
+/**
+ * The keyword facet, the OR-ed kinds, and the two keyboard paths that hang
+ * off them.
+ *
+ * Keywords are AND and kinds are OR, which is not an inconsistency but a
+ * consequence: a package has exactly one kind, so demanding two is always
+ * empty, while it carries many keywords, so demanding two is the only reading
+ * where the second click narrows.
+ */
+describe("the keyword facet", () => {
+  const TAGGED = [
+    {
+      namespace: "acme",
+      name: "alpha",
+      kind: "skill",
+      ref: "r.test/acme/alpha",
+      keywords: ["cli", "rust"],
+    },
+    {
+      namespace: "acme",
+      name: "bravo",
+      kind: "rule",
+      ref: "r.test/acme/bravo",
+      keywords: ["cli"],
+    },
+    {
+      namespace: "acme",
+      name: "charlie",
+      kind: "agent",
+      ref: "r.test/acme/charlie",
+      keywords: ["rust"],
+    },
+    // Carries a keyword none of the others do, so it is the one that leaves
+    // the result set entirely as soon as any other keyword is picked.
+    {
+      namespace: "acme",
+      name: "delta",
+      kind: "mcp",
+      ref: "r.test/acme/delta",
+      keywords: ["python"],
+    },
+  ] as unknown as CatalogPackage[];
+
+  function mountAt(url: string): HTMLElement {
+    history.replaceState({}, "", url);
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={TAGGED} vscodeExtension={null} />, host);
+    return host;
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  const names = (host: HTMLElement) =>
+    [...host.querySelectorAll("li.card h2 a, a.row .t-name")].map((el) =>
+      el.textContent?.trim(),
+    );
+
+  /** Rail chips only — the card's own keyword chips share the `chip` class. */
+  const rail = (host: HTMLElement) =>
+    [...host.querySelectorAll<HTMLElement>("button.chip.kw")].map((b) =>
+      b.textContent?.trim().split(/\s/)[0],
+    );
+
+  const railChip = (host: HTMLElement, label: string) =>
+    [...host.querySelectorAll<HTMLElement>("button.chip.kw")].find(
+      (b) => b.textContent?.trim().split(/\s/)[0] === label,
+    );
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
+  });
+
+  it("seeds the facet from ?kw= and keeps the chip pinned", async () => {
+    const host = mountAt("/?kw=rust");
+    await settle();
+
+    expect(names(host)).toEqual(["alpha", "charlie"]);
+    // Pinned, not merely present: an active filter that scrolls out of the
+    // rail is one the reader cannot lift.
+    expect(rail(host)[0]).toBe("rust");
+    expect(railChip(host, "rust")?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("intersects two keywords rather than uniting them", async () => {
+    const host = mountAt("/?kw=cli,rust");
+    await settle();
+
+    // `alpha` alone carries both. Under OR this would be all three, and the
+    // second chip would have *widened* the answer.
+    expect(names(host)).toEqual(["alpha"]);
+  });
+
+  it("drops a keyword no package publishes", async () => {
+    const host = mountAt("/?kw=rust,../etc");
+    await settle();
+
+    expect(names(host)).toEqual(["alpha", "charlie"]);
+    expect(rail(host)).not.toContain("../etc");
+  });
+
+  it("unites two kinds rather than intersecting them", async () => {
+    const host = mountAt("/?kind=skill,agent");
+    await settle();
+
+    expect(names(host)).toEqual(["alpha", "charlie"]);
+  });
+
+  it("puts a clicked keyword back into the URL, and takes it out again", async () => {
+    const host = mountAt("/");
+    await settle();
+
+    railChip(host, "cli")!.click();
+    await vi.waitFor(() => expect(location.search).toBe("?kw=cli"));
+    expect(names(host)).toEqual(["alpha", "bravo"]);
+
+    railChip(host, "cli")!.click();
+    await vi.waitFor(() => expect(location.search).toBe(""));
+  });
+
+  // The rail is rescored against what is on screen, so every chip it offers
+  // is a real further cut. Scored against the whole catalog instead, `python`
+  // would still be offered here — and clicking it would empty the grid, since
+  // no surviving package carries it.
+  it("offers no chip that leads to an empty catalog", async () => {
+    const host = mountAt("/?kw=rust");
+    await settle();
+
+    expect(rail(host)).toEqual(["rust", "cli"]);
+    expect(rail(host)).not.toContain("python");
+  });
+
+  it("keeps the filter chips in the Tab order", async () => {
+    const host = mountAt("/");
+    await settle();
+
+    // They carried `tabindex="-1"` whenever the grid had anything in it,
+    // which left filtering operable by pointer and arrow key only — a WCAG
+    // 2.1.1 (A) failure, and the reason the arrow rail is no longer the
+    // only way in.
+    for (const chip of host.querySelectorAll(".controls button.chip")) {
+      expect(chip.getAttribute("tabindex")).toBeNull();
+    }
+  });
+
+  it("sends Tab out of the search field to the first result", async () => {
+    const host = mountAt("/");
+    await settle();
+
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    search.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(host.querySelector("li.card"));
+  });
+
+  it("leaves Tab alone when there is nothing to jump to", async () => {
+    const host = mountAt("/?q=nothingmatchesthis");
+    await settle();
+
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    search.dispatchEvent(event);
+
+    // Swallowing it here would trap focus in the field — worse than the walk
+    // through the toolbar the hatch exists to save.
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("round-trips the cards/table choice through storage, not the URL", async () => {
+    const host = mountAt("/");
+    await settle();
+    expect(host.querySelector("ul.grid")).not.toBeNull();
+
+    host.querySelectorAll<HTMLElement>("button.view-pick")[1]!.click();
+    await vi.waitFor(() => expect(localStorage.getItem("grim.catalog.view")).toBe("table"));
+    expect(location.search, "a preference is not a query").toBe("");
+    expect(names(host)).toEqual(["alpha", "bravo", "charlie", "delta"]);
+
+    unmountAll();
+    const back = mountAt("/");
+    await settle();
+    expect(back.querySelector("div.table")).not.toBeNull();
+    expect(back.querySelector("ul.grid")).toBeNull();
+  });
+});

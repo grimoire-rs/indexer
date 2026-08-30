@@ -6,7 +6,8 @@
   "description": "Count what the build produced.",
   "repository": "https://github.com/acme/bean-counter",
   "keywords": [
-    "metrics"
+    "metrics",
+    "quality"
   ],
   "owner": {
     "github": "acme",

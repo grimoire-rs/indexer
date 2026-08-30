@@ -7,7 +7,8 @@
   "repository": "https://gitlab.example/team/mirror",
   "keywords": [
     "mirror",
-    "gitlab"
+    "gitlab",
+    "cli"
   ],
   "owner": {
     "login": "team",

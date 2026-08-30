@@ -7,7 +7,8 @@
   "repository": "https://github.com/acme/rust-style",
   "keywords": [
     "rust",
-    "style"
+    "style",
+    "quality"
   ],
   "owner": {
     "github": "acme",

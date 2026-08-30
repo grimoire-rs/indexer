@@ -7,7 +7,8 @@
   "repository": "https://github.com/acme/ghost-logo",
   "keywords": [
     "fixture",
-    "logo"
+    "logo",
+    "docs"
   ],
   "owner": {
     "github": "acme",

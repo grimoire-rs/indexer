@@ -7,7 +7,8 @@
   "repository": "https://github.com/acme/test-writer",
   "keywords": [
     "testing",
-    "tdd"
+    "tdd",
+    "quality"
   ],
   "owner": {
     "github": "acme",

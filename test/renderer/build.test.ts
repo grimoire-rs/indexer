@@ -711,9 +711,13 @@ describe("config reaches the rendered HTML", () => {
   });
 
   // Both halves, because either alone is a dead end: the page emits the
-  // query, the island reads it back into the search box on mount.
+  // parameter, the island reads it back into the facet on mount.
+  //
+  // `kw`, not `q`: the link applies the keyword filter rather than running a
+  // text search that also sweeps descriptions. The island still accepts `q`,
+  // so links shared before the change keep working.
   it("routes a keyword back to the catalog, prefiltered", async () => {
-    expect(detailHtml).toContain('href="/?q=review"');
+    expect(detailHtml).toContain('href="/?kw=review"');
     expect(detailHtml).toContain('title="Find packages tagged review"');
     const chunks = (await fs.readdir(path.join(site.outDir, "_astro"))).filter((f) =>
       f.endsWith(".js"),

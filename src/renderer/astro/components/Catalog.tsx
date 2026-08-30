@@ -16,11 +16,14 @@ import {
   Globe,
   Image,
   ImageOff,
+  LayoutGrid,
+  List,
 } from "lucide-preact";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "./KindMark.js";
 import { withBase } from "../lib/base.js";
+import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
 import {
   externalUrl,
   lastUpdated,
@@ -41,6 +44,17 @@ function kindOrder(kind: string): number {
 
 export type Sort = "name" | "updated" | "rating";
 export type Dir = "asc" | "desc";
+/** Roomy cards, or the same packages as a scannable list. */
+export type View = "cards" | "table";
+
+/**
+ * How many keyword chips the rail shows at once, actives included.
+ *
+ * Everything past it goes behind the overflow menu. The cap is the point:
+ * this catalog's keyword vocabulary is open-ended, and a rail that renders
+ * all of it is a wall of chips nobody reads.
+ */
+const KEYWORD_CHIP_LIMIT = 8;
 
 /**
  * The direction each field is *worth* reading first in — A→Z for a name,
@@ -139,12 +153,12 @@ export function compare(
 /**
  * The reader's own preferences, kept out of the URL.
  *
- * The split is deliberate and matches grim: `q` and `kind` are *what you are
- * looking at* — a keyword chip on a package page links to `/?q=<kw>`, so that
- * half has to stay shareable — while sort, direction and deprecated
- * visibility are *how you like the catalog arranged*, the same answer on
- * every visit. grim keeps `show_deprecated` in its config file for exactly
- * that reason.
+ * The split is deliberate and matches grim: `q`, `kind` and `kw` are *what
+ * you are looking at* — a keyword chip on a package page links to
+ * `/?kw=<keyword>`, so that half has to stay shareable — while sort,
+ * direction, deprecated visibility and the cards/table choice are *how you
+ * like the catalog arranged*, the same answer on every visit. grim keeps
+ * `show_deprecated` in its config file for exactly that reason.
  *
  * Both accessors swallow: reading `localStorage` throws outright, not
  * returns null, in a browser set to block site data, and a catalog is not
@@ -169,6 +183,17 @@ function writePref(key: string, value: string | null): void {
   }
 }
 
+/**
+ * A comma-joined URL parameter, back into the list it was.
+ *
+ * Empty and absent are the same answer — `?kind=` is a reader who cleared
+ * the filter, not a request for the kind named "". Duplicates collapse so a
+ * hand-edited `?kw=a,a` cannot render the same chip twice.
+ */
+function list(value: string | null): string[] {
+  return [...new Set((value ?? "").split(",").filter(Boolean))];
+}
+
 /** Typing inside one of these means a bare keystroke is text, not a shortcut. */
 function isTyping(el: EventTarget | null): boolean {
   const node = el as HTMLElement | null;
@@ -184,6 +209,10 @@ function isTyping(el: EventTarget | null): boolean {
  * Measured, not read from CSS: the track list is `auto-fill` with a minimum
  * width, so the count is a layout outcome that depends on the viewport. The
  * first card whose top edge drops below the first row's starts row two.
+ *
+ * The table view needs no branch of its own — its rows stack, so the second
+ * one is already below the first and this measures the 1 that makes every
+ * arrow key move by a single row.
  */
 function columnCount(cards: HTMLElement[]): number {
   if (cards.length < 2) return 1;
@@ -325,6 +354,147 @@ function CopyButton({
   );
 }
 
+/**
+ * The same packages as a list, for reading down a column rather than across
+ * a grid.
+ *
+ * **A row is an anchor, and there is no `<table>`.** Two reasons, and the
+ * first is the load-bearing one: a header row that cannot sort is a header
+ * row that *looks* like it sorts — every reader who has met a data table
+ * clicks it once. Sorting lives in the toolbar, so the table has no headers,
+ * and a headerless table has no column semantics left to justify the element.
+ * What remains is a list of links, which is what this is. A CSS grid with
+ * `subgrid` rows keeps the columns aligned without the markup.
+ *
+ * The anchor is also what makes the whole row clickable, focusable and
+ * middle-clickable for free — no stretched-link overlay, no synthetic Enter
+ * handler. A row carries no controls of its own: the install buttons and the
+ * vote links are what the card exists for, and repeating them per row would
+ * be five columns of icons. The detail page has all of them.
+ *
+ * Columns are fixed, unlike the keyword rail above — deliberately. A column
+ * is a slot the eye tracks down; one that appears and disappears as the
+ * filters change destroys the alignment the table exists to give. The rating
+ * column is the one exception, and it is decided once per index rather than
+ * per filter.
+ */
+function PackageTable({
+  packages,
+  hasRatings,
+  onKeyDown,
+  rootRef,
+}: {
+  packages: CatalogPackage[];
+  hasRatings: boolean;
+  onKeyDown: (event: KeyboardEvent) => void;
+  rootRef: { current: HTMLElement | null };
+}) {
+  return (
+    <div
+      class={hasRatings ? "table rated" : "table"}
+      data-slot="package-table"
+      ref={(el) => {
+        rootRef.current = el;
+      }}
+    >
+      {packages.map((p) => {
+        const at = lastUpdated(p);
+        const ago = at && timeAgo(at) ? timeAgo(at) : null;
+        return (
+          <a
+            key={`${p.namespace}/${p.name}`}
+            class="row"
+            data-slot="package-row"
+            href={withBase(`/p/${p.namespace}/${p.name}/`)}
+            // The full identity, since the visible name is clipped and the
+            // namespace is not shown at all.
+            title={`${p.namespace}/${p.name}`}
+            onKeyDown={onKeyDown}
+          >
+            {/* The kind as its mark, not as its word — the same glyph the
+                card wears in its corner and the same one the VS Code
+                extension puts on its cards, in the kind's own colour.
+
+                Which is also how deprecation is said here: a retired package
+                shows the warning mark in the deprecation colour instead of
+                its kind, exactly as the card's watermark does. The badge this
+                replaces was a second word in a cell with room for none, and
+                it widened the column for every row whether or not anything in
+                view was retired.
+
+                The word is not lost — it names the mark, so it is read out,
+                and the `title` sits on the cell rather than on the `<svg>`:
+                an SVG takes its tooltip from a `<title>` child, and a `title`
+                attribute on it does nothing at all. */}
+            {(() => {
+              const mark = p.deprecated ? DEPRECATED_MARK : KIND_MARKS[p.kind];
+              const label = p.deprecated ? `${p.kind}, deprecated` : p.kind;
+              return (
+                <span
+                  class="t-kind"
+                  data-slot="package-kind"
+                  title={label}
+                  style={{
+                    color: p.deprecated
+                      ? "var(--grim-color-deprecated)"
+                      : `var(--grim-color-kind-${p.kind}, var(--grim-color-muted))`,
+                  }}
+                >
+                  {mark ? (
+                    <KindMark
+                      glyph={mark}
+                      size={16}
+                      role="img"
+                      aria-label={label}
+                    />
+                  ) : (
+                    // An unknown kind has no mark, and inventing one would be
+                    // a claim. It keeps the word it always had.
+                    <span class="t-kind-word">{label}</span>
+                  )}
+                </span>
+              );
+            })()}
+            {/* The name alone. The namespace used to sit beside it and was
+                what pushed this cell onto a second line — and it is not worth
+                a column of its own here, where the kind already answers "what
+                is this" and the description answers "about what". It rides in
+                the row's tooltip instead, with the full name, which is also
+                what the ellipsis costs the reader. */}
+            <span class="t-name" data-slot="package-name">
+              {p.name}
+            </span>
+            <span class="t-desc">{p.description}</span>
+            <span class="t-updated" data-slot="package-meta">
+              {ago && at && (
+                <time datetime={at} title={at}>
+                  {ago}
+                </time>
+              )}
+            </span>
+            {hasRatings && (
+              // Count first, arrow after it, both held at the right edge.
+              // The count sits in a fixed right-aligned box, so the digits
+              // stack into a column and the arrow after them lands in the
+              // same place on every row whatever the count is. An unrated
+              // package keeps the empty cell: the column is a slot the eye
+              // tracks down, and a row that skips it breaks the run.
+              <span class="t-rating">
+                {p.rating && (
+                  <>
+                    <span class="t-votes">{p.rating.up}</span>
+                    <ArrowBigUp size={13} aria-hidden="true" />
+                  </>
+                )}
+              </span>
+            )}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 // `vscodeExtension` arrives as a prop, not from lib/data: this island
 // hydrates in the browser, so importing the build-time payload here would
 // ship the whole catalog twice.
@@ -350,7 +520,14 @@ export default function Catalog({
   // Whether the URL's query has been applied. Gates the reveal below, so the
   // catalog is never unhidden while it still shows the unfiltered list.
   const [seeded, setSeeded] = useState(false);
-  const [kind, setKind] = useState<string | null>(null);
+  // Kinds combine with OR, keywords with AND, and the two groups with each
+  // other. That is not an inconsistency, it follows from the data: a package
+  // has exactly one kind, so requiring both of two kinds always yields
+  // nothing, while it carries many keywords, so requiring both of two is the
+  // only reading under which a second click narrows. A facet whose second
+  // click *widens* the result set reads as broken.
+  const [kinds, setKinds] = useState<string[]>([]);
+  const [keywords, setKeywords] = useState<string[]>([]);
   const [sort, setSort] = useState<Sort>("name");
   // Direction, not "reversed": what the arrow draws is the order itself.
   const [dir, setDir] = useState<Dir>(NATURAL.name);
@@ -358,18 +535,130 @@ export default function Catalog({
   // noise for someone browsing what to install, and the publisher already
   // said as much by deprecating it.
   const [showDeprecated, setShowDeprecated] = useState(false);
+  const [view, setView] = useState<View>("cards");
+  // Local to the overflow menu and deliberately not shareable: it narrows
+  // the list of keywords, not the catalog.
+  const [keywordFilter, setKeywordFilter] = useState("");
 
   const searchRef = useRef<HTMLInputElement>(null);
-  const gridRef = useRef<HTMLUListElement>(null);
+  const gridRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
 
+  // Both views, one selector: a table row is the Tab stop its card is, so
+  // every keyboard path below — the search hatch, ArrowDown out of the
+  // chips, Escape's blur — works in either without knowing which is up.
   const cardsOf = () => [
-    ...(gridRef.current?.querySelectorAll<HTMLElement>("li.card") ?? []),
+    ...(gridRef.current?.querySelectorAll<HTMLElement>("li.card, a.row") ?? []),
   ];
+  // Clipped keyword chips are excluded: they are drawn as nothing, so an
+  // arrow key that landed on one would move focus somewhere the reader
+  // cannot see it.
   const chipsOf = () => [
-    ...(controlsRef.current?.querySelectorAll<HTMLElement>("button.chip") ??
-      []),
+    ...(controlsRef.current?.querySelectorAll<HTMLElement>(
+      'button.chip:not([aria-hidden="true"])',
+    ) ?? []),
   ];
+
+  const railRefs = useRef(new Map<string, HTMLElement>());
+  const railRects = useRef(new Map<string, DOMRect>());
+  const railRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * How many keyword chips actually fit on the row, measured.
+   *
+   * Not a constant, because the answer is a layout outcome: the rail is the
+   * one flexible child of the filter row, so its width is whatever the kinds,
+   * the overflow menu and the deprecated toggle left, and the chips are as
+   * wide as the words publishers wrote. `KEYWORD_CHIP_LIMIT` bounds how many
+   * are *offered*; this is how many are shown.
+   *
+   * The rule it enforces: the rail never wraps and never scrolls. A second
+   * row makes the toolbar a different height on every filter click, and a
+   * scrollbar hides the chips behind a gesture nobody looks for — it also
+   * pushed the overflow menu off the end of the row entirely.
+   *
+   * Every chip stays in the flow whatever this says; the ones past it are
+   * drawn as nothing (see `.chip.kw.clipped`). Taking them out of the flow
+   * would free the width that excluded them, which is a measurement that
+   * disagrees with itself on every other frame.
+   */
+  const [railFit, setRailFit] = useState(KEYWORD_CHIP_LIMIT);
+
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const measure = () => {
+      const edge = rail.getBoundingClientRect().right;
+      let fits = 0;
+      for (const chip of rail.children) {
+        // Half a pixel of slack: a fractional layout can leave a chip's right
+        // edge a rounding error past a boundary it visually sits inside.
+        if (chip.getBoundingClientRect().right > edge + 0.5) break;
+        fits += 1;
+      }
+      // At least one, always. A rail too narrow for its shortest chip should
+      // show that chip clipped rather than render an empty group beside a
+      // divider that then divides nothing.
+      setRailFit(Math.max(1, fits));
+    };
+    measure();
+    // Guarded rather than assumed: this effect also runs under the test
+    // renderer, whose DOM has no `ResizeObserver` — and a missing one costs
+    // only re-measurement on viewport resize, which is not worth throwing
+    // during a render over.
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(rail);
+    return () => observer.disconnect();
+    // Re-measured on every commit that changes which chips are up, since the
+    // observer only fires when the rail's own box changes and a rescore can
+    // swap a short word for a long one at the same width.
+  });
+
+  /**
+   * FLIP for the keyword rail: chips slide to their new places instead of
+   * teleporting.
+   *
+   * The rail is rescored against the current result set, so it reorders on
+   * every click — the chip just picked moves to the front and the rest flow
+   * around it. Animating that is not decoration: a rail whose contents change
+   * between two frames reads as having been *replaced*, and a reader who
+   * cannot see that a chip moved has no reason to believe it is the same one.
+   *
+   * First (the map of rects kept from the last commit), Last (measured now),
+   * Invert (an inline translate back to where the chip was), Play (dropped on
+   * the next frame, so the stylesheet's transition carries it home). Measure
+   * every chip before transforming any: `translate` composites and does not
+   * reflow, but reading a rect after writing a style on a sibling is the
+   * shape that makes a layout thrash, and this runs per keystroke.
+   */
+  useLayoutEffect(() => {
+    const previous = railRects.current;
+    const current = new Map<string, DOMRect>();
+    const moved: { el: HTMLElement; dx: number; dy: number }[] = [];
+    for (const [keyword, el] of railRefs.current) {
+      const rect = el.getBoundingClientRect();
+      current.set(keyword, rect);
+      const was = previous.get(keyword);
+      if (!was) continue;
+      const dx = was.left - rect.left;
+      const dy = was.top - rect.top;
+      if (dx !== 0 || dy !== 0) moved.push({ el, dx, dy });
+    }
+    railRects.current = current;
+    if (moved.length === 0) return;
+    for (const { el, dx, dy } of moved) {
+      el.style.transition = "none";
+      el.style.translate = `${dx}px ${dy}px`;
+    }
+    const frame = requestAnimationFrame(() => {
+      for (const { el } of moved) {
+        el.style.transition = "";
+        el.style.translate = "";
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  });
 
   /** Move focus `delta` cards along, clamping at both ends rather than wrapping. */
   const focusCard = (from: number, delta: number) => {
@@ -411,22 +700,27 @@ export default function Catalog({
    * looking at was hidden again.
    *
    * Unknown values are dropped rather than trusted at both doors: `kind`
-   * reaches a class name and `sort` selects a comparator, so neither follows
+   * reaches a class name, `kw` reaches a chip that stays on screen until it
+   * is clicked off, and `sort` selects a comparator, so none of them follows
    * a hand-typed URL or a hand-edited storage entry anywhere the controls
-   * cannot go.
+   * cannot go. `kw` is checked against the catalog's own vocabulary rather
+   * than a fixed list, since keywords are whatever publishers wrote.
    */
   const applyView = () => {
     const params = new URLSearchParams(location.search);
-    const k = params.get("kind");
     const s = readPref("sort");
     const d = readPref("dir");
+    const v = readPref("view");
     const field: Sort = s === "updated" || s === "rating" ? s : "name";
+    const published = new Set(packages.flatMap((p) => p.keywords ?? []));
     setQuery(params.get("q") ?? "");
-    setKind(k && KNOWN_KINDS.includes(k) ? k : null);
+    setKinds(list(params.get("kind")).filter((k) => KNOWN_KINDS.includes(k)));
+    setKeywords(list(params.get("kw")).filter((k) => published.has(k)));
     setSort(field);
     setDir(d === "asc" || d === "desc" ? d : NATURAL[field]);
     // A flag: stored at all means on.
     setShowDeprecated(readPref("deprecated") !== null);
+    setView(v === "table" ? "table" : "cards");
   };
 
   // Apply the URL's view, now that hydration has matched the server's markup
@@ -458,13 +752,16 @@ export default function Catalog({
     const set = (key: string, value: string | null) =>
       value === null ? params.delete(key) : params.set(key, value);
     set("q", query || null);
-    set("kind", kind);
+    set("kind", kinds.length > 0 ? kinds.join(",") : null);
+    set("kw", keywords.length > 0 ? keywords.join(",") : null);
     const search = params.toString();
     const next = `${location.pathname}${search ? `?${search}` : ""}${location.hash}`;
     if (next !== `${location.pathname}${location.search}${location.hash}`) {
       history.replaceState(history.state, "", next);
     }
-  }, [seeded, query, kind]);
+    // `keywords` is compared by identity, which is what we want: the array is
+    // replaced on every toggle and never mutated in place.
+  }, [seeded, query, kinds, keywords]);
 
   // The preferences, into storage — so the next visit opens the way this one
   // ended. Each is stored only when it is not the default, so a reader who
@@ -474,7 +771,8 @@ export default function Catalog({
     writePref("sort", sort === "name" ? null : sort);
     writePref("dir", dir === NATURAL[sort] ? null : dir);
     writePref("deprecated", showDeprecated ? "1" : null);
-  }, [seeded, sort, dir, showDeprecated]);
+    writePref("view", view === "cards" ? null : view);
+  }, [seeded, sort, dir, showDeprecated, view]);
 
   // Base.astro hides the catalog before first paint when the URL carries a
   // query. Reveal it only once the filtered render is in the DOM — keyed on
@@ -528,27 +826,43 @@ export default function Catalog({
       // Also true for a control *inside* a card, which is still the card
       // being selected as far as the reader is concerned.
       const card =
-        active instanceof HTMLElement ? active.closest("li.card") : null;
-      if (!query && kind === null && !card) return; // nothing selected: not our key
+        active instanceof HTMLElement ? active.closest("li.card, a.row") : null;
+      // Nothing selected: not our key.
+      if (!query && kinds.length === 0 && keywords.length === 0 && !card)
+        return;
       event.preventDefault();
       setQuery("");
-      setKind(null);
+      setKinds([]);
+      setKeywords([]);
       if (card) (active as HTMLElement).blur();
     };
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
-  }, [query, kind]);
+  }, [query, kinds, keywords]);
+
+  /** Both facets toggle the same way; only the relation between values differs. */
+  const toggle =
+    (set: (next: (was: string[]) => string[]) => void) => (value: string) =>
+      set((was) =>
+        was.includes(value) ? was.filter((v) => v !== value) : [...was, value],
+      );
+  const toggleKind = toggle(setKinds);
+  // Appends rather than inserts, so the pinned chips below stay in the order
+  // they were picked — the rail reorders underneath them, the actives do not.
+  const toggleKeyword = toggle(setKeywords);
 
   /**
-   * The filter and sort chips are not Tab stops — Tab is reserved for
-   * crossing the catalog, so it runs search → card → card. The chips sit in
-   * the row above the grid, so they are reached the way that row is:
-   * ArrowUp out of the top card row, ArrowDown back into it.
+   * Arrow keys move *across* a rail the reader is already standing in. They
+   * are not Tab's replacement, and this is the correction of a real defect:
+   * the chips used to carry `tabIndex={-1}` whenever the grid had anything
+   * in it, which left filtering reachable by pointer and arrow key only.
+   * That is a WCAG 2.1.1 (A) failure — every control has to be operable from
+   * the keyboard through the ordinary sequence, and an undocumented arrow
+   * convention is not that sequence. The sibling `@ocx-sh/catalog` renderer
+   * shipped the same shortcut and reverted it for the same reason.
    *
-   * The one case that would strand them is an empty result set, where there
-   * is no card to arrow up from — so with nothing shown they rejoin the Tab
-   * order (see `chipTabIndex` below), which is also exactly when a reader
-   * needs them most.
+   * So the chips are ordinary Tab stops now, and ArrowUp/ArrowDown remain as
+   * the faster way to cross a long rail or drop back into the grid.
    */
   const onChipKeyDown = (event: KeyboardEvent) => {
     const chips = chipsOf();
@@ -578,7 +892,35 @@ export default function Catalog({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       cardsOf()[0]?.focus();
-    } else if (event.key === "Escape" && !query && kind === null) {
+    } else if (
+      event.key === "Tab" &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey
+    ) {
+      // The hatch. Everything between the field and the grid — sort, the
+      // view toggle, every chip — sits after it in the DOM and is a real Tab
+      // stop again, so plain Tab would walk the whole toolbar before
+      // reaching a single package. Forward Tab skips to the results; the
+      // toolbar stays reachable by Shift+Tab back out of the grid.
+      //
+      // Reordering the DOM instead would have put focus order at odds with
+      // visual order, which is the worse defect of the two.
+      //
+      // With nothing to jump to — an empty result set — Tab is left alone
+      // rather than swallowed: trapping focus in the field is worse than the
+      // walk it was meant to save.
+      const first = cardsOf()[0];
+      if (!first) return;
+      event.preventDefault();
+      first.focus();
+    } else if (
+      event.key === "Escape" &&
+      !query &&
+      kinds.length === 0 &&
+      keywords.length === 0
+    ) {
       // Clearing is the document handler's job; this is only the second
       // press, once there is nothing left to clear — so Escape leaves the
       // field rather than being a dead key.
@@ -625,6 +967,10 @@ export default function Catalog({
         // Only when the card itself holds focus: an inner control reached by
         // mouse must keep its own Space/Enter behaviour.
         if (event.target !== card) return;
+        // A table row *is* an anchor, so Enter is the browser's to handle —
+        // swallowing it here would break activation rather than provide it.
+        // Only the card needs its title link clicked on its behalf.
+        if (card instanceof HTMLAnchorElement) return;
         event.preventDefault();
         card.querySelector<HTMLAnchorElement>("h2 a")?.click();
         return;
@@ -641,20 +987,26 @@ export default function Catalog({
     [packages, showDeprecated],
   );
 
-  const kinds = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of counted) counts.set(p.kind, (counts.get(p.kind) ?? 0) + 1);
-    return [...counts.entries()].sort(
-      (a, b) => kindOrder(a[0]) - kindOrder(b[0]) || a[0].localeCompare(b[0]),
+  // Which kinds this catalog publishes, in chip order. No counts on the
+  // chips: they cost every chip the width of a number, which is width the
+  // keyword rail beside them needs more, and the meta row already states how
+  // many packages the filters left. A per-chip count is also the harder one
+  // to read honestly — kinds are an OR group, so a count taken after the
+  // filter says "3" about a chip that is about to reveal thirty.
+  const kindNames = useMemo(() => {
+    const seen = new Set(counted.map((p) => p.kind));
+    return [...seen].sort(
+      (a, b) => kindOrder(a) - kindOrder(b) || a.localeCompare(b),
     );
   }, [counted]);
 
   const q = query.trim().toLowerCase();
-  // Query and kind first, deprecation last — so the toggle can report how
+  // Query and facets first, deprecation last — so the toggle can report how
   // many entries *it alone* is holding back, rather than a catalog-wide
   // number that has nothing to do with what is on screen.
   const matching = packages.filter((p) => {
-    if (kind && p.kind !== kind) return false;
+    if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
+    if (!keywords.every((kw) => p.keywords?.includes(kw))) return false;
     if (!q) return true;
     return [
       p.name,
@@ -670,14 +1022,57 @@ export default function Catalog({
     showDeprecated ? matching : matching.filter((p) => !p.deprecated)
   ).sort((a, b) => compare(a, b, sort, dir));
 
+  /**
+   * The keyword rail, over what is on screen rather than over the catalog.
+   *
+   * Two decisions, both borrowed from `@ocx-sh/catalog` and both load-bearing:
+   *
+   * Active keywords are **pinned**, first and in the order they were clicked,
+   * and never scored. A filter that scrolls out of the rail is a filter the
+   * reader cannot lift. Their count is `shown.length` by construction — under
+   * AND, every surviving package carries every active keyword.
+   *
+   * The rest are picked by splitting power over `shown`, not by frequency
+   * over `packages`. A rail scored against the whole catalog keeps offering
+   * keywords no surviving package carries, and under AND that is most of
+   * them — every such chip is one click to an empty grid.
+   *
+   * The cost, accepted: the rail's contents move as the reader filters, which
+   * is what the FLIP effect above animates. The set changing invisibly is
+   * what would read as broken.
+   */
+  const pinned = keywords.map((keyword) => ({
+    keyword,
+    count: shown.length,
+  }));
+  const rail = selectRailKeywords(shown, KEYWORD_CHIP_LIMIT)
+    // `selectRailKeywords` scores the actives like any other keyword, so
+    // over-request and drop them rather than spend rail slots twice.
+    .filter((k) => !keywords.includes(k.keyword))
+    .slice(0, Math.max(0, KEYWORD_CHIP_LIMIT - pinned.length));
+  const visibleKeywords = [...pinned, ...rail];
+  // What the menu has to carry: everything the rail had no slot for, plus
+  // everything it has a slot for but no ROOM for. The second half is why the
+  // menu is built from `railFit` rather than from `KEYWORD_CHIP_LIMIT` — a
+  // chip clipped at the rail's edge is one the reader cannot reach anywhere
+  // else, and a "+N more" that does not count it is lying about where it is.
+  const clippedKeywords = visibleKeywords.slice(railFit).map((k) => k.keyword);
+  const menuKeywords = keywordFrequency(shown).filter(
+    (k) =>
+      clippedKeywords.includes(k.keyword) ||
+      !visibleKeywords.some((v) => v.keyword === k.keyword),
+  );
+  // Plain substring, not a fuzzy match: this searches a list the reader is
+  // looking at, and every entry in it is one short known word.
+  const menuShown = menuKeywords.filter((k) =>
+    k.keyword.toLowerCase().includes(keywordFilter.trim().toLowerCase()),
+  );
+
   // A catalog with nothing deprecated gets no toggle — a control that can
   // only ever be a no-op is worse than its absence. An index that publishes
   // no ratings gets no rating chip for the same reason.
   const hasDeprecated = packages.some((p) => p.deprecated);
   const hasRatings = packages.some((p) => p.rating);
-
-  // Chips leave the Tab order only while there is a grid to arrow up from.
-  const chipTabIndex = shown.length === 0 ? 0 : -1;
 
   return (
     <section class="catalog" data-slot="catalog">
@@ -686,7 +1081,7 @@ export default function Catalog({
           <input
             ref={searchRef}
             type="search"
-            placeholder={`Search ${counted.length} packages…`}
+            placeholder="Search packages — name, keyword, description…"
             value={query}
             onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
             onKeyDown={onSearchKeyDown}
@@ -700,92 +1095,143 @@ export default function Catalog({
             /
           </kbd>
         </div>
-        {/* Beside the search field rather than among the chips: choosing an
-            order is not filtering, and it is built to the field's own
-            measurements — same height, same radius — so the two read as one
-            control strip. Both halves take an ordinary tab stop; a select
-            owns ArrowLeft/Right for its options, so neither can join the
-            chips' roving arrow ring. */}
-        <div class="sort-group" role="group" aria-label="Sort by">
-          {/* Left, because that is the order the pair reads in: "descending,
-              by rating". The bars-and-arrow glyph draws the order itself —
-              tall-to-short under a down arrow — rather than labelling a flag,
-              so it stays right whichever field is selected. */}
-          <button
-            type="button"
-            class="sort-dir"
-            data-slot="filter-chip"
-            title={
-              dir === "asc"
-                ? "Ascending — click for descending"
-                : "Descending — click for ascending"
-            }
-            aria-label={
-              dir === "asc"
-                ? "Sorted ascending; sort descending"
-                : "Sorted descending; sort ascending"
-            }
-            onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
-          >
-            {dir === "asc" ? (
-              <ArrowUpNarrowWide size={15} aria-hidden="true" />
-            ) : (
-              <ArrowDownWideNarrow size={15} aria-hidden="true" />
-            )}
-          </button>
-          <select
-            class="sort-field"
-            data-slot="filter-chip"
-            aria-label="Sort by"
-            value={sort}
-            onChange={(event) => {
-              const next = (event.currentTarget as HTMLSelectElement)
-                .value as Sort;
-              setSort(next);
-              // Picking a field takes that field's own direction. Carrying
-              // the previous one over lands the reader on "oldest first"
-              // because they had asked for Z→A a moment ago.
-              setDir(NATURAL[next]);
-            }}
-          >
-            <option value="name">name</option>
-            <option value="updated">updated</option>
-            {hasRatings && <option value="rating">rating</option>}
-          </select>
-        </div>
-        {/* Divides sort from filter — two different questions sharing a row.
-            Decorative only: each group already carries its own aria-label,
-            so this is hidden rather than announced. */}
-        {/* Its own line, always. The kind filters and the deprecated toggle
-            are one row and the search field and sort control are another;
-            without this wrapper a wide viewport fits all four on one line
-            and the toolbar stops reading as two questions. */}
+        {/* One row, three groups, in the order they narrow: what sort of
+            thing, then what it is about, then what the catalog is
+            withholding. Only the keyword group flexes and scrolls, so a
+            narrow viewport shrinks IT rather than dropping the deprecated
+            toggle onto a second line — no chip can shrink below its own
+            longest word, and the rail's chip count is a constant, not a
+            viewport reading. */}
         <div class="filter-row">
-          <div class="chips" role="group" aria-label="Filter by kind">
+          <div
+            class="chips kind-chips"
+            role="group"
+            aria-label="Filter by kind"
+          >
+            {/* "all" is the empty selection rendered as a chip, not a sixth
+                kind — so it is active exactly when nothing else is, and
+                clicking it clears rather than selects. */}
             <button
               type="button"
-              class={kind === null ? "chip active" : "chip"}
+              class={kinds.length === 0 ? "chip active" : "chip"}
               data-slot="filter-chip"
-              tabIndex={chipTabIndex}
+              aria-pressed={kinds.length === 0}
               onKeyDown={onChipKeyDown}
-              onClick={() => setKind(null)}
+              onClick={() => setKinds([])}
             >
-              all <small>{counted.length}</small>
+              all
             </button>
-            {kinds.map(([k, count]) => (
+            {kindNames.map((k) => (
               <button
                 key={k}
                 type="button"
-                class={kind === k ? `chip active kind-${k}` : `chip kind-${k}`}
+                class={
+                  kinds.includes(k) ? `chip active kind-${k}` : `chip kind-${k}`
+                }
                 data-slot="filter-chip"
-                tabIndex={chipTabIndex}
+                aria-pressed={kinds.includes(k)}
                 onKeyDown={onChipKeyDown}
-                onClick={() => setKind(kind === k ? null : k)}
+                onClick={() => toggleKind(k)}
               >
-                {k} <small>{count}</small>
+                {k}
               </button>
             ))}
           </div>
+          {/* Divides "what sort of thing" from "about what" — two
+              questions sharing a row. Decorative: each group carries its own
+              aria-label, so this is drawn, not announced. */}
+          {visibleKeywords.length > 0 && (
+            <>
+              <span class="filter-divider" aria-hidden="true" />
+              <div
+                class="chips kw-rail"
+                role="group"
+                aria-label="Filter by keyword"
+                ref={railRef}
+              >
+                {visibleKeywords.map(({ keyword }, i) => {
+                  // Past the measured fit: still laid out, so the measurement
+                  // that decided this stays true on the next pass, but drawn
+                  // as nothing and out of reach. Removing it from the flow
+                  // instead would free the width that excluded it, which is
+                  // the oscillation this shape exists to avoid.
+                  const clipped = i >= railFit;
+                  return (
+                    <button
+                      key={keyword}
+                      ref={(el) => {
+                        // The FLIP effect measures whatever is in this map, so
+                        // a chip that leaves has to leave the map with it —
+                        // Preact calls back with null on unmount for that.
+                        if (el)
+                          railRefs.current.set(keyword, el as HTMLElement);
+                        else railRefs.current.delete(keyword);
+                      }}
+                      type="button"
+                      class={[
+                        "chip kw",
+                        keywords.includes(keyword) ? "active" : "",
+                        clipped ? "clipped" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      data-slot="filter-chip"
+                      aria-pressed={keywords.includes(keyword)}
+                      aria-hidden={clipped ? "true" : undefined}
+                      tabIndex={clipped ? -1 : undefined}
+                      onKeyDown={onChipKeyDown}
+                      onClick={() => toggleKeyword(keyword)}
+                    >
+                      {keyword}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {menuKeywords.length > 0 && (
+            // Everything the rail had no room for, behind a search box.
+            // Not an "expand" that dumps the remaining chips inline: a
+            // catalog's keyword vocabulary is open-ended, and a few hundred
+            // chips at once is a wall, not a control.
+            //
+            // A `<details>` for the same reason the platform picker and the
+            // version menus are: it opens, closes and takes Escape on its
+            // own, with no popover library and no script.
+            <details class="kw-menu">
+              <summary class="chip" data-slot="filter-chip">
+                +{menuKeywords.length} more
+              </summary>
+              <div class="kw-menu-panel">
+                <input
+                  type="text"
+                  class="kw-menu-search"
+                  placeholder="Filter keywords…"
+                  aria-label="Filter keywords"
+                  value={keywordFilter}
+                  onInput={(e) =>
+                    setKeywordFilter((e.target as HTMLInputElement).value)
+                  }
+                />
+                <div class="kw-menu-list">
+                  {menuShown.map(({ keyword, count }) => (
+                    <button
+                      key={keyword}
+                      type="button"
+                      class="kw-menu-item"
+                      onClick={() => toggleKeyword(keyword)}
+                    >
+                      <span>{keyword}</span>
+                      <small>{count}</small>
+                    </button>
+                  ))}
+                  {menuShown.length === 0 && (
+                    <p class="kw-menu-empty">No keyword matches.</p>
+                  )}
+                </div>
+              </div>
+            </details>
+          )}
           {hasDeprecated && (
             // A toggle, not a filter: `aria-pressed` rather than the `active`
             // class alone, so it is announced as on/off instead of selected.
@@ -807,7 +1253,6 @@ export default function Catalog({
                   ? "Hide deprecated packages"
                   : "Show deprecated packages"
               }
-              tabIndex={chipTabIndex}
               onKeyDown={onChipKeyDown}
               onClick={() => setShowDeprecated((on) => !on)}
             >
@@ -815,12 +1260,119 @@ export default function Catalog({
             </button>
           )}
         </div>
+        {/* The bottom line of the toolbar: what the filters above left, and
+            the three controls that arrange it. The count leads because it is
+            the answer to everything above it; the controls are pushed to the
+            far end because they are not. */}
+        <div class="meta-row">
+          {/* `role="status"` on the count alone. It re-announces "N of M
+              packages" as the filters change; putting it on the grid would
+              read the whole result list out on every keystroke. */}
+          <p class="result-count" role="status" aria-atomic="true">
+            {shown.length === counted.length
+              ? `${counted.length} packages`
+              : `${shown.length} of ${counted.length} packages`}
+          </p>
+          {/* Held at the far end, away from the chips: choosing an order is
+              not filtering. Both halves take an ordinary tab stop; a select
+              owns ArrowLeft/Right for its options, so neither can join the
+              chips' roving arrow ring. */}
+          <div class="sort-group" role="group" aria-label="Sort by">
+            {/* Left, because that is the order the pair reads in: "descending,
+                by rating". The bars-and-arrow glyph draws the order itself —
+                tall-to-short under a down arrow — rather than labelling a flag,
+                so it stays right whichever field is selected. */}
+            <button
+              type="button"
+              class="sort-dir"
+              data-slot="filter-chip"
+              title={
+                dir === "asc"
+                  ? "Ascending — click for descending"
+                  : "Descending — click for ascending"
+              }
+              aria-label={
+                dir === "asc"
+                  ? "Sorted ascending; sort descending"
+                  : "Sorted descending; sort ascending"
+              }
+              onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
+            >
+              {dir === "asc" ? (
+                <ArrowUpNarrowWide size={15} aria-hidden="true" />
+              ) : (
+                <ArrowDownWideNarrow size={15} aria-hidden="true" />
+              )}
+            </button>
+            <select
+              class="sort-field"
+              data-slot="filter-chip"
+              aria-label="Sort by"
+              value={sort}
+              onChange={(event) => {
+                const next = (event.currentTarget as HTMLSelectElement)
+                  .value as Sort;
+                setSort(next);
+                // Picking a field takes that field's own direction. Carrying
+                // the previous one over lands the reader on "oldest first"
+                // because they had asked for Z→A a moment ago.
+                setDir(NATURAL[next]);
+              }}
+            >
+              <option value="name">name</option>
+              <option value="updated">updated</option>
+              {hasRatings && <option value="rating">rating</option>}
+            </select>
+          </div>
+          {/* Beside sort, because it answers the same kind of question — how
+              the catalog is arranged, not which of it is shown. Two buttons
+              rather than one that toggles: a single button has to be labelled
+              with either the state or the action, and whichever it picks reads
+              as the other half the time. `aria-pressed` on both says which is
+              current without either label lying. */}
+          <div class="view-toggle" role="group" aria-label="Catalog view">
+            <button
+              type="button"
+              class={view === "cards" ? "view-pick active" : "view-pick"}
+              data-slot="filter-chip"
+              aria-pressed={view === "cards"}
+              title="Cards"
+              aria-label="Show packages as cards"
+              onClick={() => setView("cards")}
+            >
+              <LayoutGrid size={15} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class={view === "table" ? "view-pick active" : "view-pick"}
+              data-slot="filter-chip"
+              aria-pressed={view === "table"}
+              title="List"
+              aria-label="Show packages as a list"
+              onClick={() => setView("table")}
+            >
+              <List size={15} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {shown.length === 0 ? (
         <p class="empty">No packages match.</p>
+      ) : view === "table" ? (
+        <PackageTable
+          packages={shown}
+          hasRatings={hasRatings}
+          onKeyDown={onCardKeyDown}
+          rootRef={gridRef}
+        />
       ) : (
-        <ul class="grid" ref={gridRef}>
+        <ul
+          class="grid"
+          ref={(el) => {
+            gridRef.current = el;
+          }}
+        >
           {shown.map((p) => (
             // One Tab stop per card, in DOM order — which the grid lays out
             // left to right, top to bottom. Every control inside is taken
@@ -967,13 +1519,22 @@ export default function Catalog({
                   {/* Capped at five so a package with thirty keywords does
                       not render thirty chips off the side of a clipped row.
                       Which of the five actually fit is the row's business. */}
+                  {/* Applies the keyword facet, not a text search. The two
+                      are not the same answer: `setQuery("cli")` also matched
+                      every description with the word in it, so the chip
+                      returned packages that are not tagged `cli` at all. */}
                   {p.keywords.slice(0, 5).map((kw) => (
                     <button
                       key={kw}
                       type="button"
-                      class="chip keyword"
+                      class={
+                        keywords.includes(kw)
+                          ? "chip keyword active"
+                          : "chip keyword"
+                      }
+                      aria-pressed={keywords.includes(kw)}
                       tabIndex={-1}
-                      onClick={() => setQuery(kw)}
+                      onClick={() => toggleKeyword(kw)}
                     >
                       {kw}
                     </button>

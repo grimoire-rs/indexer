@@ -7,7 +7,8 @@
   "repository": "https://github.com/acme/starter-pack",
   "keywords": [
     "bundle",
-    "starter"
+    "starter",
+    "docs"
   ],
   "owner": {
     "github": "acme",

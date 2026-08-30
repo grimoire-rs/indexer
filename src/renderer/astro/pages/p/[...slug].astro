@@ -534,10 +534,13 @@ const headMarkColor = pkg.deprecated
             <ul class="keywords">
               {pkg.keywords.map((k) => (
                 <li>
-                  {/* Back to the catalog with the term already in the search
-                      box — a keyword is only useful if it leads somewhere. */}
+                  {/* Back to the catalog with the keyword FACET applied, not
+                      a text search. `?q=` also matched every description with
+                      the word in it, so a link labelled `cli` returned
+                      packages nobody tagged `cli`. The catalog still reads
+                      `?q=`, so links shared before this change still work. */}
                   <a
-                    href={withBase(`/?q=${encodeURIComponent(k)}`)}
+                    href={withBase(`/?kw=${encodeURIComponent(k)}`)}
                     title={`Find packages tagged ${k}`}
                   >
                     {k}
