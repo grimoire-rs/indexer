@@ -20,7 +20,12 @@ import {
   mdiMicrosoftWindows,
   mdiPenguin,
 } from "@mdi/js";
-import type { ResolvedSiteConfig } from "../../../config.js";
+import type { RegistryHint, ResolvedSiteConfig } from "../../../config.js";
+
+// Re-exported so an index's own page can name the shape it passes to the two
+// functions below without reaching past `@grim/lib/*` into the package's
+// internals, which the overlay does not publish.
+export type { RegistryHint };
 
 /**
  * One option in a command bar: what it is called, what it copies, and the
@@ -77,10 +82,18 @@ export function installChoices(config: ResolvedSiteConfig): Choice[] {
  * the `helm repo add` ergonomic. `null` when `registry` is unconfigured,
  * which means the index has no public URL to hand out; the block is omitted
  * rather than guessed.
+ *
+ * `registry` defaults to the site's own, and is a parameter so a page can draw
+ * the same bar for a *different* index: a corporate setup guide that hands out
+ * its own index in the hero and the public one further down needs two bars
+ * differing in nothing but this argument.
  */
-export function registryAddCommand(config: ResolvedSiteConfig): string | null {
-  return config.registry
-    ? `grim config registry add ${config.registry.alias} --index ${config.registry.index}`
+export function registryAddCommand(
+  config: ResolvedSiteConfig,
+  registry: RegistryHint | null = config.registry,
+): string | null {
+  return registry
+    ? `grim config registry add ${registry.alias} --index ${registry.index}`
     : null;
 }
 
@@ -96,8 +109,11 @@ export function registryAddCommand(config: ResolvedSiteConfig): string | null {
  * flag, and appended after a long `--index <url>` it fell off the end of the
  * line, so switching scope looked like it changed nothing at all.
  */
-export function registryScopeChoices(config: ResolvedSiteConfig): Choice[] {
-  const add = registryAddCommand(config);
+export function registryScopeChoices(
+  config: ResolvedSiteConfig,
+  registry: RegistryHint | null = config.registry,
+): Choice[] {
+  const add = registryAddCommand(config, registry);
   if (!add) return [];
   return [
     { name: "Global", command: `grim --global ${add.slice("grim ".length)}`, Icon: Globe },

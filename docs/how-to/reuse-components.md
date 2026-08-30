@@ -63,6 +63,70 @@ const { config } = data;
 Both bars are derived from *your* `install` and `registry` config, so the
 commands cannot drift from the ones the landing page shows.
 
+### A bar for an index other than your own
+
+`registryScopeChoices` takes the registry as a second argument, defaulting to
+the one in your config. Pass a different one and you get the same bar for it —
+which is what a corporate setup guide that hands out its own index *and*
+encourages the public one needs:
+
+```astro
+---
+import CommandBar from "@grim/components/CommandBar.astro";
+import { BrandMark } from "@grim/components/BrandMark.tsx";
+import { registryScopeChoices, type RegistryHint } from "@grim/lib/commands";
+import { addRegistryUrl } from "@grim/lib/catalog";
+import { data } from "@grim/lib/data";
+import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
+const { config } = data;
+
+const publicIndex: RegistryHint = {
+  alias: "grimoire",
+  index: "https://index.grimoire.rs",
+};
+const addPublic = addRegistryUrl(config.vscodeExtension, publicIndex);
+---
+
+<h2>Also add the public index</h2>
+<CommandBar
+  choices={registryScopeChoices(config, publicIndex)}
+  noun="registry add command"
+  copyLabel="Copy the registry add command"
+  pickerTitle="Scope"
+  pickerLabel="Choose the scope"
+>
+  {addPublic && (
+    <a slot="action" class="seg brand-link" href={addPublic}
+       title="Add this index via VS Code" aria-label="Add this index via VS Code">
+      <BrandMark path={mdiMicrosoftVisualStudioCode} />
+    </a>
+  )}
+</CommandBar>
+```
+
+`addRegistryUrl` already took its registry explicitly, and returns `null`
+whenever the deep link would not work — a non-`https` locator, embedded
+credentials, an alias the extension refuses — so a broken button never renders.
+
+`registryAddCommand(config, registry)` takes the same second argument, for a
+page that wants the bare command string rather than the bar.
+
+| Prop | Meaning |
+|---|---|
+| `choices` | The commands offered. One renders a bare field; more than one adds the picker. Empty is legal — a bar can be nothing but its action segment |
+| `noun` | What the copy toast calls it, after the choice name: `"install command"` becomes `"Linux install command"` |
+| `copyLabel` | Accessible name for the field |
+| `pickerTitle`, `pickerLabel` | Tooltip and accessible name for the picker |
+| `detect` | Preselect the visitor's own platform before first paint. Only meaningful when the choices *are* platforms |
+
+An `action` slot fills the trailing segment:
+
+```astro
+<CommandBar choices={choices} noun="add command" copyLabel="Copy it">
+  <a slot="action" class="seg brand-link" href={deepLink}>…</a>
+</CommandBar>
+```
+
 ## Code blocks
 
 `CommandBar` is for a command a reader copies and runs. Anything else you want
@@ -120,8 +184,8 @@ one you write. All three return `null` when the index sets
 | Function | Returns |
 |---|---|
 | `installChoices(config)` | One choice per platform named in `install`, with its brand glyph |
-| `registryAddCommand(config)` | The `grim config registry add …` line, or `null` when `registry` is unset |
-| `registryScopeChoices(config)` | That command as Global and Project choices |
+| `registryAddCommand(config, registry?)` | The `grim config registry add …` line, or `null` when there is no registry. `registry` defaults to your config's |
+| `registryScopeChoices(config, registry?)` | That command as Global and Project choices, for the same registry |
 | `addArtifactChoices(ref)` | `grim add` for one package, Global and Project |
 
 ## Smaller pieces
