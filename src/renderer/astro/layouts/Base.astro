@@ -1253,6 +1253,27 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
           gap: var(--grim-space-6);
         }
+        /* Off-screen cards skip layout and paint until they are scrolled to.
+           A card is the expensive item on this page — a masked keyword strip,
+           a clipped watermark in its own stacking context, a logo — and the
+           grid and the table are separate component trees, so switching view
+           repaints every one of them at once.
+
+           `auto` remembers each card's last real height, so the scrollbar
+           stops jumping after the first pass; the `18rem` is only the guess
+           before that. Cards stay focusable and findable — the engine renders
+           one on focus or find-in-page.
+
+           ponytail: this bounds the PAINT, not the JS. Measured in jsdom (no
+           layout at all) the Preact commit for one view switch is ~30ms at 100
+           packages, ~90-170ms at 500 and ~180-350ms at 1000, because the two
+           views share no element types and every card unmounts as every row
+           mounts. Past a few hundred packages the answer is windowing the
+           list, not another CSS property. */
+        .grid > li {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 18rem;
+        }
         .card {
           display: flex;
           flex-direction: column;

@@ -851,6 +851,14 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).not.toMatch(/\.kw-menu-panel\{[^}]*position:absolute/);
   });
 
+  // The two views share no element types, so switching repaints every item.
+  // Off-screen cards skip that work; `auto` remembers each one's real height
+  // once it has been rendered, so the scrollbar settles after one pass.
+  it("keeps off-screen cards out of layout and paint", () => {
+    expect(bundledCss).toMatch(/\.grid>li\{[^}]*content-visibility:auto/);
+    expect(bundledCss).toMatch(/\.grid>li\{[^}]*contain-intrinsic-size:auto /);
+  });
+
   it("attributes the renderer in the footer, and lets an index turn it off", async () => {
     // New tab, and `noopener` with it — the opened page must not get a
     // handle on this one through `window.opener`.
