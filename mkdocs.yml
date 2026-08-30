@@ -1,0 +1,125 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+#
+# Documentation site for @grimoire-rs/indexer, published to GitHub Pages by
+# .github/workflows/pages.yml. Build it with `task docs:build` (strict — a dead
+# internal link fails the build); preview with `task docs:serve`.
+#
+# Deliberately plugin-light: only the built-in `search`. Every markdown
+# extension below ships inside `pymdown-extensions`, a direct dependency of
+# mkdocs-material, so the single pinned `mkdocs-material==<version>` in
+# taskfile.yml is the whole toolchain.
+
+site_name: Grimoire Indexer
+site_description: Run your own Grimoire package index — a static site listing the skills, rules, agents, MCP servers and bundles in one or more OCI registries.
+site_url: https://grimoire-rs.github.io/indexer/
+site_author: The Grimoire Authors
+repo_name: grimoire-rs/indexer
+repo_url: https://github.com/grimoire-rs/indexer
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 The Grimoire Authors
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/grimoire-rs/indexer
+    - icon: fontawesome/solid/globe
+      link: https://grimoire.rs
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.magiclink:
+      hide_protocol: true
+      repo_url_shorthand: true
+      user: grimoire-rs
+      repo: indexer
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+# Every entry names a file that exists. There is no generated nav and no
+# hardcoded list of someone else's slugs — the failure mode `ocx-catalog`
+# shipped, where the docs sidebar names one index's pages and 404s for
+# every other tree.
+nav:
+  - Home: index.md
+  - How-To:
+      - how-to/index.md
+      - Quickstart: how-to/quickstart.md
+      - Preview locally: how-to/preview-locally.md
+      - Brand the site: how-to/customize-branding.md
+      - Add your own pages: how-to/add-pages.md
+      - Reuse shipped components: how-to/reuse-components.md
+      - Replace a component: how-to/replace-a-component.md
+  - Reference:
+      - reference/index.md
+      - CLI: reference/cli.md
+      - Config schema: reference/config-schema.md
+      - Theme overlay: reference/theme-overlay.md
+      - Theme tokens: reference/theme-tokens.md
+      - Data slots: reference/data-slots.md
+      - Output layout: reference/output-layout.md
+      - stats.json sidecar: reference/stats-sidecar.md
+  - Explanation:
+      - explanation/index.md
+      - Index vs. site: explanation/index-vs-site.md
+      - Security and trust: explanation/security-and-trust-model.md
+  - Ops:
+      - ops/index.md
+      - Known limitations: ops/known-limitations.md
+      - Troubleshooting: ops/troubleshooting.md

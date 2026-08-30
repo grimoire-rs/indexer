@@ -9,6 +9,10 @@ version: "3"
 # the tests and the dev server all live in package.json, so there is no second
 # definition here to drift out of step with it.
 
+vars:
+  # Single source of truth for the docs toolchain pin (see docs:build below).
+  MKDOCS_MATERIAL: 9.7.7
+
 tasks:
   default:
     desc: Everything CI runs
@@ -46,6 +50,22 @@ tasks:
       - task: typecheck
       - task: test
       - task: smoke
+
+  # docs:* are STANDALONE, deliberately not part of `check` — `check` is the
+  # npm quality gate and must stay runnable with no Python toolchain present.
+  # The pre-merge gate for the docs is .github/workflows/pages.yml's build job,
+  # which runs `docs:build` with the same pin.
+  docs:build:
+    desc: Build the docs site into site/ (strict — any dead internal link fails)
+    cmd: uv run --with mkdocs-material=={{.MKDOCS_MATERIAL}} mkdocs build --strict
+
+  docs:serve:
+    desc: Live-reload docs preview at http://127.0.0.1:8000
+    cmd: uv run --with mkdocs-material=={{.MKDOCS_MATERIAL}} mkdocs serve -a 127.0.0.1:8000
+
+  docs:clean:
+    desc: Remove the generated site/ directory
+    cmd: rm -rf site
 
   # `interactive: true` keeps the foreground dev server usable under Task
   # (Ctrl-C reaches it, and its output is not buffered).
