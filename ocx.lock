@@ -3,7 +3,7 @@ lock_version = 3
 declaration_hash_version = 1
 declaration_hash = "sha256:adc035fdf8f184280534def68b128e8136eeb3bfa98d86b87b35ce678cd9035e"
 generated_by = "ocx 0.5.8"
-generated_at = "2026-08-29T13:01:08Z"
+generated_at = "2026-08-30T09:18:36Z"
 
 [[tool]]
 name = "go-task"
@@ -24,12 +24,12 @@ group = "default"
 repository = "ocx.sh/grimoire/cli"
 
 [tool.platforms]
-"darwin/amd64" = "sha256:21d53f543441f99db1e7163296bd1af21f19af94bf11ff2155c37d5de914c6b3"
-"darwin/arm64" = "sha256:50e4e8a74acdc381acbb21f2d2fa0576b933675b716960f1d3a5b313c8e3a08e"
-"linux/amd64" = "sha256:a8ae19ecbc4091fefd0cb5fb4ea66f451d7cf1891223c014690cb83f08b90ae9"
-"linux/arm64" = "sha256:31a34f8ad31b580b50d020b9d483fbae0c2b3a2d705e593d93d2a70e55cff11e"
-"windows/amd64" = "sha256:da3ea2488f70d71219b2e899f1fbc46ab047bfc4613a4cf3142fe26549dc9941"
-"windows/arm64" = "sha256:9992d347d206a78d07ce7b55c4c5831dfcc9530049f11ae6082161947132de33"
+"darwin/amd64" = "sha256:785e20d2ac7ba36ae0447b669864ab57e55e9ce2911874abfe6d48d422aebf20"
+"darwin/arm64" = "sha256:62909b7ae8c09a958c461db05a036958a5c595acd47db58d0ae2c6305b1ee512"
+"linux/amd64" = "sha256:b407c5680de1ae9c96696bc4b6e1b74e828f7a05f5a13d4efed945f77e78e497"
+"linux/arm64" = "sha256:604deab263adb9993786fa8e480fa5211e80b39ac0bdb5762389e381f3d88ee2"
+"windows/amd64" = "sha256:cf3bd6d2d30ac678a272da994cca6bfc53d05ee18f4a97b5d7b3c181524c9f93"
+"windows/arm64" = "sha256:e066781ab5e64dc4319860f2b33ee8139af143712d3040be3b3f8c645f8c464f"
 
 [[tool]]
 name = "nodejs"

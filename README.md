@@ -364,7 +364,7 @@ not worth promising this early.
 The toolchain — `task`, `node`, `grim` — is pinned in `ocx.toml`. Once:
 
 ```sh
-direnv allow          # or: eval "$(ocx direnv export -g default,node24)"
+ocx shell allow       # per-prompt activation for this project, once
 task install
 ```
 
