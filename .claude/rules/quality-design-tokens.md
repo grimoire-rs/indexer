@@ -27,15 +27,31 @@ choice.
 
 ## Tiers
 
-Two exist. A third is deliberately absent.
+Three exist, and the third has exactly one member.
 
 | Tier | Visibility | Contents |
 |---|---|---|
-| **Semantic** | **Public API** — documented in `tokens.css`'s contract comment | 45 tokens across seven families |
+| **Primitive** | **Public API**, and deliberately tiny | `--grim-radius-base` |
+| **Semantic** | **Public API** — documented in `tokens.css`'s contract comment | 46 tokens across seven families |
 | **Component hook** | **Does not exist** | See below |
 
-There is no primitive tier: no raw value is shared by two semantic tokens, so
-a private tier would be one indirection with nothing behind it.
+The primitive tier exists on one condition, and only that condition: **a raw
+value shared by two or more semantic tokens.** Without one, a primitive is an
+indirection with nothing behind it, which is why this tier was empty until the
+four radius steps came to share a base. Do not add a second member because a
+value *looks* primitive — the four steps derive from this one, and that is the
+whole test.
+
+`--grim-radius-base` is the round-or-square decision as one number: `0px` for
+square, `4px` for the rounding this renderer shipped through `0.4.x`, and the
+four steps hold their ratios at any setting. It is public rather than private
+because the knob is the *point* — a consumer restyling every corner sets one
+value instead of four, while still being able to override a single step, since
+a full redeclaration beats the derivation.
+
+`--grim-radius-pill` is deliberately NOT on the knob. A chip is a pill because
+that shape says "toggleable tag"; squaring one turns it into a button. It is a
+constant, not a step on a scale.
 
 **Component hooks are deliberately absent**, and `README.md` says so publicly.
 They reach nothing `data-slot` does not already reach — see the sibling rule's
@@ -88,7 +104,7 @@ the consumer writes an override that silently does nothing.
 | Colour | 18 tokens, both schemes |
 | Space | 9 steps, numbered |
 | Type | 7 steps |
-| Radius | 5 steps |
+| Radius | 4 derived steps + `pill`, all from `--grim-radius-base` |
 | Border width | 1 token |
 | Motion | 3 durations |
 | Elevation | 2 shadows |
@@ -113,10 +129,17 @@ the same case.
 
 Derived values are the opposite: write the derivation, never a second
 literal. A nested radius is
-`calc(var(--grim-radius-control) - var(--grim-border-width))`; a border overlap is
-`calc(-1 * var(--grim-border-width))`; a full-bleed margin is the negation of
-the padding token it must cancel. A hand-computed `7px` or `-1px` silently
-stops tracking the moment the token it was derived from moves.
+`max(0px, calc(var(--grim-radius-control) - var(--grim-border-width)))`; a
+border overlap is `calc(-1 * var(--grim-border-width))`; a full-bleed margin
+is the negation of the padding token it must cancel. A hand-computed `7px` or
+`-1px` silently stops tracking the moment the token it was derived from moves.
+
+**A derivation that subtracts must be clamped.** `--grim-radius-base` can be
+`0px`, and a *negative* `border-radius` does not clip to zero — the whole
+declaration is dropped. The clamp costs nothing while the site is square and
+is the difference between the knob working and half-working the moment someone
+rounds it back up. Zero itself is exempt from the raw-value check, since zero
+is the absence of a value rather than a step on any scale.
 
 ## Invariants
 

@@ -293,7 +293,7 @@ stale.
 | Colour | `--grim-color-*` — surface, accent, package kind, state |
 | Space | `--grim-space-1` … `-9`, a sparse scale whose steps grow apart |
 | Type | `--grim-text-2xs` … `-2xl` |
-| Radius | `--grim-radius-code`, `-inset`, `-control`, `-surface`, `-pill` — named for the job, not the size |
+| Radius | `--grim-radius-base` — one knob: `0px` square (the default), `4px` rounded. The four steps `-code`, `-inset`, `-control`, `-surface` derive from it and keep their ratios; `-pill` does not, so chips stay pills |
 | Border, motion, elevation | `--grim-border-width`, `--grim-duration-*`, `--grim-shadow-*` |
 
 **Colour is the only family that differs per scheme**, so it is the only one
@@ -325,6 +325,13 @@ There is deliberately no component-override API (`--grim-card-radius` and
 friends). With the layer and the slots, it would reach nothing the CSS above
 cannot already reach, and it would freeze a per-slot prop contract that is
 not worth promising this early.
+
+> **The renderer ships square.** `--grim-radius-base` is `0px`; set it to
+> `4px` to restore the rounding of `0.4.x` and earlier in one line. The four
+> measurement steps derive from it, so overriding the base moves all of them;
+> overriding one step directly still wins over the derivation. `-pill` is off
+> the knob on purpose — a chip is a pill because that shape says "toggleable
+> tag", and squaring one turns it into a button.
 
 > **If your `theme.css` overrides a radius**, the five steps were renamed:
 > `--grim-radius-sm`/`-md`/`-lg`/`-xl` are now `--grim-radius-code`,

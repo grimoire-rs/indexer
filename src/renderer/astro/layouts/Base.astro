@@ -734,14 +734,19 @@ function repoLabel(url: string): string {
            shows until a hover, focus or open state paints a background — then
            square corners poke out past the bar's own 8px rounding.
            The summary is named explicitly rather than left to inherit. */
+        /* Clamped at zero, because the radius is a knob now: with
+           `--grim-radius-base: 0px` the bare subtraction is `-1px`, and a
+           negative `border-radius` is not invalid-but-ignored per corner —
+           it drops the whole declaration. Harmless while everything is
+           square, and a trap the moment someone rounds the site back up. */
         .cmd-bar > :first-child,
         .cmd-bar > :first-child > summary {
-          border-start-start-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
-          border-end-start-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
+          border-start-start-radius: max(0px, calc(var(--grim-radius-control) - var(--grim-border-width)));
+          border-end-start-radius: max(0px, calc(var(--grim-radius-control) - var(--grim-border-width)));
         }
         .cmd-bar > :last-child {
-          border-start-end-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
-          border-end-end-radius: calc(var(--grim-radius-control) - var(--grim-border-width));
+          border-start-end-radius: max(0px, calc(var(--grim-radius-control) - var(--grim-border-width)));
+          border-end-end-radius: max(0px, calc(var(--grim-radius-control) - var(--grim-border-width)));
         }
 
         /* Attribution sits opposite the raw-data line, on the same row where

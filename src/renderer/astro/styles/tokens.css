@@ -99,13 +99,17 @@
     --grim-text-2xl: 1.6rem;
 
     /* ---- Radius ----------------------------------------------------
-       Five steps, named for the job each one does. They were `sm`/`md`/
-       `lg`/`xl` — magnitudes, which is what every other family here is
-       deliberately not — and the cost was exactly what you would expect:
-       nothing said which step a new surface should take, so the package
-       list ended up wearing the control step beside cards wearing the
-       surface one, and the two corners disagreed.
+       Four steps named for the job each one does, all derived from one
+       knob, plus `pill`, which is not.
 
+       `--grim-radius-base` IS the round-or-square decision, and it is the
+       one primitive in this sheet. It exists because the four steps below
+       share a raw value — the condition under which a primitive tier stops
+       being an indirection with nothing behind it. Ship square by setting
+       it to `0px`; `4px` restores the rounding this renderer had through
+       `0.4.x`, and every step keeps its ratio at any setting.
+
+         base     the knob. 0px is square, 4px is the old look
          code     an inline run of code
          inset    a control INSIDE another control — a menu item, an icon
                   button, the logo tile, the key hint in the search field
@@ -116,15 +120,24 @@
          pill     anything whose shape is its category — chips, badges,
                   the version marker
 
+       `pill` is deliberately off the knob. A chip is a pill because that
+       shape says "toggleable tag"; squaring it turns it into a button, so
+       it is a constant rather than a step on the scale.
+
+       The four steps stay overridable one by one — a full redeclaration
+       beats the derivation — so a consumer wanting square surfaces and
+       rounded controls sets `--grim-radius-control` and ignores the knob.
+
        Pick by matching the job, never by eyeballing the corner: the same
        radius on a shorter box reads as more curve, so two surfaces that
        look different are usually the same step, and two that look alike
        are not necessarily. A corner that is genuinely wrong beside another
        is almost always two surfaces of one job wearing different steps. */
-    --grim-radius-code: 4px;
-    --grim-radius-inset: 6px;
-    --grim-radius-control: 8px;
-    --grim-radius-surface: 10px;
+    --grim-radius-base: 0px;
+    --grim-radius-code: calc(1 * var(--grim-radius-base));
+    --grim-radius-inset: calc(1.5 * var(--grim-radius-base));
+    --grim-radius-control: calc(2 * var(--grim-radius-base));
+    --grim-radius-surface: calc(2.5 * var(--grim-radius-base));
     --grim-radius-pill: 999px;
 
     /* ---- Border ----------------------------------------------------

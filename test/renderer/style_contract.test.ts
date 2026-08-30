@@ -201,7 +201,6 @@ describe("coverage", () => {
     "padding: 2.1rem", //            the copy glyph's own lane width
     "padding-right: 2.4rem", //      the key hint's measured width
     "border-bottom: 2px", //         the active tab underline, not a border seam
-    "transition-duration: 0ms", //   the prefers-reduced-motion lock
   ]);
 
   it("reads every scaled value from a token", () => {
@@ -214,6 +213,13 @@ describe("coverage", () => {
       for (const m of stripComments(css).matchAll(/([a-z-]+)\s*:\s*([^;{}]+);/g)) {
         if (!SCALED.has(m[1])) continue;
         for (const len of m[2].matchAll(/-?\d*\.?\d+(?:rem|px|em|ms|s)\b/g)) {
+          // Zero is not a step on any scale. It is the absence of a value,
+          // so there is nothing behind it a consumer could want to change —
+          // a `max(0px, …)` clamp floor, a `transition-duration: 0ms` under
+          // `prefers-reduced-motion`. Exempting it here rather than listing
+          // each occurrence in ALLOWED keeps that set about the values that
+          // really are measurements someone had to pick.
+          if (Number.parseFloat(len[0]) === 0) continue;
           const pair = `${m[1]}: ${len[0]}`;
           if (!ALLOWED.has(pair)) raw.push(`${file}: ${pair}`);
         }
