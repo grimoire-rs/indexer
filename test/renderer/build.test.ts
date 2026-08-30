@@ -859,6 +859,32 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).toMatch(/\.grid>li\{[^}]*contain-intrinsic-size:auto /);
   });
 
+  // Centred, the logo tile hung off the middle of the text beside it, so a
+  // long description pushed it down the header and the same package's mark sat
+  // at a different height on every page.
+  it("holds the detail header's logo against the title, not the description", async () => {
+    expect(bundledCss).toMatch(/\.detail-head\[[^\]]+\]\{[^}]*align-items:flex-start/);
+    // The tile it sits in is a fixed square whatever the logo's aspect ratio
+    // is, so the mark letterboxes inside it. `cover` would crop a wide logo
+    // to its middle third and nothing would say so — the dev index carries a
+    // 3:1 and a 1:2.5 logo for exactly this.
+    expect(bundledCss).toMatch(/\.logo-slot img\{[^}]*object-fit:contain/);
+    // And no ground behind it. A logo is a designed mark already sitting on
+    // one, so a tinted square framed it twice — most visibly for the many
+    // logos that are themselves a rounded square. The slot reserves space and
+    // draws nothing.
+    expect(bundledCss).not.toMatch(/\.logo-slot\{[^}]*background/);
+    // Nor a frame around a logo that failed to load. It read as a fault in the
+    // layout rather than in the image; the slashed glyph is what says the load
+    // failed, and the slot's `role="img"` plus its label is what announces it.
+    expect(bundledCss).not.toMatch(/\.logo-slot\[data-state=broken\]\{[^}]*border/);
+    // The initial-letter tile is not an exception to that: there the coloured
+    // ground IS the mark, and the letter on it would be invisible without one.
+    // `test-writer` is the fixture package carrying no logo at all.
+    const lettered = await readOut("p/github.com/acme/test-writer/index.html");
+    expect(lettered).toMatch(/class="tile letter"[^>]*background:\s*var\(--grim-color-kind-/);
+  });
+
   it("attributes the renderer in the footer, and lets an index turn it off", async () => {
     // New tab, and `noopener` with it — the opened page must not get a
     // handle on this one through `window.opener`.

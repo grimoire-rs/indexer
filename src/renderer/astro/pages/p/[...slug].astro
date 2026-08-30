@@ -611,9 +611,14 @@ const headMarkColor = pkg.deprecated
     gap: var(--grim-space-7);
     min-width: 0;
   }
+  /* Top-aligned, not centred. Centring pinned the tile to the middle of the
+     text block beside it, so every extra line of description pushed the logo
+     further down the header — the same package's mark sat at a different
+     height on every page. Aligned to the start it keeps its place against the
+     name and the byline whatever the description runs to. */
   .detail-head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--grim-space-6);
     background: var(--grim-color-card);
     border: var(--grim-border-width) solid var(--grim-color-border);
@@ -623,12 +628,18 @@ const headMarkColor = pkg.deprecated
   .detail-head-text {
     min-width: 0;
   }
-  /* One fixed square, the same on every package. Sizing it off the text
-     block beside it did not work: `aspect-ratio` derives the width from the
-     height the box has *before* `align-self: stretch` grows it, so the tile
-     came out 56px wide against a 93px-tall header — a portrait chip that
-     hugged the logo instead of framing it. A definite square has no such
-     ordering problem, and the background is then identical page to page. */
+  /* One fixed square, the same on every package — a size, not a frame: the
+     logo slot draws no background, so what this reserves is the space the
+     mark letterboxes into. Sizing it off the text block beside it did not
+     work: `aspect-ratio` derives the width from the height the box has
+     *before* `align-self: stretch` grows it, so the tile came out 56px wide
+     against a 93px-tall header — a portrait chip that hugged the logo instead
+     of framing it. A definite square has no such ordering problem, and every
+     package's mark then lands at one size whatever its aspect ratio.
+
+     `.tile.letter` below is the exception that keeps a background, and it is
+     not one: there the coloured ground IS the mark, and the initial sitting on
+     it would be invisible without it. */
   .tile {
     flex: 0 0 auto;
     width: 4.5rem;

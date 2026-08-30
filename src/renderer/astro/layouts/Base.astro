@@ -1417,10 +1417,6 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           height: 36px;
           border-radius: var(--grim-radius-inset);
         }
-        img.card-logo {
-          object-fit: contain;
-          background: var(--grim-color-chip-bg);
-        }
         .card-logo-fallback {
           display: flex;
           align-items: center;
@@ -1441,17 +1437,26 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
 
              loading  placeholder, no slash — the resting state
              ready    image faded in, placeholder faded out
-             broken   placeholder with its slash, dashed edge
+             broken   placeholder with its slash
 
            Kept distinct from `.card-logo-fallback`: that is a package with
            no logo at all, which is normal, not a fault. */
+        /* No background. A logo is already a designed mark on its own ground,
+           and a tinted square behind it framed it twice — worst on the many
+           logos that are themselves a rounded square, which then sat inside a
+           slightly larger rounded square. What is left is a box with a size,
+           so the three states still swap without shifting anything. Nothing is
+           drawn in any of them: the placeholder and the broken glyph carry
+           their own colour, and the slash is what separates the two — a
+           dashed frame around the broken one read as a fault in the layout
+           rather than in the image, which is not what it means. The state is
+           still announced, through `role="img"` and a label on the slot. */
         .logo-slot {
           position: relative;
           display: flex;
           align-items: center;
           justify-content: center;
           overflow: hidden;
-          background: var(--grim-color-chip-bg);
           color: var(--grim-color-muted);
         }
         .logo-slot .logo-mark,
@@ -1483,9 +1488,6 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .logo-slot[data-state="broken"] .mark-loading,
         .logo-slot:not([data-state="broken"]) .mark-broken {
           display: none;
-        }
-        .logo-slot[data-state="broken"] {
-          border: var(--grim-border-width) dashed var(--grim-color-border);
         }
         @media (prefers-reduced-motion: reduce) {
           .logo-slot .logo-mark,
