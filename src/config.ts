@@ -31,6 +31,51 @@ export interface RegistryHint {
   index: string;
 }
 
+/** One header or footer link. */
+export interface NavLink {
+  /** Link text, rendered verbatim. */
+  label: string;
+  /**
+   * An absolute `http(s)` URL, or a site-root path (`/setup/`) — which is
+   * what a page the index repo added under `theme/pages/` is reachable at.
+   * `validateUrlShape` is the rule; the shapes it refuses all read as one of
+   * those two and resolve somewhere else.
+   */
+  href: string;
+  /**
+   * Force the header's external-link treatment (new-tab affordance, `rel`)
+   * on or off. Unset — the default — keeps today's behaviour: the header
+   * infers "external" from `href`'s shape (an `http(s)` URL) rather than
+   * from this field, so an existing config with no `external` key renders
+   * exactly as it did before this field existed.
+   */
+  external?: boolean;
+}
+
+/**
+ * Forges whose name is worth showing instead of their host. Ordered by
+ * nothing — `repoLabel` takes the first substring hit, and no two of these
+ * appear in one hostname.
+ */
+const FORGES = ["github", "gitlab", "bitbucket", "codeberg", "sourcehut"];
+
+/**
+ * Name the forge `repoUrl` actually points at, rather than assuming one.
+ * `repoUrl` is free-form config: an index hosted on GitLab was previously
+ * labelled "GitHub" in its own header. An unrecognized host is named
+ * outright — honest, and already lowercase, which is the house style for
+ * this nav.
+ */
+export function repoLabel(url: string): string {
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "repo";
+  }
+  return FORGES.find((forge) => host.includes(forge)) ?? host;
+}
+
 /**
  * Renderer configuration. Every field is optional — `resolveConfig` fills
  * gaps from `DEFAULT_CONFIG`, so a partial `index.config.json`
@@ -47,6 +92,27 @@ export interface SiteConfig {
   description?: string;
   /** Hero paragraph under the `<h1>`. */
   tagline?: string;
+  /**
+   * Header links, in order. `null` — the default — synthesizes exactly what
+   * the header has always shown: `docsUrl` as "docs", then `repoUrl`
+   * labelled after the forge it points at. Set it to take the nav over
+   * entirely; `[]` leaves the theme toggle standing alone.
+   *
+   * A page the index repo adds under `theme/pages/` is linked from here by
+   * its own path (`/setup/`) — nothing else registers it.
+   */
+  nav?: NavLink[] | null;
+  /**
+   * One line above the page content, in the same width as the rest of the
+   * site. For whatever this index has to say on every page — an
+   * internal-use notice, a migration warning. `null` renders nothing.
+   *
+   * Named `notice`, not `banner`: `--grim-color-banner-*` is the renderer's
+   * existing amber palette for the deprecated-package banner, and a config
+   * key called `banner` would invite an index runner to override that token
+   * family by mistake, expecting to restyle this line instead.
+   */
+  notice?: string | null;
   /** Header "docs" link. `null` hides it. */
   docsUrl?: string | null;
   /** "install grim" link in the hero paragraph. `null` drops the sentence. */
@@ -89,7 +155,7 @@ export interface SiteConfig {
    * renderer takes no position and ships none by default — it just stops the
    * answer being "fork the layout".
    */
-  footerLinks?: Array<{ label: string; href: string }>;
+  footerLinks?: NavLink[];
   /**
    * "Built with ♥ using Grimoire" in the footer, linking to grimoire.rs.
    * `false` removes it — an index runner is not obliged to advertise the
@@ -104,10 +170,16 @@ export interface SiteConfig {
   customCss?: string | null;
 }
 
-/** A `SiteConfig` with every gap filled — what the templates actually read. */
-export type ResolvedSiteConfig = Required<SiteConfig>;
+/**
+ * A `SiteConfig` with every gap filled — what the templates actually read.
+ *
+ * `nav` is the one key whose resolved type is narrower than its input type:
+ * `resolveConfig` turns the `null` default into the synthesized pair, so a
+ * template never repeats that fallback.
+ */
+export type ResolvedSiteConfig = Omit<Required<SiteConfig>, "nav"> & { nav: NavLink[] };
 
-export const DEFAULT_CONFIG: ResolvedSiteConfig = {
+export const DEFAULT_CONFIG: Required<SiteConfig> = {
   site: "https://index.grimoire.rs",
   brand: "grim package index",
   brandMark: "grim",
@@ -115,6 +187,10 @@ export const DEFAULT_CONFIG: ResolvedSiteConfig = {
     "Browse and search AI-config packages (skills, rules, agents, MCP servers, and bundles), installable with the grim package manager.",
   tagline:
     "Skills, rules, agents, MCP servers, and bundles for AI coding agents, hosted on OCI registries.",
+  // Synthesized from `docsUrl`/`repoUrl` by `resolveConfig`, so an index
+  // that never configures a nav keeps the header it already had.
+  nav: null,
+  notice: null,
   // grimoire.rs is the tool's documentation, which is the same page whoever
   // runs the index — unlike the two keys below, which name a *specific*
   // index and so cannot have a first-party default.
@@ -168,15 +244,72 @@ function optionalString(raw: Record<string, unknown>, key: string): void {
   }
 }
 
-// Config values land in `href`; a `javascript:` URL would execute in the
-// visitor's browser. The site owner authors this file, so this is a
-// typo/paste guard rather than a trust boundary — but it costs one check.
+/**
+ * The one URL-shape rule, applied at every key whose value ends up in a
+ * rendered `href` or `src`: `nav`/`footerLinks` hrefs, `logo`, `favicon`, and
+ * the plain-URL keys through `optionalUrl`. Exported for `src/cli/init.ts`,
+ * whose prompts check the same values a scaffold-time typo early — one
+ * acceptance policy per key, the same reason `validateSite` is exported.
+ *
+ * **This is a typo-and-paste guard, not a trust boundary.** The site owner
+ * authors and commits `index.config.json`; there is no anonymous input path
+ * into it, and nothing here should be cited as a defence against one. The
+ * realistic worst case is an author who meant to name their own asset and
+ * named someone else's: an off-origin `<img src>` or icon then reports every
+ * visitor's IP and user agent to a host nobody chose. A `javascript:` href
+ * in `nav` is live because an `<a>` is a navigation; the same string on
+ * `<link rel="icon">` is inert, because that href is a resource fetch.
+ *
+ * The reason to have one function is narrower and more concrete than either:
+ * this rule used to be three regexes, and the traversal fix applied to the
+ * href regex on this branch left `logo` fifty lines below still carrying the
+ * pre-fix shape and `favicon` with no URL check at all. The file disagreed
+ * with itself about what a site-root path is, silently. Three copies drift;
+ * one copy with a flag cannot.
+ *
+ * The shapes it refuses, because none of them is obvious from reading the
+ * value:
+ *
+ *  - Any scheme but `http(s)`. Nothing else renders at any of these sinks.
+ *  - `//host/x` and `/\host/x`. Each reads as a site-root path to a human
+ *    and to a `startsWith("/")` check, and WHATWG treats `\` as a path
+ *    separator, so either one resolves to another origin.
+ *  - Whitespace — tab, CR and LF above all. The URL parser *deletes* those
+ *    three before it parses anything, so `/<tab>/evil.test/x` is
+ *    `//evil.test/x` by the time a browser resolves it, having passed a
+ *    check that only ever read the character after the first slash.
+ *  - Userinfo. `https://good.test@evil.test/` reads as one host and fetches
+ *    another — `validateSite` has said so since it shipped, and a reader
+ *    misreads a header link exactly as readily as a fetch target.
+ *
+ * `rootPath` is the only axis that varies. A nav entry, a logo and a favicon
+ * may name something this site itself emits (`/setup/`, `/logo.svg`) —
+ * a page under `theme/pages/` is reachable at nothing else. `docsUrl` and
+ * its siblings point off-site by definition. A *bare* relative path is
+ * refused either way: it would resolve against whichever page the link is
+ * rendered on, and the detail pages are two levels deep.
+ */
+export function validateUrlShape(value: string, at: string, rootPath: boolean): void {
+  const shape = rootPath ? "an http(s) URL or a site-root path like /setup/" : "an http(s) URL";
+  if (/\s/.test(value)) fail(`${at} must be ${shape} — no whitespace`);
+  // A `/`-rooted path carries no authority to lie about, so it is done here.
+  if (rootPath && /^\/(?![/\\])/.test(value)) return;
+  if (!/^https?:\/\//i.test(value)) fail(`${at} must be ${shape}`);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    fail(`${at} must be ${shape}`);
+  }
+  if (url.username !== "" || url.password !== "") {
+    fail(`${at} must not carry userinfo — https://user@host reads as one host and fetches another`);
+  }
+}
+
 function optionalUrl(raw: Record<string, unknown>, key: string): void {
   optionalString(raw, key);
   const value = raw[key];
-  if (typeof value === "string" && !/^https?:\/\//i.test(value)) {
-    fail(`${key} must be an http(s) URL`);
-  }
+  if (typeof value === "string") validateUrlShape(value, key, false);
 }
 
 /**
@@ -222,13 +355,78 @@ export function validateSite(value: unknown): void {
   }
 }
 
+/**
+ * Validate a `NavLink[]` key — `nav` or `footerLinks`, which have the same
+ * shape and the same rule, so they get one implementation rather than two
+ * that drift.
+ *
+ * `href` is checked at load rather than sanitized at render, by `validateUrlShape` —
+ * see there for what the shape rule refuses and why. `external` is checked
+ * here because nothing else would: it is typed `boolean` and arrives as
+ * whatever the file says, and `"false"` — the likely typo — is truthy, so an
+ * author writing "not external" gets external. `null` is refused for the
+ * reason `attribution` refuses it: the field has no third state to mean.
+ */
+function validateLinks(raw: Record<string, unknown>, key: string): void {
+  const value = raw[key];
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) fail(`${key} must be an array`);
+  for (const [i, entry] of value.entries()) {
+    const at = `${key}[${i}]`;
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      fail(`${at} must be an object with label and href`);
+    }
+    const { label, href, external } = entry as Record<string, unknown>;
+    if (typeof label !== "string" || label.trim() === "") {
+      fail(`${at}.label must be a non-empty string`);
+    }
+    if (typeof href !== "string") fail(`${at}.href must be a string`);
+    validateUrlShape(href, `${at}.href`, true);
+    if (external !== undefined && typeof external !== "boolean") {
+      fail(`${at}.external must be a boolean`);
+    }
+  }
+}
+
+/**
+ * Every top-level key `index.config.json` may carry.
+ *
+ * Derived from `DEFAULT_CONFIG` rather than written out by hand: it is typed
+ * `Required<SiteConfig>`, so it holds every key exhaustively and cannot drift
+ * — a future `SiteConfig` key with no default is a compile error rather than
+ * a silently-narrow allowlist that warns about a field the renderer reads.
+ *
+ * `ci` and `ratings` are not `SiteConfig` keys and are not an oversight: the
+ * file is shared. `loadCiConfig` (`src/ci.ts`) reads `.ci` and
+ * `loadRatingsConfig` (`src/ratings/config.ts`) reads `.ratings` out of this
+ * same document, and neither block is declared on `SiteConfig`. Drop either
+ * name and every index that configures CI or ratings — which is most of
+ * them — gets a warning about a key that is doing its job.
+ */
+const KNOWN_KEYS = new Set([...Object.keys(DEFAULT_CONFIG), "ci", "ratings"]);
+
 function validate(raw: unknown): SiteConfig {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     fail("must contain a JSON object");
   }
   const cfg = raw as Record<string, unknown>;
 
-  for (const key of ["brand", "brandMark", "description", "tagline", "favicon", "footerNote", "customCss"]) {
+  // An unrecognised key is a typo signal, not a fatal error — the file is
+  // hand-edited, and the failure worth catching is a misspelling that does
+  // nothing at all. The pre-release `banner` name is the case that motivated
+  // this: after the rename to `notice`, an index still carrying `banner`
+  // loaded clean, rendered no notice line, and built green. So warn, name the
+  // key, and load the rest anyway.
+  for (const key of Object.keys(cfg)) {
+    if (!KNOWN_KEYS.has(key)) {
+      console.warn(
+        `warn: ${CONFIG_FILE} sets \`${key}\`, which nothing reads — ` +
+          `check the spelling, or drop the key if it is left over from an older config`,
+      );
+    }
+  }
+
+  for (const key of ["brand", "brandMark", "description", "tagline", "favicon", "footerNote", "notice", "customCss", "logo"]) {
     optionalString(cfg, key);
   }
   for (const key of ["docsUrl", "installDocsUrl", "repoUrl"]) {
@@ -240,34 +438,20 @@ function validate(raw: unknown): SiteConfig {
     fail("attribution must be a boolean");
   }
 
-  if (cfg.footerLinks !== undefined) {
-    if (!Array.isArray(cfg.footerLinks)) fail("footerLinks must be an array");
-    for (const [i, entry] of cfg.footerLinks.entries()) {
-      const at = `footerLinks[${i}]`;
-      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-        fail(`${at} must be an object with label and href`);
-      }
-      const { label, href } = entry as Record<string, unknown>;
-      if (typeof label !== "string" || label.trim() === "") {
-        fail(`${at}.label must be a non-empty string`);
-      }
-      // Same rule the other URL keys get. A relative href would resolve
-      // against whichever page the footer happens to be on — `/p/<ns>/<pkg>/`
-      // is two levels deep — so it is refused rather than silently 404ing
-      // from half the site.
-      if (typeof href !== "string" || !/^https?:\/\//i.test(href)) {
-        fail(`${at}.href must be an http(s) URL`);
-      }
-    }
-  }
+  validateLinks(cfg, "nav");
+  validateLinks(cfg, "footerLinks");
 
-  // Lands in `src`. A site-root path is the normal case; an absolute URL is
-  // allowed for a logo already hosted elsewhere. Anything else — a bare
-  // relative path that would break on a subpath deployment, or a `javascript:`
-  // URL — is refused rather than rendered.
-  optionalString(cfg, "logo");
-  if (typeof cfg.logo === "string" && !/^(\/|https?:\/\/)/i.test(cfg.logo)) {
-    fail("logo must be a site-root path (/logo.svg) or an http(s) URL");
+  // `logo` lands in `<img src>`, `favicon` in `<link rel="icon" href>`, and
+  // whichever of the two is set becomes the default `og:image`. Same rule as
+  // a nav href, deliberately: one guard for all three, because these two are
+  // where the href fix would otherwise have shipped with its own siblings
+  // still broken. `data:` is refused with every other non-http scheme — the
+  // icon link declares `type="image/svg+xml"` and `og:image` is fetched by a
+  // crawler, so an inline URI is wrong at both sinks; an inline icon belongs
+  // in `public/` and is then named by its path like anything else.
+  for (const key of ["logo", "favicon"]) {
+    const value = cfg[key];
+    if (typeof value === "string") validateUrlShape(value, key, true);
   }
 
   if (cfg.vscodeExtension !== undefined && cfg.vscodeExtension !== null) {
@@ -328,8 +512,17 @@ export function resolveConfig(config: SiteConfig): ResolvedSiteConfig {
   // (it disables the feature) and survives.
   for (const [key, value] of Object.entries(merged)) {
     if (value === undefined) {
-      (merged as Record<string, unknown>)[key] = DEFAULT_CONFIG[key as keyof ResolvedSiteConfig];
+      (merged as Record<string, unknown>)[key] = DEFAULT_CONFIG[key as keyof Required<SiteConfig>];
     }
   }
-  return merged;
+  // `null` means "nobody configured a nav", which is every index that
+  // predates the key — so it resolves to the two links the header has always
+  // shown. An explicit `[]` is a decision and survives as one.
+  const nav =
+    merged.nav ??
+    [
+      merged.docsUrl ? { label: "docs", href: merged.docsUrl } : null,
+      merged.repoUrl ? { label: repoLabel(merged.repoUrl), href: merged.repoUrl } : null,
+    ].filter((link) => link !== null);
+  return { ...merged, nav };
 }
