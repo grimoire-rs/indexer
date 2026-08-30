@@ -1,6 +1,9 @@
-node_modules/
+node_modules
 dist/
 coverage/
+
+# `task docs:build` output. The docs site is published from CI, never committed.
+site/
 
 # Local materialized toolchain (ocx) and task's checksum cache.
 .ocx/
@@ -22,3 +25,6 @@ coverage/
 .claude/*
 !.claude/rules.md
 !.claude/rules/
+
+# Ephemeral agent worktrees (hex work packages). Never committed.
+.agents/worktrees/

@@ -5,9 +5,26 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
+    // Build output only — nothing here ships or executes, which is the bar
+    // an ignore entry has to clear.
+    //
     // `.dev/` is `npm run dev`'s scratch index root; Astro generates typed
-    // `.astro/` stubs inside it that are not ours to lint.
-    ignores: ["dist/**", "coverage/**", "node_modules/**", ".dev/**"],
+    // `.astro/` stubs inside it that are not ours to lint. `site/` is
+    // `task docs:build`'s output — minified vendor JS, 800-odd findings, none
+    // of it authored here.
+    // `.agents/worktrees/` holds git worktrees — duplicate checkouts of this
+    // same repo, git-ignored, each linted by its own gate in its own tree.
+    // Linting them from here is not extra coverage, and it breaks the parser
+    // outright: it finds a tsconfig.json per worktree and refuses to guess
+    // which root to resolve against.
+    ignores: [
+      "dist/**",
+      "coverage/**",
+      "node_modules/**",
+      ".dev/**",
+      "site/**",
+      ".agents/worktrees/**",
+    ],
   },
   ...tseslint.configs.recommended,
   {

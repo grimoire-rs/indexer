@@ -1,0 +1,26 @@
+{
+  "//": [
+    "Type-checks the test tree, which tsconfig.json deliberately does not:",
+    "its `include` is `src` alone, because it is the BUILD config and a test",
+    "file compiled into dist/ would ship. So `npm run typecheck` has never",
+    "read a line of test/, and a type-level assertion there could only be",
+    "watched go red under a scratch config.",
+    "",
+    "Not wired into `task check` yet: the test tree has real type errors",
+    "today (fixture-name strings passed where a union is expected, and",
+    "unchecked index access), and fixing them is its own change. Run it by",
+    "hand with `npm run typecheck:tests`.",
+    "",
+    "`rootDir` is overridden rather than inherited. `src` cannot contain a",
+    "file under test/, so inheriting it fails every test file with TS6059",
+    "before type checking reaches them - which reads as 'the tests are",
+    "broken' rather than 'the config is'. Nothing is emitted here, so the",
+    "inherited outDir and declaration settings never apply."
+  ],
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}
