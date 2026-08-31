@@ -46,7 +46,12 @@
        these finds the declaration and no use site; all five are used. */
     --grim-color-kind-skill: #6d4fc4;
     --grim-color-kind-rule: #1a7f6b;
-    --grim-color-kind-agent: #b0641a;
+    /* ~5.2:1 on white. The predecessor #b0641a was 4.48:1 — under WCAG AA's
+       4.5 for the 11.5px badge these tint, which `task quality:web` caught as
+       a `color-contrast` failure on every agent-kind page. Its four siblings
+       clear it unaided (4.89:1 to 6.02:1) and are unchanged; so is the dark
+       value, which reads 7.44:1 on the dark card. */
+    --grim-color-kind-agent: #a05c17;
     --grim-color-kind-mcp: #2565c7;
     --grim-color-kind-bundle: #a63d68;
 

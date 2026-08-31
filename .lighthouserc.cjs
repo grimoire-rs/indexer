@@ -30,7 +30,7 @@
  *
  *   /                        perf 1.00  a11y 1.00  bp 0.96  seo 1.00
  *   .../ghost-logo/          perf 1.00  a11y 1.00  bp 0.96  seo 1.00
- *   .../test-writer/         perf 1.00  a11y 0.96  bp 1.00  seo 1.00
+ *   .../test-writer/         perf 1.00  a11y 1.00  bp 1.00  seo 1.00
  *   .../code-review/         perf 1.00  a11y 1.00  bp 1.00  seo 1.00
  *   .../bare/                perf 1.00  a11y 1.00  bp 1.00  seo 1.00
  *   .../many-versions/       perf 1.00  a11y 1.00  bp 1.00  seo 1.00
@@ -50,22 +50,21 @@
  * does. Re-measure and re-ratchet when the renderer or the fixture changes;
  * never raise a threshold above a level the site actually clears.
  *
- *   accessibility   min median 0.96 -> 0.93 error
+ *   accessibility   min median 1.00 -> 0.97 error
  *   best-practices  min median 0.96 -> 0.93 error
  *   seo             min median 1.00 -> 0.97 error
  *   performance     min median 1.00 -> 0.97 warn
  *
- * Two known defects hold the first two floors below 1.00, and both should be
- * ratcheted up once closed:
+ * Accessibility was 0.96 on every agent-kind page when this gate first ran —
+ * one `color-contrast` failure, the `kind-agent` badge at 4.48:1 against
+ * white where AA requires 4.5. That token is now #a05c17 (5.20:1) and the
+ * floor is ratcheted to 0.97 accordingly; see `styles/tokens.css`.
  *
- *   - accessibility 0.96 on every agent-kind page is one `color-contrast`
- *     failure: the `kind-agent` badge computes 4.48:1 against white, against
- *     a required 4.5:1. It is a design-token value (`--grim-color-kind-agent`),
- *     so it is reported rather than silently changed here.
- *   - best-practices 0.96 is `errors-in-console`: a 404 for the `ghost-logo`
- *     fixture's declared-but-unshipped logo. That is the fixture doing its
- *     job — it exists to render the broken-logo state — so this one is a
- *     property of the test data, not of the renderer.
+ * Best-practices stays at 0.93, and that one is not a defect to fix: the 0.96
+ * is `errors-in-console`, a 404 for the `ghost-logo` fixture's
+ * declared-but-unshipped logo. The fixture exists to render the broken-logo
+ * state, so the console error is the test data doing its job. Raising this
+ * floor would mean deleting the state it covers.
  *
  * ## Why category assertions and NOT `preset: 'lighthouse:no-pwa'`
  *
@@ -117,7 +116,7 @@ module.exports = {
     },
     assert: {
       assertions: {
-        'categories:accessibility': ['error', { minScore: 0.93 }],
+        'categories:accessibility': ['error', { minScore: 0.97 }],
         'categories:best-practices': ['error', { minScore: 0.93 }],
         'categories:seo': ['error', { minScore: 0.97 }],
         'categories:performance': ['warn', { minScore: 0.97 }],

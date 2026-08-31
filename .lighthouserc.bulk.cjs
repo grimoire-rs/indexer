@@ -12,7 +12,15 @@
  * detail page at fixture size.
  *
  * Thresholds follow the same measured-then-ratcheted discipline as the
- * fixture run; see that file's docblock. MEASUREMENT PENDING.
+ * fixture run; see that file's docblock. Measured 2026-08-31, 3 runs, Chrome
+ * 152.0.7977.64, against a 255-package build: every category medians 1.00, so
+ * every floor is 1.00 minus the same 0.03 margin. For reference the same run
+ * reported LCP 1205ms, TBT 35ms and CLS 0.000 — `content-visibility` on the
+ * card grid is what holds that at this size.
+ *
+ * Higher than the fixture run's two lower floors, deliberately: neither of
+ * the defects that depress those exists here. The bulk index is cloned from
+ * the curated one, so there is no `ghost-logo` 404 in it.
  */
 module.exports = {
   ci: {
@@ -29,10 +37,10 @@ module.exports = {
     },
     assert: {
       assertions: {
-        'categories:accessibility': ['error', { minScore: 0.9 }],
-        'categories:best-practices': ['error', { minScore: 0.9 }],
-        'categories:seo': ['error', { minScore: 0.9 }],
-        'categories:performance': ['warn', { minScore: 0.9 }],
+        'categories:accessibility': ['error', { minScore: 0.97 }],
+        'categories:best-practices': ['error', { minScore: 0.97 }],
+        'categories:seo': ['error', { minScore: 0.97 }],
+        'categories:performance': ['warn', { minScore: 0.97 }],
       },
     },
     upload: { target: 'filesystem', outputDir: '.lighthouseci-bulk' },
