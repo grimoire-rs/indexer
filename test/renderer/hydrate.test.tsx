@@ -489,6 +489,130 @@ describe("the keyword facet", () => {
  * `build.test.ts`. What is checkable here is the half that silently rots: the
  * `popovertarget` and the `id` agreeing, which is the whole mechanism.
  */
+/**
+ * The keyword rail's reorder animation.
+ *
+ * The bug this exists for: the FLIP pass used to invert a chip with an inline
+ * `transition: none` plus a `translate` and drop both on the next animation
+ * frame. Any commit landing inside that window — and the rail's fit
+ * measurement re-commits whenever a rescore changes how many chips fit — left
+ * a chip carrying the offset with its transition disabled. That is a chip
+ * frozen off its seat with nothing left to move it back, and the pass that
+ * followed measured its *drawn* box rather than its seat, so the error
+ * compounded instead of correcting: the stutter.
+ *
+ * jsdom has neither layout nor the Web Animations API, so both are supplied
+ * here — `offsetLeft` from the chip's position among its siblings, which is
+ * exactly what a reorder changes, and `animate` as a recorder. That is enough
+ * to assert the two properties that make a stuck chip impossible: the slide
+ * is an animation rather than an inline style, and a chip that moves again
+ * mid-slide has its previous one cancelled rather than stacked.
+ */
+describe("the keyword rail's reorder slide", () => {
+  // Keywords deliberately shared, so filtering on one leaves several chips
+  // to reorder around it. A fixture of unique keywords collapses the rail to
+  // a single pinned chip on the first click and animates nothing.
+  const SHARED = [
+    { keywords: ["alpha", "beta"] },
+    { keywords: ["alpha", "gamma"] },
+    { keywords: ["beta", "gamma"] },
+    { keywords: ["alpha", "beta", "gamma"] },
+    { keywords: ["beta"] },
+    { keywords: ["gamma"] },
+  ].map((p, i) => ({
+    namespace: "acme",
+    name: `pkg-${i}`,
+    kind: "skill",
+    ref: `r.test/acme/pkg-${i}`,
+    ...p,
+  })) as unknown as CatalogPackage[];
+
+  let animations: { el: HTMLElement; keyframes: unknown }[];
+  let cancelled: HTMLElement[];
+  let offsetLeft: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    animations = [];
+    cancelled = [];
+    offsetLeft = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetLeft",
+    );
+    Object.defineProperty(HTMLElement.prototype, "offsetLeft", {
+      configurable: true,
+      get(this: HTMLElement) {
+        const siblings = [...(this.parentElement?.children ?? [])];
+        return Math.max(0, siblings.indexOf(this)) * 100;
+      },
+    });
+    HTMLElement.prototype.animate = function (
+      this: HTMLElement,
+      keyframes: unknown,
+    ) {
+      const entry = { el: this, keyframes };
+      animations.push(entry);
+      return { cancel: () => cancelled.push(entry.el) } as unknown as Animation;
+    } as unknown as typeof HTMLElement.prototype.animate;
+  });
+
+  afterEach(() => {
+    unmountAll();
+    if (offsetLeft)
+      Object.defineProperty(HTMLElement.prototype, "offsetLeft", offsetLeft);
+    delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
+  });
+
+  function mount(): HTMLElement {
+    history.replaceState({}, "", "/");
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={SHARED} vscodeExtension={null} />, host);
+    return host;
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("animates the move and never writes to the chip's style", async () => {
+    const host = mount();
+    await settle();
+    const chips = () => [
+      ...host.querySelectorAll<HTMLElement>("button.chip.kw"),
+    ];
+    const inlined = () =>
+      chips()
+        .filter((chip) => chip.getAttribute("style"))
+        .map((chip) => `${chip.textContent}: ${chip.getAttribute("style")}`);
+
+    expect(chips().length).toBeGreaterThan(1);
+    expect(inlined()).toEqual([]);
+
+    // The last chip, so it is never already at the front: clicking it pins it
+    // there and every other chip shifts along, which is the reorder.
+    animations = [];
+    chips().at(-1)!.click();
+    await settle();
+    expect(animations.length).toBeGreaterThan(0);
+    // An animation, not a style — the whole point. A `translate` written to
+    // `style` is what could survive a superseded pass.
+    expect(inlined()).toEqual([]);
+
+    // Again, on a rail that is still mid-slide as far as anything here knows.
+    // Every chip that moves must cancel its own previous slide first, or two
+    // animations composite the same property and the chip lands nowhere.
+    cancelled = [];
+    const before = animations.length;
+    chips().at(-1)!.click();
+    await settle();
+    expect(animations.length).toBeGreaterThan(before);
+    expect(cancelled.length).toBeGreaterThan(0);
+    expect(inlined()).toEqual([]);
+  });
+});
+
 describe("the keyword overflow menu", () => {
   // More distinct keywords than the rail's cap, so there is always something
   // for the menu to hold whatever the (unmeasurable, in jsdom) rail fit is.

@@ -1053,21 +1053,13 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           background: var(--grim-color-accent-soft);
         }
         /* The keyword rail reorders on every click — it is rescored against
-           what is on screen — and the chips slide rather than jump. The FLIP
-           effect in `Catalog.tsx` sets an inline `translate` back to where
-           each chip was and drops it on the next frame; this transition is
-           what plays that back. Without a declared duration the invert would
-           simply stick. */
-        .chip.kw {
-          transition:
-            border-color var(--grim-duration-base) ease,
-            translate var(--grim-duration-slow) ease-out;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .chip.kw {
-            transition: border-color var(--grim-duration-base) ease;
-          }
-        }
+           what is on screen — and the chips slide rather than jump. There is
+           deliberately no `translate` transition here: the FLIP effect in
+           `Catalog.tsx` runs each slide as a Web Animation instead, reading
+           `--grim-duration-slow` for its length and honouring
+           `prefers-reduced-motion` itself. A transition needs an inline style
+           to drive it, and an inline style is what a superseded pass used to
+           leave behind on a chip stopped off its seat. */
         /* The overflow menu. A popover, and it has to be one: `.filter-row`
            above is a scroll container, and an absolutely-positioned panel
            inside a scroll container is cropped to the row AND stretches the

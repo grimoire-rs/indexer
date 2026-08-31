@@ -334,7 +334,18 @@ export default function Catalog({
   ];
 
   const railRefs = useRef(new Map<string, HTMLElement>());
-  const railRects = useRef(new Map<string, DOMRect>());
+  /**
+   * Where each chip sat at the last commit, as `offsetLeft`/`offsetTop`.
+   *
+   * Layout positions, deliberately, not `getBoundingClientRect`: the offsets
+   * ignore transforms and page scroll, so a chip measured mid-slide reports
+   * the seat it is animating towards rather than the box it is drawn in this
+   * frame. See the FLIP effect below for why that distinction is the whole
+   * fix.
+   */
+  const railSeats = useRef(new Map<string, { x: number; y: number }>());
+  /** The slide each chip is currently running, so a new one can replace it. */
+  const railSlides = useRef(new WeakMap<HTMLElement, Animation>());
   const railRef = useRef<HTMLDivElement>(null);
 
   const kwMenuRef = useRef<HTMLDivElement>(null);
@@ -450,68 +461,79 @@ export default function Catalog({
    * between two frames reads as having been *replaced*, and a reader who
    * cannot see that a chip moved has no reason to believe it is the same one.
    *
-   * First (the map of rects kept from the last commit), Last (measured now),
-   * Invert (an inline translate back to where the chip was), Play (dropped on
-   * the next frame, so the stylesheet's transition carries it home). Measure
-   * every chip before transforming any: `translate` composites and does not
-   * reflow, but reading a rect after writing a style on a sibling is the
-   * shape that makes a layout thrash, and this runs per keystroke.
+   * Two choices carry the whole thing, and both are here because the shape
+   * they replace — an inline `translate` under the stylesheet's transition,
+   * dropped again on a `requestAnimationFrame` — could leave a chip stopped
+   * off its seat with no path back:
+   *
+   * - **Seats come from `offsetLeft`/`offsetTop`, never from
+   *   `getBoundingClientRect`.** The offsets are layout positions and ignore
+   *   both transforms and scroll; a rect is where the chip is *drawn*, so a
+   *   chip measured mid-slide recorded its animated box and the next
+   *   inversion compounded that error — the stutter. Mid-slide is the common
+   *   case, not a rare one: the fit measurement above commits a second time
+   *   whenever a rescore changes how many chips fit, and that commit lands
+   *   inside the previous slide. Because the offsets are transform-blind,
+   *   that second commit now measures the same seats and starts nothing.
+   * - **The slide is a Web Animation, not an inline style.** It needs no
+   *   frame to start, so no commit can land between an invert and its play
+   *   and freeze a chip at the offset. It writes nothing to `style`, so
+   *   there is nothing left to strip when a chip unmounts or a pass is
+   *   superseded. And it clears itself the instant it finishes or is
+   *   cancelled, which makes "the rail always ends up in its real state" a
+   *   property of the mechanism rather than of a cleanup remembering to run.
    */
   useLayoutEffect(() => {
-    // Undo whatever the last pass left on the chips before measuring
-    // anything. Two reasons, and both were visible: `getBoundingClientRect`
-    // reports the *translated* box, so a chip caught mid-slide would be
-    // measured where it is drawn rather than where it belongs and the next
-    // inversion would compound that error; and a chip whose play frame never
-    // ran is still carrying `transition: none` with an offset, which is a chip
-    // frozen off its seat. Clearing here is what unfreezes it.
-    //
-    // Mid-slide is not a rare case: the fit measurement above commits a second
-    // time whenever the rescore changes how many chips fit, and that commit
-    // lands between this one and its animation frame.
-    for (const el of railRefs.current.values()) {
-      el.style.transition = "";
-      el.style.translate = "";
-    }
-    const previous = railRects.current;
-    const current = new Map<string, DOMRect>();
+    const previous = railSeats.current;
+    const current = new Map<string, { x: number; y: number }>();
     const moved: { el: HTMLElement; dx: number; dy: number }[] = [];
-    // A second pass, deliberately: every write above is flushed before the
-    // first read below, rather than interleaving them per chip.
     for (const [keyword, el] of railRefs.current) {
-      const rect = el.getBoundingClientRect();
-      current.set(keyword, rect);
+      const x = el.offsetLeft;
+      const y = el.offsetTop;
+      current.set(keyword, { x, y });
       const was = previous.get(keyword);
       if (!was) continue;
-      const dx = was.left - rect.left;
-      const dy = was.top - rect.top;
+      const dx = was.x - x;
+      const dy = was.y - y;
       if (dx !== 0 || dy !== 0) moved.push({ el, dx, dy });
     }
-    railRects.current = current;
+    // Rebuilt from `railRefs` every pass, so a chip that left the rail leaves
+    // this map with it and cannot seed a slide if it comes back elsewhere.
+    railSeats.current = current;
     if (moved.length === 0) return;
+    const rail = railRef.current;
+    // Guarded rather than assumed, like the fit observer above: the test
+    // renderer's DOM has no Web Animations API, and a rail that does not
+    // slide is not worth throwing during a render over.
+    if (!rail || typeof rail.animate !== "function") return;
+    // The motion is the ornament here — the filtering works identically
+    // without it — so a reader who asked for less of it gets none.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    // The stylesheet stays the source of truth for how long a slide runs:
+    // `--grim-duration-slow` is written in milliseconds and that is the unit
+    // the Web Animations API takes, so the token survives the move out of CSS.
+    // Read once, after every seat above, so the reads and the writes below
+    // stay in two passes rather than interleaving per chip.
+    const ms = Number.parseFloat(
+      getComputedStyle(rail).getPropertyValue("--grim-duration-slow"),
+    );
     for (const { el, dx, dy } of moved) {
-      el.style.transition = "none";
-      el.style.translate = `${dx}px ${dy}px`;
+      // One slide per chip. A chip that moves again mid-slide takes the new
+      // delta from its layout seat, which starts the second slide a step off
+      // where the first had drawn it — a jump measured in the pixels one
+      // frame of easing covers, and it is bounded, unlike two animations
+      // compositing the same property against each other.
+      // ponytail: not blended with the in-flight offset, which would cost a
+      // computed-style read per chip in the middle of the write pass.
+      railSlides.current.get(el)?.cancel();
+      railSlides.current.set(
+        el,
+        el.animate(
+          { translate: [`${dx}px ${dy}px`, "none"] },
+          { duration: Number.isFinite(ms) ? ms : 200, easing: "ease-out" },
+        ),
+      );
     }
-    const frame = requestAnimationFrame(() => {
-      for (const { el } of moved) {
-        el.style.transition = "";
-        el.style.translate = "";
-      }
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      // Cancelling is not enough on its own. Nothing else takes these off, so
-      // a commit landing before the frame ran would leave every moved chip
-      // sitting at its inverted offset with transitions disabled — the rail
-      // stopping halfway and staying there. Deselecting the last keyword is
-      // the reliable way to see it: the rescore is at its largest, so the fit
-      // changes and the extra commit always lands.
-      for (const { el } of moved) {
-        el.style.transition = "";
-        el.style.translate = "";
-      }
-    };
   });
 
   /** Move focus `delta` cards along, clamping at both ends rather than wrapping. */
