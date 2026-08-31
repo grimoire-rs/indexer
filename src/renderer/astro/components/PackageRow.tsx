@@ -13,10 +13,10 @@ import { ArrowBigUp } from "lucide-preact";
 import { CardLogo } from "./CardLogo.js";
 import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "./KindMark.js";
 import { withBase } from "../lib/base.js";
-import { lastUpdated, timeAgo, type CatalogPackage } from "../lib/catalog.js";
+import { lastUpdated, timeAgo, type CardPackage } from "../lib/catalog.js";
 
 export interface PackageRowProps {
-  pkg: CatalogPackage;
+  pkg: CardPackage;
   /** Whether this index publishes ratings at all — decided once, not per row. */
   hasRatings: boolean;
   /** The catalog's own arrow-key navigation. */

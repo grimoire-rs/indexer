@@ -22,11 +22,11 @@ import {
   timeAgo,
   vscodeUrl,
   vscodeVoteUrl,
-  type CatalogPackage,
+  type CardPackage,
 } from "../lib/catalog.js";
 
 export interface PackageCardProps {
-  pkg: CatalogPackage;
+  pkg: CardPackage;
   /**
    * `publisher.extension` id behind the deep links, or `null`. A prop rather
    * than a `lib/data` read: this island hydrates in the browser, and importing

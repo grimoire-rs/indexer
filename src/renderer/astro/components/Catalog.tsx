@@ -17,7 +17,7 @@ import {
 import { PackageCard } from "./PackageCard.js";
 import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
-import { lastUpdated, type CatalogPackage } from "../lib/catalog.js";
+import { lastUpdated, type CardPackage } from "../lib/catalog.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
@@ -64,7 +64,7 @@ export const NATURAL: Record<Sort, Dir> = {
   rating: "desc",
 };
 
-type Key = (a: CatalogPackage, b: CatalogPackage) => number;
+type Key = (a: CardPackage, b: CardPackage) => number;
 
 /**
  * Bigger first, with `null` as its own bucket underneath every number.
@@ -80,7 +80,7 @@ function descending(a: number | null, b: number | null): number {
 }
 
 /** `updated` as epoch ms; null when absent, empty or not a date at all. */
-function updatedAt(p: CatalogPackage): number | null {
+function updatedAt(p: CardPackage): number | null {
   const at = lastUpdated(p);
   const ms = at ? new Date(at).getTime() : NaN;
   return Number.isFinite(ms) ? ms : null;
@@ -123,8 +123,8 @@ const CHAINS: Record<Sort, Key[]> = {
 // (`browse_sort.rs`) has no deprecated key either; keeping this comparator
 // silent on deprecation is what keeps the two in sync.
 export function compare(
-  a: CatalogPackage,
-  b: CatalogPackage,
+  a: CardPackage,
+  b: CardPackage,
   sort: Sort,
   dir: Dir = NATURAL[sort],
 ): number {
@@ -244,7 +244,7 @@ function PackageTable({
   onKeyDown,
   rootRef,
 }: {
-  packages: CatalogPackage[];
+  packages: CardPackage[];
   hasRatings: boolean;
   onKeyDown: (event: KeyboardEvent) => void;
   rootRef: { current: HTMLElement | null };
@@ -276,7 +276,7 @@ export default function Catalog({
   packages,
   vscodeExtension,
 }: {
-  packages: CatalogPackage[];
+  packages: CardPackage[];
   vscodeExtension: string | null;
 }) {
   // Empty on the first render, ALWAYS — `?q=…` is applied a beat later, in
@@ -880,23 +880,41 @@ export default function Catalog({
   // Query and facets first, deprecation last — so the toggle can report how
   // many entries *it alone* is holding back, rather than a catalog-wide
   // number that has nothing to do with what is on screen.
-  const matching = packages.filter((p) => {
-    if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
-    if (!keywords.every((kw) => p.keywords?.includes(kw))) return false;
-    if (!q) return true;
-    return [
-      p.name,
-      p.description ?? "",
-      p.namespace,
-      p.kind,
-      p.ref,
-      p.summary ?? "",
-      (p.keywords ?? []).join(" "),
-    ].some((field) => field.toLowerCase().includes(q));
-  });
-  const shown = (
-    showDeprecated ? matching : matching.filter((p) => !p.deprecated)
-  ).sort((a, b) => compare(a, b, sort, dir));
+  //
+  // Memoized, and `shown` with it, for a reason beyond the scan's own cost:
+  // an unmemoized `.filter().sort()` yields a NEW array on every render, so
+  // anything downstream keyed on `shown` — the keyword rail's set-cover below
+  // — could never hit its own cache. Both had to move together or neither
+  // helped. Every dependency here is a primitive or a state array, so the
+  // identity is stable exactly when the answer is.
+  const matching = useMemo(
+    () =>
+      packages.filter((p) => {
+        if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
+        if (!keywords.every((kw) => p.keywords?.includes(kw))) return false;
+        if (!q) return true;
+        return [
+          p.name,
+          p.description ?? "",
+          p.namespace,
+          p.kind,
+          p.ref,
+          p.summary ?? "",
+          (p.keywords ?? []).join(" "),
+        ].some((field) => field.toLowerCase().includes(q));
+      }),
+    [packages, kinds, keywords, q],
+  );
+  const shown = useMemo(
+    () =>
+      // `.filter()` already returns a fresh array, so sorting in place here
+      // mutates nothing the memo above holds — except in the `showDeprecated`
+      // branch, where `matching` IS that array. Copy before sorting.
+      (showDeprecated ? [...matching] : matching.filter((p) => !p.deprecated)).sort((a, b) =>
+        compare(a, b, sort, dir),
+      ),
+    [matching, showDeprecated, sort, dir],
+  );
 
   /**
    * The keyword rail, over what is on screen rather than over the catalog.
@@ -921,7 +939,15 @@ export default function Catalog({
     keyword,
     count: shown.length,
   }));
-  const rail = selectRailKeywords(shown, KEYWORD_CHIP_LIMIT)
+  // Memoized on `shown` alone, because that is the only thing the scan reads.
+  // `selectRailKeywords` is a greedy set-cover over every keyword of every
+  // shown package — it scales with catalog size, and unmemoized it ran on
+  // EVERY render: each keystroke in the search box, each chip click, each
+  // view toggle, and once more for every re-render none of those caused. At a
+  // corporate-sized catalog that is the most expensive thing in the render
+  // path, repeated for an answer that had not changed.
+  const scored = useMemo(() => selectRailKeywords(shown, KEYWORD_CHIP_LIMIT), [shown]);
+  const rail = scored
     // `selectRailKeywords` scores the actives like any other keyword, so
     // over-request and drop them rather than spend rail slots twice.
     .filter((k) => !keywords.includes(k.keyword))

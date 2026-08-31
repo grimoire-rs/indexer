@@ -1150,3 +1150,62 @@ describe("input validation", () => {
     ).rejects.toThrow(/customCss must stay inside/);
   });
 });
+
+describe("the island's serialized payload", () => {
+  /**
+   * Astro serializes island props into an attribute on `<astro-island>`, so
+   * every field reaching `<Catalog>` is paid for twice on the landing page —
+   * once in the server-rendered card markup, once as escaped JSON the browser
+   * parses at hydration. `index.astro` projects each package through
+   * `cardPackage()` first (see `astro/lib/catalog.ts`); at a corporate-sized
+   * catalog that trim is 37% of the attribute and 6.6% of the whole page.
+   *
+   * `CardPackage` is what makes the trim enforceable — a component reaching
+   * for a dropped field fails `npm run typecheck`, which `task check` runs.
+   * This is the other half: the type governs what the island may READ, and
+   * nothing in it governs what `index.astro` actually SENDS. Passing
+   * `packages` whole still compiles, because `CatalogPackage` is assignable
+   * to `CardPackage` — it just silently restores the payload. So the
+   * assertion is on the emitted bytes.
+   */
+  const DROPPED = [
+    "license",
+    "authors",
+    "vendor",
+    "documentation",
+    "compatibility",
+    "revision",
+    "support",
+    "repository",
+    "title",
+    "owner",
+    "schema",
+    "tags",
+    // Not `url`: `rating.url` is a nested key of a field the island DOES
+    // ship, and a substring match cannot tell the two apart.
+    "hasReadme",
+    "hasChangelog",
+  ];
+
+  it("ships only the fields a card renders", () => {
+    const attr = /<astro-island[^>]*\bprops="([^"]*)"/.exec(site.indexHtml)?.[1];
+    expect(attr, "no <astro-island props> on the landing page").toBeDefined();
+    // The attribute is HTML-escaped JSON. Astro escapes a quote as
+    // `&quot;`, so that — not `&#34;` — is the form a key name takes here.
+    // Both spellings are valid HTML and only one appears; the sibling
+    // assertion below is what caught the wrong guess, because a
+    // never-matching needle makes THIS test pass vacuously.
+    const present = DROPPED.filter((key) => attr?.includes(`&quot;${key}&quot;:`));
+    expect(present).toEqual([]);
+  });
+
+  it("still ships every field a card does render", () => {
+    const attr = /<astro-island[^>]*\bprops="([^"]*)"/.exec(site.indexHtml)?.[1] ?? "";
+    // Not the whole `CardPackage` key set: `deprecated`, `replacedBy`, `logo`
+    // and `rating` are absent from a package that has none, and the fixture
+    // does not carry all four on every record. These five are on every one.
+    for (const key of ["name", "kind", "ref", "namespace", "description"]) {
+      expect(attr, `${key} missing from the island payload`).toContain(`&quot;${key}&quot;:`);
+    }
+  });
+});

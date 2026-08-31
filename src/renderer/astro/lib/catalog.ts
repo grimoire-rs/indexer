@@ -10,6 +10,78 @@ import type { CatalogPackage } from "../../types.js";
 export type { CatalogPackage } from "../../types.js";
 
 /**
+ * The fields the CATALOG ISLAND may read — and, because the island's props
+ * are serialized into the page, the only fields that are worth shipping.
+ *
+ * `index.astro` projects every package through `cardPackage()` before handing
+ * the array to `<Catalog>`. Astro serializes island props into an HTML
+ * attribute on `<astro-island>`, so anything left in a record is paid for
+ * twice on the landing page: once in the server-rendered card markup, and
+ * again as escaped JSON the browser parses at hydration. At a corporate-sized
+ * catalog the untrimmed record set was 323 KB of that attribute, ~18% of the
+ * page, most of it fields no card or row ever looks at — `license`,
+ * `authors`, `vendor`, `documentation`, `compatibility`, `revision`,
+ * `support`, `repository`, and every unknown enrichment key riding
+ * `IndexRecord`'s index signature.
+ *
+ * This is a TYPE, not just a filter, and that is the point: a component that
+ * reaches for a field not listed here fails to compile, rather than silently
+ * rendering `undefined` in the browser while the server render — which reads
+ * the full record — looks correct. The detail pages are unaffected; they read
+ * `data` directly and hydrate nothing.
+ */
+export type CardPackage = Pick<
+  CatalogPackage,
+  | "name"
+  | "kind"
+  | "ref"
+  | "namespace"
+  | "description"
+  | "summary"
+  | "version"
+  | "keywords"
+  | "created"
+  | "updated"
+  | "deprecated"
+  | "replacedBy"
+  | "logo"
+  | "rating"
+>;
+
+/** The keys of `CardPackage`, as one list the projection actually iterates. */
+const CARD_FIELDS = [
+  "name",
+  "kind",
+  "ref",
+  "namespace",
+  "description",
+  "summary",
+  "version",
+  "keywords",
+  "created",
+  "updated",
+  "deprecated",
+  "replacedBy",
+  "logo",
+  "rating",
+] as const satisfies readonly (keyof CardPackage)[];
+
+/**
+ * One package, trimmed to what the island renders.
+ *
+ * An absent key is omitted rather than set to `undefined`: `JSON.stringify`
+ * drops an undefined value anyway, and omitting it keeps the projection's
+ * output identical to what a hand-written object literal would produce.
+ */
+export function cardPackage(p: CatalogPackage): CardPackage {
+  const out: Record<string, unknown> = {};
+  for (const key of CARD_FIELDS) {
+    if (p[key] !== undefined) out[key] = p[key];
+  }
+  return out as CardPackage;
+}
+
+/**
  * When a package last moved, for sorting and for the "updated" stamp.
  *
  * `updated` is what `enrich` derived — the artifact's own `created` when it
@@ -18,7 +90,7 @@ export type { CatalogPackage } from "../../types.js";
  * existed: those records still date correctly instead of dropping into the
  * unknown bucket on the first build after an upgrade.
  */
-export function lastUpdated(p: CatalogPackage): string | undefined {
+export function lastUpdated(p: Pick<CatalogPackage, "updated" | "created">): string | undefined {
   return p.updated ?? p.created;
 }
 

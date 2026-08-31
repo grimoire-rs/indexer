@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Image, ImageOff } from "lucide-preact";
 import { withBase } from "../lib/base.js";
-import type { CatalogPackage } from "../lib/catalog.js";
+import type { CardPackage } from "../lib/catalog.js";
 
 export /**
  * The card's 28px logo slot, in its three states.
@@ -24,7 +24,7 @@ export /**
  * so it opts into the global handler in `Base.astro` instead — keep the two
  * placeholders looking alike.
  */
-function CardLogo({ pkg }: { pkg: CatalogPackage }) {
+function CardLogo({ pkg }: { pkg: CardPackage }) {
   const [state, setState] = useState<"loading" | "ready" | "broken">("loading");
   const imgRef = useRef<HTMLImageElement>(null);
 

@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import Catalog from "../components/Catalog.tsx";
 import CommandBar from "../components/CommandBar.astro";
 import { BrandMark } from "../components/BrandMark.tsx";
-import { addRegistryUrl } from "../lib/catalog";
+import { addRegistryUrl, cardPackage } from "../lib/catalog";
 import { installChoices, registryAddCommand, registryScopeChoices } from "../lib/commands";
 import { data } from "../lib/data";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
@@ -126,5 +126,14 @@ const scopeChoices = registryScopeChoices(config);
     }
   </script>
 
-  <Catalog client:load packages={packages} vscodeExtension={config.vscodeExtension} />
+  {/* Projected, not passed whole. Astro serializes island props into an
+      attribute on `<astro-island>`, so every field a card never reads is
+      shipped twice — once in the server-rendered markup above, once as
+      escaped JSON here. `cardPackage` is the trim, and `CardPackage` is what
+      makes it enforceable; see `lib/catalog.ts`. */}
+  <Catalog
+    client:load
+    packages={packages.map(cardPackage)}
+    vscodeExtension={config.vscodeExtension}
+  />
 </Base>
