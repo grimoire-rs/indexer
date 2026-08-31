@@ -68,15 +68,21 @@ function run(step, command, args, options = {}) {
   return result;
 }
 
-/** The npm major this script's assertions were verified against. Every check
- * below reads `npm pack --json` output and npm's own manifest-normalization
- * warnings — both of which npm is free to change across a major. Bump this
- * ONLY together with a re-verification of the whole script under the new
- * major (a green run after the bump is the evidence); a silent pass under an
- * npm whose pack format moved is exactly the regression this guards.
- * `release.yml` installs `npm@11.x` explicitly in the publish job, and
- * `actions/setup-node` with node 24 ships npm 11 in the gate job. */
-const EXPECTED_NPM_MAJOR = 11;
+/** The npm majors this script's assertions have been verified against. Every
+ * check below reads `npm pack --json` output and npm's own
+ * manifest-normalization warnings — both of which npm is free to change
+ * across a major, so an unrecognised one is a hard stop rather than a
+ * silently weaker gate.
+ *
+ * TWO majors, not one, because this repository proves its `engines` claim on
+ * two Node versions and they do not ship the same npm: Node 22 carries npm
+ * 10, Node 24 carries npm 11. That is not an inconvenience to paper over —
+ * npm 10 is what a consumer on the declared minimum actually packs and
+ * installs with, so the pack shape is worth verifying under both.
+ *
+ * Extend this list ONLY together with a re-verification of the whole script
+ * under the new major; a green run after the edit is the evidence. */
+const EXPECTED_NPM_MAJORS = [10, 11];
 
 function assertNpmMajor() {
   const result = spawnSync("npm", ["--version"], { encoding: "utf8" });
@@ -89,11 +95,12 @@ function assertNpmMajor() {
     throw new Error(`assert npm version: could not parse npm major version from "${version}"`);
   }
   const major = Number(match[1]);
-  if (major !== EXPECTED_NPM_MAJOR) {
+  if (!EXPECTED_NPM_MAJORS.includes(major)) {
     throw new Error(
       `assert npm version: this script's pack-format assertions are verified against npm ` +
-        `${String(EXPECTED_NPM_MAJOR)}.x, but it is running under npm ${version} — re-verify the ` +
-        `whole script under the new major, then bump EXPECTED_NPM_MAJOR in scripts/pack-smoke.mjs.`,
+        `${EXPECTED_NPM_MAJORS.map(String).join("/")}.x, but it is running under npm ${version} — ` +
+        `re-verify the whole script under the new major, then add it to EXPECTED_NPM_MAJORS in ` +
+        `scripts/pack-smoke.mjs.`,
     );
   }
   return { version, major };
