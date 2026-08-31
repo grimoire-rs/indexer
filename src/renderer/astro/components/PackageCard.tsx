@@ -175,7 +175,15 @@ export function PackageCard({
               {p.kind}
             </span>
             <span aria-hidden="true"> · </span>
-            {p.namespace}
+            {/* Its own element so the row can give the address the slack and
+                nothing else: the kind is one short word and keeps its width,
+                and what does not fit is dropped off the FRONT — a registry
+                host is the least distinguishing part of an address and the
+                repository is the most. `title` keeps the whole of it
+                reachable, since the ellipsis hides the head. */}
+            <span class="address" title={p.namespace}>
+              {p.namespace}
+            </span>
           </p>
         </div>
         {/* Under the head, above the description: what the package

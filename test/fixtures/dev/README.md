@@ -23,6 +23,7 @@ a row in the table below; it never means adding a second index.
 | `many-versions` | skill | Fourteen tags → version picker and cascade. Also the one **rated ref with no thread URL**: the count renders as plain text, not a link, and the badge keeps both ends round. Carries the **1:2.5 tall** logo, the other extreme against the square tile |
 | `changelog-only` | agent | Changelog but no README → the tab reports its own absence |
 | `gitlab.com/team/mirror` | rule | Second namespace, nested, GitLab `login` owner, non-`ghcr.io` host |
+| `long-address` | rule | A namespace far wider than the card's head, as the case for the address line's leading ellipsis — the card must trim `registry.internal.…/` off the front rather than wrap to a second line |
 
 `.stats.json` also rates `ghcr.io/acme/gone`, which no `metadata.json`
 mentions — the catalog must invent no card for it.

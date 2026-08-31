@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "long-address",
+  "kind": "rule",
+  "ref": "registry.internal.enterprise-platform.example/developer-experience-guild/long-address",
+  "description": "A namespace far wider than the card, so the address line has something to trim.",
+  "repository": "https://registry.internal.enterprise-platform.example/developer-experience-guild/long-address",
+  "keywords": [
+    "cli",
+    "rule"
+  ],
+  "owner": {
+    "login": "developer-experience-guild",
+    "id": 91
+  }
+}

@@ -1749,6 +1749,34 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           font-size: var(--grim-text-xs);
           line-height: 1.3;
           font-family: ui-monospace, "SFMono-Regular", monospace;
+          /* One line, whatever the address is. A namespace breaks at its own
+             slashes and dots, so left to itself a long one wrapped to a second
+             line and made the card's head taller than its neighbours'. */
+          display: flex;
+          min-width: 0;
+          white-space: nowrap;
+        }
+        /* Trimmed from the FRONT: `github.com/` is on every address in an
+           index and the repository at the tail is what tells two apart, so the
+           head is what to spend.
+
+           `direction: rtl` is the mechanism — `text-overflow` ellipsises at
+           the line's inline END, which in an RTL box is its left edge, and
+           `text-align: left` keeps a short address sitting under the name
+           rather than flung to the right. The address itself still reads
+           left-to-right: it is one run of Latin characters, so the bidi
+           algorithm lays it out LTR inside the RTL box. That holds because a
+           namespace neither starts nor ends with punctuation — one that did
+           would have that character reordered to the far end.
+
+           The two-value `text-overflow: ellipsis ""` would say this directly
+           and is Firefox-only. */
+        .namespace .address {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          direction: rtl;
+          text-align: left;
         }
         /* The rating is one control with two halves — the count, which opens
            the forge thread, and the vote, which casts one — joined the way
