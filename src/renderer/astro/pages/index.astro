@@ -4,6 +4,7 @@ import Catalog from "../components/Catalog.tsx";
 import CommandBar from "../components/CommandBar.astro";
 import { BrandMark } from "../components/BrandMark.tsx";
 import { addRegistryUrl, cardPackage } from "../lib/catalog";
+import { withBase } from "../lib/base";
 import { installChoices, registryAddCommand, registryScopeChoices } from "../lib/commands";
 import { data } from "../lib/data";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
@@ -125,6 +126,39 @@ const scopeChoices = registryScopeChoices(config);
       if (match) window.__grimPick(bar, match);
     }
   </script>
+
+  {/* Without JavaScript the island never hydrates, so the catalog stops at
+      the viewport's worth of cards the server rendered and the toolbar above
+      it does nothing. This is the whole list instead: the inline rule below
+      retires the partial catalog, and the list under it names every package.
+
+      Inside `<noscript>`, so a reader with JavaScript never parses it and
+      pays nothing for it. Crawlers execute JavaScript and therefore ignore
+      this too — `sitemap.xml` is what states every route to them, and it is
+      written by `buildSite` for exactly that reason. */}
+  <noscript>
+    <style is:inline>
+      @layer grimoire {
+        .catalog { display: none; }
+        .nojs-catalog { margin-block: var(--grim-space-7); }
+      }
+    </style>
+    <section class="nojs-catalog">
+      <h2>All packages</h2>
+      <ul>
+        {
+          packages.map((p) => (
+            <li>
+              <a href={withBase(`/p/${p.namespace}/${p.name}/`)}>
+                {p.namespace}/{p.name}
+              </a>
+              {p.description && <> — {p.description}</>}
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </noscript>
 
   {/* Projected, not passed whole. Astro serializes island props into an
       attribute on `<astro-island>`, so every field a card never reads is

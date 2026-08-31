@@ -1540,6 +1540,28 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           font-size: var(--grim-text-sm);
           transition: background-color var(--grim-duration-base) ease;
         }
+        /* Off-screen rows skip layout and paint, and skip fetching their
+           logo, exactly as `.grid > li` does for cards. The list view had no
+           such bound, which is most of why it cost three times what the card
+           view did to mount at 500 packages — a trace showed 139ms of
+           `ResourceFetcher::requestResource` alone, several hundred logos
+           requested for rows nobody had scrolled to.
+
+           `contain-intrinsic-size` is the measured row height. Reproduced in
+           Chromium 152: `content-visibility` on a `subgrid` item does NOT
+           break the column alignment the subgrid exists for — the first and
+           last rows' cells stay at identical offsets, before and after
+           scrolling the length of the list. That was the risk worth checking,
+           since a skipped row contributes nothing to the parent's track
+           sizing, and it is why the bound was not simply copied here to begin
+           with.
+
+           ponytail: this bounds the PAINT, not the Preact commit. Past a few
+           hundred packages the rest is windowing the list. */
+        .table .row {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 34px;
+        }
         /* The rule belongs between rows, not under the last one — which the
            container's own border already draws. */
         .table .row + .row {

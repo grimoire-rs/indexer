@@ -26,8 +26,7 @@ export default tseslint.config(
       ".agents/worktrees/**",
       // `task quality:web` artifacts — two generated catalog sites and the
       // Lighthouse reports for each.
-      ".lhci-site/**",
-      ".lhci-bulk/**",
+      ".lhci-*/**",
       ".lighthouseci/**",
       ".lighthouseci-bulk/**",
     ],

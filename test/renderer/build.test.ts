@@ -1209,3 +1209,56 @@ describe("the island's serialized payload", () => {
     }
   });
 });
+
+/** The fixture's own packages, read from the file the build reads. */
+const FIXTURE_PACKAGES: { namespace: string; name: string }[] = JSON.parse(
+  await fs.readFile(path.join(FIXTURE, "all.json"), "utf8"),
+);
+
+describe("discovery", () => {
+  /**
+   * The catalog island builds a viewport's worth of cards and grows as the
+   * reader scrolls, so past that first slice the landing page's own markup
+   * names only some of the packages. At the fixture's size everything fits in
+   * one slice, which is exactly why this asserts the CONTRACT rather than the
+   * count: every package must be reachable from the landing page by some
+   * route that needs no scrolling. Measured at 500 packages the card markup
+   * covered 48 of them, and without the two fallbacks below that would have
+   * been the whole of the landing page's link graph.
+   */
+  it("links every package from the landing page, windowed or not", () => {
+    const hrefs = new Set(
+      [...site.indexHtml.matchAll(/href="([^"]*\/p\/[^"]+\/)"/g)].map((m) => m[1]),
+    );
+    const missing = FIXTURE_PACKAGES.filter(
+      (p) => !hrefs.has(`/p/${p.namespace}/${p.name}/`),
+    );
+    expect(missing.map((p) => `${p.namespace}/${p.name}`)).toEqual([]);
+  });
+
+  it("retires the partial catalog for a reader with no JavaScript", () => {
+    const noscript = /<noscript>[\s\S]*?<\/noscript>/.exec(site.indexHtml)?.[0];
+    expect(noscript, "no <noscript> fallback on the landing page").toBeDefined();
+    // Without this the reader gets the first slice of cards and a toolbar
+    // that does nothing, on top of the complete list below it.
+    expect(noscript).toMatch(/\.catalog\s*\{\s*display:\s*none/);
+    const linked = [...(noscript ?? "").matchAll(/href="([^"]*\/p\/[^"]+\/)"/g)].length;
+    expect(linked).toBe(FIXTURE_PACKAGES.length);
+  });
+
+  it("writes a sitemap and a robots.txt naming it", async () => {
+    const sitemap = await site.read("sitemap.xml");
+    const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    // Every package page, plus the index itself.
+    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 1);
+    for (const p of FIXTURE_PACKAGES) {
+      expect(locs).toContain(`https://index.example.test/p/${p.namespace}/${p.name}/`);
+    }
+    // Absolute, as the sitemap protocol requires — a relative <loc> is
+    // ignored, silently, by every consumer of the file.
+    expect(locs.every((l) => l.startsWith("https://"))).toBe(true);
+
+    const robots = await site.read("robots.txt");
+    expect(robots).toContain("Sitemap: https://index.example.test/sitemap.xml");
+  });
+});

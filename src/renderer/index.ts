@@ -848,6 +848,64 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
     ],
     opts.outDir,
   );
+  await writeSitemap(inputs, opts.outDir);
+}
+
+/**
+ * `sitemap.xml` and `robots.txt`, listing every package page.
+ *
+ * The catalog builds a viewport's worth of cards and grows as the reader
+ * scrolls (see `Catalog.tsx`), so the landing page's markup names 48 packages
+ * rather than all of them. That is what makes it fast, and on its own it
+ * would have made the landing page a much thinner path to the detail pages
+ * than it used to be — the only path a crawler had, since this site emitted
+ * no sitemap at all.
+ *
+ * A sitemap is the standard answer and a better one than the page ever was:
+ * every route, stated once, with no crawler obliged to render an island or
+ * scroll it. Written here rather than through `@astrojs/sitemap` because the
+ * route set is `packages` plus the index — already in hand, exactly, with no
+ * integration to configure and no dependency to carry.
+ *
+ * Absolute URLs, because the sitemap protocol requires them; `config.site`
+ * is the origin and already carries any project-Pages path segment.
+ */
+async function writeSitemap(
+  inputs: Awaited<ReturnType<typeof resolveInputs>>,
+  outDir: string,
+): Promise<void> {
+  const site = inputs.config.site.replace(/\/$/, "");
+  const base = inputs.base.replace(/\/$/, "");
+  // `site` already ends in the base path when one is configured, so the
+  // per-package path must not repeat it.
+  const origin = base && site.endsWith(base) ? site.slice(0, -base.length) : site;
+  const urls = [
+    `${site}/`,
+    ...inputs.packages.map(
+      (p) => `${origin}${base}/p/${p.namespace}/${p.name}/`,
+    ),
+  ];
+  const xml =
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map((u) => `  <url><loc>${escapeXml(u)}</loc></url>`).join("\n") +
+    "\n</urlset>\n";
+  await fs.writeFile(path.join(outDir, "sitemap.xml"), xml);
+  await fs.writeFile(
+    path.join(outDir, "robots.txt"),
+    `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`,
+  );
+}
+
+/** The five predefined XML entities. A package name is not free text, but a
+ *  `site` URL can carry a query string, and one `&` would break the file. */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 /**

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -41,6 +42,11 @@ export type View = "cards" | "table";
  * all of it is a wall of chips nobody reads.
  */
 const KEYWORD_CHIP_LIMIT = 8;
+
+/**
+ * How many packages the catalog builds at a time. See `limit` in `Catalog`.
+ */
+const WINDOW = 48;
 
 /**
  * `popovertarget` needs an id, and the catalog is a singleton on its page —
@@ -347,6 +353,27 @@ export default function Catalog({
   /** The slide each chip is currently running, so a new one can replace it. */
   const railSlides = useRef(new WeakMap<HTMLElement, Animation>());
   const railRef = useRef<HTMLDivElement>(null);
+  /**
+   * Which chips are up, in order, as of the current render — written below,
+   * once `visibleKeywords` exists, and read by the two layout effects.
+   *
+   * Both of those effects measure geometry, and a geometry read forces a
+   * synchronous style and layout pass over the WHOLE document. Neither had a
+   * dependency array, so both ran on every commit — including a commit that
+   * changed no chip at all. Switching to the list view is that commit, and at
+   * 500 packages it paid two forced layouts over several hundred rows Preact
+   * had just mounted: a 600ms task, most of it in `ForcedStyleAndLayout`.
+   *
+   * A ref rather than a dependency array because the chip list is computed
+   * hundreds of lines below these hooks, and a value cannot be a dependency
+   * before it exists. Writing a ref during render is safe — it is not state,
+   * nothing re-renders from it, and an effect body always runs after the
+   * render that wrote it.
+   */
+  const railSignature = useRef("");
+  /** What `railSignature` was when each effect last did its reads. */
+  const railMeasured = useRef<string | null>(null);
+  const railFlipped = useRef<string | null>(null);
 
   const kwMenuRef = useRef<HTMLDivElement>(null);
   const kwTriggerRef = useRef<HTMLButtonElement>(null);
@@ -420,35 +447,56 @@ export default function Catalog({
    */
   const [railFit, setRailFit] = useState(KEYWORD_CHIP_LIMIT);
 
-  useLayoutEffect(() => {
+  const measureRail = useCallback(() => {
     const rail = railRef.current;
     if (!rail) return;
-    const measure = () => {
-      const edge = rail.getBoundingClientRect().right;
-      let fits = 0;
-      for (const chip of rail.children) {
-        // Half a pixel of slack: a fractional layout can leave a chip's right
-        // edge a rounding error past a boundary it visually sits inside.
-        if (chip.getBoundingClientRect().right > edge + 0.5) break;
-        fits += 1;
-      }
-      // At least one, always. A rail too narrow for its shortest chip should
-      // show that chip clipped rather than render an empty group beside a
-      // divider that then divides nothing.
-      setRailFit(Math.max(1, fits));
-    };
-    measure();
-    // Guarded rather than assumed: this effect also runs under the test
-    // renderer, whose DOM has no `ResizeObserver` — and a missing one costs
-    // only re-measurement on viewport resize, which is not worth throwing
-    // during a render over.
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(rail);
-    return () => observer.disconnect();
-    // Re-measured on every commit that changes which chips are up, since the
-    // observer only fires when the rail's own box changes and a rescore can
-    // swap a short word for a long one at the same width.
+    const edge = rail.getBoundingClientRect().right;
+    let fits = 0;
+    for (const chip of rail.children) {
+      // Half a pixel of slack: a fractional layout can leave a chip's right
+      // edge a rounding error past a boundary it visually sits inside.
+      if (chip.getBoundingClientRect().right > edge + 0.5) break;
+      fits += 1;
+    }
+    // At least one, always. A rail too narrow for its shortest chip should
+    // show that chip clipped rather than render an empty group beside a
+    // divider that then divides nothing.
+    setRailFit(Math.max(1, fits));
+  }, []);
+
+  /**
+   * The rail's own `ref`, so the resize observer is attached exactly when the
+   * element exists. It is conditionally rendered — no keywords, no rail — and
+   * a `[]`-dependency effect would miss it appearing later.
+   *
+   * This also stops the observer being torn down and rebuilt on every commit,
+   * which was not free: `observe()` delivers an initial callback, so a rebuild
+   * per commit meant a measurement per commit no matter what gated the effect.
+   *
+   * Guarded rather than assumed: this runs under the test renderer too, whose
+   * DOM has no `ResizeObserver` — and a missing one costs only re-measurement
+   * on viewport resize, which is not worth throwing during a render over.
+   */
+  const railObserver = useRef<ResizeObserver | null>(null);
+  const attachRail = useCallback(
+    (el: HTMLDivElement | null) => {
+      railRef.current = el;
+      railObserver.current?.disconnect();
+      railObserver.current = null;
+      if (!el || typeof ResizeObserver === "undefined") return;
+      railObserver.current = new ResizeObserver(measureRail);
+      railObserver.current.observe(el);
+    },
+    [measureRail],
+  );
+
+  // Re-measured when the chips change, and only then — a rescore can swap a
+  // short word for a long one at the same width, which the observer above
+  // would never see. See `railSignature` for why the guard is a ref.
+  useLayoutEffect(() => {
+    if (railSignature.current === railMeasured.current) return;
+    railMeasured.current = railSignature.current;
+    measureRail();
   });
 
   /**
@@ -484,6 +532,18 @@ export default function Catalog({
    *   property of the mechanism rather than of a cleanup remembering to run.
    */
   useLayoutEffect(() => {
+    // Same guard as the fit measurement, for the same reason: `offsetLeft`
+    // forces layout, and a commit that moved no chip has nothing to animate.
+    //
+    // The seats it leaves behind are therefore from the last chip change
+    // rather than from the last commit, which is what FLIP wants. The one
+    // case that costs: a viewport resize between two chip changes moves the
+    // chips without changing the signature, so the next slide starts from
+    // pre-resize seats. One slightly-off slide after a resize, against two
+    // forced layouts on every commit — including every keystroke and every
+    // view switch — which is the trade this makes.
+    if (railSignature.current === railFlipped.current) return;
+    railFlipped.current = railSignature.current;
     const previous = railSeats.current;
     const current = new Map<string, { x: number; y: number }>();
     const moved: { el: HTMLElement; dx: number; dy: number }[] = [];
@@ -917,6 +977,63 @@ export default function Catalog({
   );
 
   /**
+   * How many of `shown` are actually built.
+   *
+   * The island's cost is dominated by constructing components, not by drawing
+   * them: `content-visibility` on the card and the row already means the
+   * browser skips layout and paint for anything off screen, but Preact still
+   * built every one. At 500 packages that was ~440 card components on
+   * hydration and another ~440 row components the moment the view changed —
+   * a 1.9s wait before a stored list view was on screen at all.
+   *
+   * So only a viewport's worth is built, and the slice GROWS as a sentinel
+   * below the list comes into view. It never shrinks, which is the whole
+   * reason this is a slice rather than true virtualization: an item that has
+   * been built stays built, so scrolling back up can never meet a blank row,
+   * and find-in-page keeps working over everything reached so far. The
+   * worst case — a reader who scrolls to the bottom — is exactly today's
+   * behaviour, and its paint is still bounded by `content-visibility`.
+   *
+   * 48 covers a tall viewport of either shape with room over: rows are 34px,
+   * and the card grid is three or four across at 19rem minimum.
+   */
+  const [limit, setLimit] = useState(WINDOW);
+  // A new result set starts a new window — otherwise narrowing to 3 matches
+  // and clearing the filter again would leave the whole catalog built.
+  // `shown` is memoized, so this identity changes exactly when the answer does.
+  const shownRef = useRef(shown);
+  if (shownRef.current !== shown) {
+    shownRef.current = shown;
+    if (limit !== WINDOW) setLimit(WINDOW);
+  }
+  const visible = limit >= shown.length ? shown : shown.slice(0, limit);
+
+  /**
+   * Grow the window when the sentinel below the list is reached.
+   *
+   * `rootMargin` is what keeps this invisible in use: the next slice is built
+   * a screen and a half before the reader gets to it, so the list reads as
+   * complete rather than as something that loads while you look at it. The
+   * observer re-fires while the sentinel stays in view, so a fast scroll
+   * keeps growing the window a slice per frame rather than stalling.
+   */
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    // Guarded like the rail's observer: the test renderer's DOM has neither.
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        setLimit((l) => (l >= shown.length ? l : l + WINDOW));
+      },
+      { rootMargin: "150% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [shown.length]);
+
+  /**
    * The keyword rail, over what is on screen rather than over the catalog.
    *
    * Two decisions, both borrowed from `@ocx-sh/catalog` and both load-bearing:
@@ -959,6 +1076,10 @@ export default function Catalog({
   // chip clipped at the rail's edge is one the reader cannot reach anywhere
   // else, and a "+N more" that does not count it is lying about where it is.
   const clippedKeywords = visibleKeywords.slice(railFit).map((k) => k.keyword);
+  // What the two layout effects above compare against. In render order, so a
+  // reorder counts as a change — the FLIP effect exists to animate exactly
+  // that. NUL-joined because a keyword may contain anything but that.
+  railSignature.current = visibleKeywords.map((k) => k.keyword).join("\u0000");
   const menuKeywords = keywordFrequency(shown).filter(
     (k) =>
       clippedKeywords.includes(k.keyword) ||
@@ -1049,7 +1170,7 @@ export default function Catalog({
                 class="chips kw-rail"
                 role="group"
                 aria-label="Filter by keyword"
-                ref={railRef}
+                ref={attachRail}
               >
                 {visibleKeywords.map(({ keyword }, i) => {
                   // Past the measured fit: still laid out, so the measurement
@@ -1322,7 +1443,7 @@ export default function Catalog({
         <p class="empty">No packages match.</p>
       ) : view === "table" ? (
         <PackageTable
-          packages={shown}
+          packages={visible}
           hasRatings={hasRatings}
           onKeyDown={onCardKeyDown}
           rootRef={gridRef}
@@ -1334,7 +1455,7 @@ export default function Catalog({
             gridRef.current = el;
           }}
         >
-          {shown.map((p) => (
+          {visible.map((p) => (
             <PackageCard
               key={`${p.namespace}/${p.name}`}
               pkg={p}
@@ -1345,6 +1466,14 @@ export default function Catalog({
             />
           ))}
         </ul>
+      )}
+      {/* The sentinel. Outside the list rather than inside it, so it is not a
+          stray child of a `<ul>` whose children are all `<li>`, nor of the
+          table's grid where it would take a row of tracks. `aria-hidden`
+          because it is a scroll position, not content — the count above the
+          list is what tells a screen reader how many packages there are. */}
+      {visible.length < shown.length && (
+        <div ref={sentinelRef} aria-hidden="true" />
       )}
     </section>
   );
