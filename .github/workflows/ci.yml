@@ -26,3 +26,61 @@ jobs:
           groups: default,node${{ matrix.node-version }}
       - run: ocx run -g default,node${{ matrix.node-version }} -- npm ci
       - run: ocx run -g default,node${{ matrix.node-version }} -- task check
+
+  # The three gates `task check` deliberately does not carry, each for the
+  # same reason: `check` must stay runnable on the plain npm toolchain, and
+  # every one of these needs something else on PATH — a Chrome, a pinned
+  # external binary, a Python runtime. Node 24 only; the 22/24 matrix above
+  # exists to prove the `engines` claim, and none of these three is
+  # node-version-sensitive.
+  web-quality:
+    name: web-quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ocx-sh/setup-ocx@de8e3366f812941423985eaccae28663ef192e8b # v1.3.0
+        with:
+          groups: default,node24
+      - run: ocx run -g default,node24 -- npm ci
+      # Chrome: the runner image ships one and chrome-launcher autodetects it,
+      # so CHROME_PATH stays unset here and the task's local puppeteer-cache
+      # glob resolves to nothing. Same command either way.
+      - run: ocx run -g default,node24 -- task quality:web
+
+  repo-checks:
+    name: repo-checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gitleaks scans history, not just the working tree — a shallow
+          # clone would report clean over one commit.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ocx-sh/setup-ocx@de8e3366f812941423985eaccae28663ef192e8b # v1.3.0
+        with:
+          groups: default,node24
+      - run: ocx run -g default,node24 -- npm ci
+      - run: ocx run -- task lint:actions
+      - run: ocx run -- task lint:links
+      - run: ocx run -- task secrets
+      - run: ocx run -g default,node24 -- task audit:signatures
+
+  workflows-lint:
+    name: workflows-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: ocx-sh/setup-ocx@de8e3366f812941423985eaccae28663ef192e8b # v1.3.0
+      - run: ocx run -- task lint:workflows

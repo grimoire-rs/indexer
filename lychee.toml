@@ -1,0 +1,32 @@
+# `task lint:links`. The workflow already runs lychee over `docs/**` through
+# the action (pages.yml); this is the whole-repo local equivalent, and the
+# excludes below are what keep it from reporting a placeholder as a dead link.
+cache = true
+max_cache_age = "1d"
+# 429 is a rate limit, not a dead link — a repo full of github.com links hits
+# it routinely and it says nothing about the target.
+accept = [200, 429]
+
+exclude_path = [
+  # Synthetic hosts by design: the dev index's config points at
+  # `index.example.test` and friends precisely because they must not resolve.
+  "test/fixtures",
+  # Build output, republished from sources this run already checked.
+  "site",
+  "dist",
+  ".lhci-site",
+  ".lhci-bulk",
+]
+
+exclude = [
+  # A server this checker is not running.
+  "^https?://localhost",
+  "^https?://127\\.0\\.0\\.1",
+  # RFC 2606 / RFC 6761 reserved names. Every one of them is in the tree
+  # BECAUSE it cannot resolve — a scaffold placeholder or a doc example.
+  "example\\.(com|org|net|test)",
+  "\\.(test|invalid|localhost|example)($|/)",
+  # The link-local metadata address. Never a real link; reaching for it from
+  # a checker is the one request worth refusing outright.
+  "169\\.254\\.169\\.254",
+]

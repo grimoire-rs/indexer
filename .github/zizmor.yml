@@ -1,0 +1,17 @@
+# zizmor project configuration.
+#
+# `task lint:workflows`. One suppression, recorded here rather than passed as
+# a flag, so the reason travels with it.
+#
+# release.yml publishes a runtime artifact on a tag, so zizmor flags its
+# `actions/setup-node` step under `cache-poisoning`: a restored dependency
+# cache would be a supply-chain write into what gets published. The actual
+# mitigation is already applied — that step requests no cache (`cache:` is
+# deliberately absent) — but setup-node v7 is reported as caching by default
+# and exposes no input to turn it off. The finding is low-confidence and the
+# exposure is already minimised. Revisit if setup-node gains an explicit
+# opt-out.
+rules:
+  cache-poisoning:
+    ignore:
+      - release.yml

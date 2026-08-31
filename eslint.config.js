@@ -24,9 +24,22 @@ export default tseslint.config(
       ".dev/**",
       "site/**",
       ".agents/worktrees/**",
+      // `task quality:web` artifacts — two generated catalog sites and the
+      // Lighthouse reports for each.
+      ".lhci-site/**",
+      ".lhci-bulk/**",
+      ".lighthouseci/**",
+      ".lighthouseci-bulk/**",
     ],
   },
   ...tseslint.configs.recommended,
+  {
+    // `scripts/lhci-posix-tmpdir.cjs` is CommonJS by necessity: it is preloaded
+    // with `node --require` to intercept a CommonJS module resolution, which an
+    // ES module cannot do.
+    files: ["**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
   {
     rules: {
       // `const { descDigest: _drop, ...rest } = sidecar` is the idiomatic way to

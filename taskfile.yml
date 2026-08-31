@@ -44,12 +44,80 @@ tasks:
     cmd: npm run dev:smoke
 
   check:
-    desc: The full gate — lint, typecheck, vitest, dev smoke
+    desc: The full gate — lint, typecheck, vitest, dev smoke, pack shape
     cmds:
       - task: lint
       - task: typecheck
       - task: test
       - task: smoke
+      - task: pack-smoke
+
+  pack-smoke:
+    desc: Publish-shape verification (publint, attw, real pack + install smoke)
+    cmd: node scripts/pack-smoke.mjs
+
+  # quality:web is STANDALONE for the same reason docs:* is — `check` must
+  # stay runnable on the plain npm toolchain, and this needs a Chrome.
+  #
+  # Two Lighthouse runs, because they answer different questions. The fixture
+  # run audits six pages of the fifteen-artifact dev index — the six that carry
+  # every distinct score the full sixteen-page sweep found — which is where an
+  # accessibility or best-practices regression on a detail page shows. The bulk
+  # run audits one page of a ~250-package catalog, which is the only size at
+  # which the island's payload and hydration cost move a score at all. Both
+  # configs carry the measured medians their floors were ratcheted from.
+  #
+  # `NODE_OPTIONS` preloads the WSL chrome-launcher fix — a no-op on plain
+  # Linux, so this command is byte-identical here and in CI. See the script.
+  quality:web:
+    desc: Build the fixture and bulk catalog sites and run Lighthouse CI + the cascade probe
+    cmds:
+      # Report directories are cleared first, and this is not tidiness: lhci
+      # writes a fresh manifest but leaves every previous run's report files
+      # behind, so a stale `lhr-*.json` from an earlier page set stays
+      # readable by `lhci assert` and by any script that globs the directory
+      # to re-measure a threshold. Ratcheting a floor against a report from
+      # a different build is the exact failure that discipline exists to stop.
+      - rm -rf .lhci-site .lhci-bulk .lighthouseci .lighthouseci-bulk
+      - npm run build
+      # `--out-dir` resolves against the INDEX root, not the cwd (see
+      # src/cli/out_dir.ts), so this has to be absolute or the site lands
+      # inside the committed fixture directory.
+      - node dist/cli/index.js build test/fixtures/dev --out-dir "$PWD/.lhci-site"
+      - node scripts/quality-site.mjs --bulk 250 --out .lhci-bulk
+      - >-
+        CHROME_PATH="${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"
+        NODE_OPTIONS="--require ./scripts/lhci-posix-tmpdir.cjs"
+        ./node_modules/.bin/lhci autorun --config=.lighthouserc.cjs
+      - >-
+        CHROME_PATH="${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"
+        NODE_OPTIONS="--require ./scripts/lhci-posix-tmpdir.cjs"
+        ./node_modules/.bin/lhci autorun --config=.lighthouserc.bulk.cjs
+      - >-
+        node scripts/quality-css-cascade.mjs
+        "${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"
+
+  # Repo hygiene. Every binary below is pinned in ocx.toml (zizmor comes from
+  # uvx), so none of these belongs in `check` either — same rule as docs:*.
+  lint:actions:
+    desc: Lint GitHub Actions workflows
+    cmd: actionlint
+
+  lint:links:
+    desc: Check for broken links (network; may be flaky offline)
+    cmd: lychee --cache --max-cache-age 1d .
+
+  lint:workflows:
+    desc: Zizmor security scan over .github/ (needs uv/uvx on PATH)
+    cmd: uvx zizmor@1.29.0 --min-severity medium --config .github/zizmor.yml .github/
+
+  secrets:
+    desc: Scan the working tree and history for committed secrets
+    cmd: gitleaks detect --source . --redact
+
+  audit:signatures:
+    desc: Verify every resolved dependency's npm registry signature
+    cmd: npm audit signatures
 
   # docs:* are STANDALONE, deliberately not part of `check` — `check` is the
   # npm quality gate and must stay runnable with no Python toolchain present.

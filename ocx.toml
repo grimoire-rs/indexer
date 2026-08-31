@@ -11,6 +11,15 @@
 [tools]
 go-task = "ocx.sh/go-task/task:3"
 grim = "ocx.sh/grimoire/cli:latest"
+# Repo-hygiene gates (`task lint:actions`, `lint:links`, `secrets`). Pinned
+# here rather than added as npm devDependencies: none of them is a node
+# package, and CI provisions them through the same setup-ocx step that
+# already supplies `task`. `zizmor` is the exception — it comes from `uvx`,
+# because `task lint:workflows` is the only gate that needs a Python
+# toolchain and `check` must stay runnable without one.
+actionlint = "ocx.sh/actionlint/actionlint:1"
+lychee = "ocx.sh/lychee/lychee:0"
+gitleaks = "ocx.sh/gitleaks/gitleaks:8"
 
 [group.node22.tools]
 nodejs = "ocx.sh/nodejs/node:22"

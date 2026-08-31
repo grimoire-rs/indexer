@@ -36,6 +36,8 @@
     "typecheck:tests": "tsc -p tsconfig.test.json"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@lhci/cli": "^0.15.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.14.0",
     "@vitest/coverage-v8": "^4.1.10",
@@ -43,6 +45,8 @@
     "eslint": "^10.8.0",
     "js-yaml": "^4.1.0",
     "jsdom": "^29.1.1",
+    "publint": "^0.3.24",
+    "puppeteer-core": "24.43.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
