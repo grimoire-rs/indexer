@@ -17,6 +17,11 @@ jobs:
         node-version: ["22", "24"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing in this job pushes, so the token has no reason to stay in
+          # `.git/config` where a later step — or anything it runs — could
+          # read it back out. `task lint:workflows` blocks on this.
+          persist-credentials: false
       # `task` and `grim` come from ocx.toml's default group; node comes from
       # the matching version group, which is why every step names both. An
       # unqualified `ocx run` would compose the default table alone and put no
