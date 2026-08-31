@@ -21,7 +21,7 @@ A path that replaces a shipped file prints one line to stderr as it is copied,
 naming the version it replaced:
 
 ```
-theme/components/SiteFooter.astro: replaces a file shipped by grimoire-indexer 0.5.2
+theme/components/SiteFooter.astro: replaces a file shipped by grimoire-indexer 0.5.3
 ```
 
 That is what makes the Unstable tier below honest: a minor release that moves a

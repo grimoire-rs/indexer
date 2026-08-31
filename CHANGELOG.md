@@ -21,6 +21,95 @@ props `{ pkg }` → `{ pkg, compact }`.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-09-01
+
+### Added
+
+- **Search is fuzzy, and reaches every field an index publishes.** It was a
+  case-insensitive substring test over the seven fields the island is handed, so
+  a typo matched nothing and a package could not be found by its licence,
+  vendor, repository, authors or documentation. A query now splits on spaces
+  into terms that are AND-combined and order-independent, and each may land on a
+  different key — `astro grimoire` finds a package whose keywords carry one word
+  and whose vendor carries the other. The full record set comes from
+  `/all.json`, already published and already a frozen public URL, so it costs
+  the island no payload: it and the matcher load on the first keystroke and not
+  before, as an 8.5 KB gzipped chunk nothing preloads. Until they land, and if
+  the fetch fails, the substring pass stands — the field is never dead.
+- **`relevance`, a sort mode**, and the reason the fuzzy pass is worth having:
+  it orders by match score. It is offered, stored and server-rendered like every
+  other mode, and with no query to rank it answers alphabetically — the order
+  the catalog opens on anyway — so a reader can leave it set and have every
+  later search come back ranked.
+- **A clear button in the search field.** Chromium and Safari draw one of their
+  own, in the UA's styling, in the same corner the `/` hint occupies, and it
+  cannot be restyled beyond hiding. So it is hidden and the control is rendered:
+  the hint's exact box, carrying an X instead of the key. The two never coexist,
+  and clicking it returns focus to the field.
+- **`sitemap.xml`, and a `robots.txt` naming it.** Written by `buildSite` from
+  the package list it already holds: every package page stated once, with no
+  crawler obliged to render an island or scroll it. This site emitted neither
+  before, so the landing page was the only path to a detail page — and the
+  windowed catalog below would have made that path a thin one.
+- **A `<noscript>` catalog on the landing page**, listing every package. Without
+  JavaScript the island never hydrates, so the reader would otherwise get one
+  slice of cards under a toolbar that does nothing.
+
+### Changed
+
+- **The catalog builds a viewport of the index, not all of it.** At 500
+  packages it took 1.9s to appear for a reader whose stored view is the list and
+  1.5s to switch views; both are now under 50ms, and the landing page goes from
+  3.42MB to 795KB. The island builds one viewport's worth and *grows* the slice
+  as a sentinel below the list comes into view — a growing slice rather than
+  true virtualization, so an item that has been built stays built and find-in-page
+  keeps working over everything reached. The keyword rail's two geometry-reading
+  layout effects are gated on a signature of the visible chips rather than
+  running on every commit, and the filter, sort and rail chain is memoized.
+- **The island is shipped only the fields a card renders**, through a new
+  `CardPackage` type and `cardPackage()` projection exported from
+  `lib/catalog.ts`. Astro serializes island props into an attribute on
+  `<astro-island>`, so every field handed to `<Catalog>` was paid for twice on
+  the landing page: at 250 packages the attribute was 323,044 bytes, 17.5% of
+  the page, most of it fields no card or row reads. It is 201,554 now (-37.6%).
+  Three Unstable-tier components take the narrower type — `PackageCard`,
+  `PackageRow` and `CardLogo`, props `{ pkg: CatalogPackage }` →
+  `{ pkg: CardPackage }`. An override reading `license`, `authors`, `vendor`,
+  `documentation`, `compatibility`, `revision`, `support`, `repository`,
+  `title`, `owner`, `schema`, `tags` or an unknown enrichment key off `pkg` now
+  fails to compile rather than rendering `undefined` in the browser; the detail
+  pages are untouched, and read the full record as before.
+- **The list view's columns are sized for the description.** The two marks are
+  `min-content` rather than `auto` and the name is `fit-content(14rem)` rather
+  than `minmax(8rem, 14rem)` — that 8rem floor made a list of short names pay a
+  fixed 8rem, so the description started after a column of empty space. The
+  row's gutter drops a step with them.
+
+### Fixed
+
+- **The list view's rows lost their subgrid columns.** `content-visibility:
+  auto`, added as a paint bound, applies size containment — and a size-contained
+  element cannot be a subgrid, so `grid-template-columns: subgrid` degraded to
+  `none` in silence and every row computed its own equal-sixths grid. Every cell
+  lined up perfectly and the alignment was fake. The bound comes off; what it
+  was aimed at is held by `loading="lazy"` on the logo and by the window above.
+- **The agent badge cleared WCAG AA.** `--grim-color-kind-agent` was `#b0641a`,
+  4.484:1 against the white card and so under AA's 4.5 for the 11.5px badge it
+  tints; it is `#a05c17` now, 5.20:1. Its four siblings were audited at the same
+  time and clear it unaided, so they are unchanged, and so is the dark palette.
+- **A stored `table` view no longer flips after the first paint.** The pre-paint
+  gate listed the sort, dir and deprecated preferences only, so a reader whose
+  stored view is the list got the server's cards painted first and the island's
+  table a moment later. `?kw=` had the same gap on the other half of the
+  condition — the parameter a keyword chip on a package page links to was never
+  checked. Both lists are pinned by a test now.
+- **The sort control's focus ring stays off a mouse click.** Chromium matches
+  `:focus-visible` on a `<select>` after a plain click, so the accent ring lit on
+  click and stayed lit beside the thin neutral chips until the reader clicked
+  elsewhere. No selector distinguishes focus that arrived from a pointer, so the
+  element marks itself on `pointerdown` and a keypress or a blur clears it. The
+  keyboard path keeps both the ring and its focus.
+
 ## [0.5.2] - 2026-08-31
 
 ### Fixed
@@ -300,7 +389,8 @@ props `{ pkg }` → `{ pkg, compact }`.
   boot can leave a `.index-*` holding Vite's `deps_temp_<hash>`, which the
   dependency optimizer recreates after the removal has already returned.
 
-[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/grimoire-rs/indexer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/grimoire-rs/indexer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/grimoire-rs/indexer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/grimoire-rs/indexer/compare/v0.4.4...v0.5.0
