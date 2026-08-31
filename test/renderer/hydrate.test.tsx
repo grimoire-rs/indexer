@@ -810,3 +810,80 @@ describe("the search field's clear button", () => {
     expect(host.querySelector("button.search-clear")).toBeNull();
   });
 });
+
+/**
+ * The sort combo's focus ring, whose rule lives half in CSS and half here.
+ *
+ * Chromium hands a `<select>` `:focus-visible` on an ordinary mouse click, so
+ * no selector can tell pointer focus from keyboard focus and the element has
+ * to say which it was. `data-pointer` is that signal; `Base.astro` drops the
+ * ring while it is present. jsdom implements neither `:focus-visible` nor the
+ * outline, so what is checked here is the half that can regress in this file:
+ * which interaction sets the mark, which clears it, and that only a pointer
+ * pick hands focus back.
+ */
+describe("the sort combo's focus mark", () => {
+  beforeEach(() => {
+    history.replaceState({}, "", "/");
+  });
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
+  });
+
+  function mount(): HTMLSelectElement {
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={PACKAGES} vscodeExtension={null} />, host);
+    return host.querySelector<HTMLSelectElement>("select.sort-field")!;
+  }
+
+  const pick = (select: HTMLSelectElement, value: string) => {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  it("marks a pointer interaction and hands focus back when the pick lands", () => {
+    const select = mount();
+    select.focus();
+
+    select.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(select.dataset.pointer, "the mark is on while the dropdown is open").toBe("");
+
+    pick(select, "updated");
+    expect(select.value).toBe("updated");
+    // Nothing left lit beside the neutral chips once the choice is made.
+    expect(document.activeElement).not.toBe(select);
+  });
+
+  it("keeps focus for a keyboard pick, because arrows change the value", () => {
+    const select = mount();
+    select.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    select.focus();
+    // A keypress makes this a keyboard interaction again, mark and all.
+    select.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(select.dataset.pointer).toBeUndefined();
+
+    // `relevance`, not `rating`: this fixture publishes no ratings, so that
+    // option is not rendered and assigning it would silently yield "".
+    pick(select, "relevance");
+    expect(select.value).toBe("relevance");
+    // Blurring here would take the control away mid-selection: on a closed
+    // select every arrow key fires its own `change`.
+    expect(document.activeElement).toBe(select);
+  });
+
+  it("clears the mark on blur, so the next focus is a keyboard focus", () => {
+    const select = mount();
+    select.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    select.focus();
+    expect(select.dataset.pointer).toBe("");
+
+    select.blur();
+    expect(select.dataset.pointer).toBeUndefined();
+  });
+});

@@ -350,6 +350,8 @@ export default function Catalog({
   const [index, setIndex] = useState<SearchIndex | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
+  /** Whether the sort combo's last interaction came from a pointer. */
+  const pickedByPointer = useRef(false);
   const gridRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
 
@@ -1509,6 +1511,40 @@ export default function Catalog({
               data-slot="filter-chip"
               aria-label="Sort by"
               value={sort}
+              // Chromium matches `:focus-visible` on a `<select>` after a
+              // plain MOUSE click — a select accepts keyboard input, so the
+              // engine treats every focus as keyboard focus. The repo's
+              // `:focus-visible` convention therefore cannot keep the accent
+              // ring off this one control, and CSS has nothing else to go on:
+              // no selector distinguishes focus that arrived from a pointer.
+              //
+              // So the pointer marks itself. `data-pointer` suppresses the
+              // ring for the whole pointer interaction — an open dropdown is
+              // its own affordance and needs no second one around the closed
+              // box behind it — and the pick then hands focus back, so
+              // nothing is left lit beside the thin neutral chips.
+              //
+              // The keyboard path must do NEITHER. Arrow keys on a closed
+              // select fire `change` per option, so blurring there would take
+              // the control away mid-selection, and a keyboard reader is
+              // exactly who the ring exists for. `onKeyDown` clears both, so
+              // a reader who clicks once and later tabs back is a keyboard
+              // reader again.
+              //
+              // Written to the node rather than to state: this fires while
+              // the native dropdown is open, and a re-render of the element
+              // holding it open is not worth the risk for a styling hint.
+              onPointerDown={(event) => {
+                pickedByPointer.current = true;
+                event.currentTarget.dataset.pointer = "";
+              }}
+              onKeyDown={(event) => {
+                pickedByPointer.current = false;
+                delete event.currentTarget.dataset.pointer;
+              }}
+              onBlur={(event) => {
+                delete event.currentTarget.dataset.pointer;
+              }}
               onChange={(event) => {
                 const next = (event.currentTarget as HTMLSelectElement)
                   .value as Sort;
@@ -1517,6 +1553,8 @@ export default function Catalog({
                 // the previous one over lands the reader on "oldest first"
                 // because they had asked for Z→A a moment ago.
                 setDir(NATURAL[next]);
+                // The pointer path only: see the handlers above.
+                if (pickedByPointer.current) event.currentTarget.blur();
               }}
             >
               <option value="name">name</option>

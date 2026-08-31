@@ -1265,6 +1265,18 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           outline-offset: 0;
           border-color: var(--grim-color-accent);
         }
+        /* The sort combo, while a POINTER is driving it. Chromium hands a
+           `<select>` `:focus-visible` on an ordinary click, so this control
+           alone would wear the keyboard ring for a mouse interaction — around
+           a closed box sitting behind its own open dropdown, which already
+           says everything the ring would. `data-pointer` is set by the
+           element's own `pointerdown` and cleared by a keypress or a blur, so
+           the ring is only ever suppressed for the interaction that did not
+           need it; every keyboard focus keeps it. */
+        .sort-field[data-pointer]:focus-visible {
+          outline: none;
+          border-color: var(--grim-color-accent);
+        }
 
         .grid {
           list-style: none;
