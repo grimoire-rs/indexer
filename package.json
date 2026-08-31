@@ -57,6 +57,7 @@
     "@mdi/js": "^7.4.47",
     "astro": "^7.1.4",
     "commander": "^15.0.0",
+    "fuzzysort": "^4.0.2",
     "lucide-preact": "^1.27.0",
     "preact": "^10.29.7",
     "preact-render-to-string": "^6.7.0"

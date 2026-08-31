@@ -694,3 +694,79 @@ describe("the keyword overflow menu", () => {
     expect(host.querySelector(".kw-menu > summary")).toBeNull();
   });
 });
+
+/**
+ * The fuzzy index, from the island's side of the boundary.
+ *
+ * `test/renderer/search.test.ts` covers the matcher itself; what is checked
+ * here is the wiring, which is where this feature can silently do nothing:
+ * the chunk is fetched lazily, so an island that never triggers the load, or
+ * one whose memo does not depend on the result, keeps showing substring
+ * results and looks entirely correct.
+ */
+describe("fuzzy search", () => {
+  /**
+   * `/all.json` as the deployed site serves it — the full records, including
+   * the two fields the island is NOT handed. Nothing here can be found by
+   * the substring pass, which is what makes the assertions below unambiguous.
+   */
+  const WIRE = PACKAGES.map((p, i) => ({
+    ...p,
+    license: i === 0 ? "Apache-2.0" : "MIT",
+    vendor: i === 0 ? "initech" : "acme-labs",
+  }));
+
+  beforeEach(() => {
+    history.replaceState({}, "", "/");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({ ok: true, status: 200, statusText: "OK", json: () => Promise.resolve(WIRE) }),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    vi.unstubAllGlobals();
+  });
+
+  it("finds a package by a field the island was never given", async () => {
+    // `vendor` is not on `CardPackage`, so the substring path cannot see it:
+    // a result here proves the fetched record set is what is being searched.
+    const host = hydrateWithQuery(serverMarkup(), "initech");
+
+    await vi.waitFor(() =>
+      expect(cards(host).map((c) => c.name)).toEqual(["alpha"]),
+    );
+  });
+
+  it("offers relevance with or without a query, and keeps it when one clears", async () => {
+    const host = hydrateWithQuery(serverMarkup(), "acme");
+    const options = () =>
+      [...host.querySelectorAll<HTMLOptionElement>("select.sort-field option")].map(
+        (o) => o.value,
+      );
+
+    expect(options()).toContain("relevance");
+
+    const select = host.querySelector<HTMLSelectElement>("select.sort-field")!;
+    select.value = "relevance";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(select.value).toBe("relevance"));
+
+    // Clearing the field leaves the mode standing: with nothing to rank it
+    // falls back to alphabetical (`CHAINS.relevance`), so the next search
+    // comes back ranked without the reader touching the control again.
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    search.value = "";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await vi.waitFor(() => expect(location.search).toBe(""));
+    expect(select.value).toBe("relevance");
+    expect(options()).toContain("relevance");
+    expect(cards(host).map((c) => c.name)).toEqual(["alpha", "bravo", "charlie"]);
+  });
+});

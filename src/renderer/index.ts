@@ -506,6 +506,11 @@ const RUNTIME_DEPS = [
   "preact-render-to-string",
   "lucide-preact",
   "@mdi/js",
+  // The catalog's fuzzy matcher. Reached only through `await import()` from
+  // the island, so it never loads in a browser that does not search — but
+  // Rolldown still has to RESOLVE it at build time to emit that chunk, and
+  // a dynamic import is no less of a resolution than a static one.
+  "fuzzysort",
 ];
 
 // Node refuses to create a directory symlink on Windows without elevation;

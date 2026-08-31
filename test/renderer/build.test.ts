@@ -356,13 +356,18 @@ describe("ratings", () => {
     expect(html).not.toContain("\u26a0");
   });
 
-  it("offers rating as a third sort field", () => {
+  it("offers rating as a third sort field, and relevance as a fourth", () => {
     const select = indexHtml.match(/<select class="sort-field"[\s\S]*?<\/select>/)![0]!;
     // `[^>]*`: the selected option carries `selected` ahead of its `value`.
+    // `relevance` is in the SERVER render, unconditionally — the island's
+    // first client render must match this markup exactly (see the hydration
+    // rule in `hydrate.test.tsx`), so an option gated on client-only state
+    // would be a mismatch rather than a feature.
     expect([...select.matchAll(/<option[^>]*value="([a-z]+)"/g)].map((m) => m[1])).toEqual([
       "name",
       "updated",
       "rating",
+      "relevance",
     ]);
   });
 });

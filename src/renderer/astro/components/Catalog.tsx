@@ -19,6 +19,12 @@ import { PackageCard } from "./PackageCard.js";
 import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
 import { lastUpdated, type CardPackage } from "../lib/catalog.js";
+import { withBase } from "../lib/base.js";
+// TYPE-ONLY, and it has to stay that way: `../lib/search.js` is the only
+// module that pulls `fuzzysort` in, and it is loaded with `await import()`
+// below so neither reaches a reader who never types. A value import here
+// would fold both back into the island's own chunk.
+import type { Scores, SearchIndex } from "../lib/search.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
@@ -29,7 +35,15 @@ function kindOrder(kind: string): number {
   return i === -1 ? KNOWN_KINDS.length : i;
 }
 
-export type Sort = "name" | "updated" | "rating";
+/**
+ * `relevance` orders by how well each package answered the query on screen,
+ * where the other three order by something every package carries. It is
+ * offered and stored like any of them even so: with no query it has nothing
+ * to rank, and `CHAINS.relevance` answers that with alphabetical — the order
+ * the catalog opens on anyway — so a reader can leave the catalog set to it
+ * and have every later search come back ranked without touching the control.
+ */
+export type Sort = "name" | "updated" | "rating" | "relevance";
 export type Dir = "asc" | "desc";
 /** Roomy cards, or the same packages as a scannable list. */
 export type View = "cards" | "table";
@@ -68,6 +82,7 @@ export const NATURAL: Record<Sort, Dir> = {
   name: "asc",
   updated: "desc",
   rating: "desc",
+  relevance: "desc",
 };
 
 type Key = (a: CardPackage, b: CardPackage) => number;
@@ -121,6 +136,16 @@ const CHAINS: Record<Sort, Key[]> = {
   name: [byName],
   updated: [byUpdated, byName],
   rating: [byRating, byUpdated, byName],
+  // Relevance cannot be a key here: a score belongs to a query, not to a
+  // package, so it is not on the record `compare` is handed. `shown` sorts
+  // that mode itself.
+  //
+  // This entry is what the mode falls back to whenever there are no scores —
+  // no query typed, or the fuzzy index still downloading — which is also why
+  // relevance can be offered and stored like any other mode. Alphabetical is
+  // the honest answer to "rank these against nothing", and it is what the
+  // catalog already shows on arrival.
+  relevance: [byName],
 };
 
 // Deprecated packages get no special ordering here — they are filtered out
@@ -319,6 +344,10 @@ export default function Catalog({
   // Local to the overflow menu and deliberately not shareable: it narrows
   // the list of keywords, not the catalog.
   const [keywordFilter, setKeywordFilter] = useState("");
+  // The fuzzy matcher, once it has been fetched. `null` is the normal state
+  // for most of a visit — see the loader below — and every consumer treats
+  // it as "fall back to the substring filter", never as an error.
+  const [index, setIndex] = useState<SearchIndex | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLElement>(null);
@@ -647,7 +676,8 @@ export default function Catalog({
     const s = readPref("sort");
     const d = readPref("dir");
     const v = readPref("view");
-    const field: Sort = s === "updated" || s === "rating" ? s : "name";
+    const field: Sort =
+      s === "updated" || s === "rating" || s === "relevance" ? s : "name";
     const published = new Set(packages.flatMap((p) => p.keywords ?? []));
     setQuery(params.get("q") ?? "");
     setKinds(list(params.get("kind")).filter((k) => KNOWN_KINDS.includes(k)));
@@ -937,6 +967,49 @@ export default function Catalog({
   }, [counted]);
 
   const q = query.trim().toLowerCase();
+
+  /**
+   * Fetch the fuzzy matcher, once, the first time anyone searches.
+   *
+   * Not on mount: a reader who never types pays nothing — no `fuzzysort`
+   * chunk, no `/all.json`. Not per keystroke either; `tried` latches on the
+   * first attempt, so a failed load degrades to the substring filter for the
+   * rest of the visit rather than re-fetching on every letter.
+   *
+   * A failure is not shown to the reader on purpose. Search keeps working —
+   * the substring path over the card's own fields is what the catalog did
+   * before this existed — so an error banner would report a downgrade nobody
+   * asked about, over a page that is doing what they asked. It goes to the
+   * console with the error value itself, chain and stack intact.
+   */
+  const tried = useRef(false);
+  useEffect(() => {
+    if (!q || tried.current) return;
+    tried.current = true;
+    // Self-catching, so the `void` attaches nothing it needs to: every await
+    // on the path is inside the try.
+    void (async () => {
+      try {
+        const { loadSearchIndex } = await import("../lib/search.js");
+        setIndex(await loadSearchIndex(withBase("/all.json")));
+      } catch (err) {
+        console.error("catalog: fuzzy search unavailable, using substring match", err);
+      }
+    })();
+  }, [q]);
+
+  /**
+   * What the current query scored against every package, or `null` when
+   * there is no query or no matcher yet.
+   *
+   * Memoized on the pair: re-scoring the whole catalog is the one genuinely
+   * expensive thing a keystroke triggers, and every consumer below reads it.
+   */
+  const scores: Scores | null = useMemo(
+    () => (index && q ? index.search(q) : null),
+    [index, q],
+  );
+
   // Query and facets first, deprecation last — so the toggle can report how
   // many entries *it alone* is holding back, rather than a catalog-wide
   // number that has nothing to do with what is on screen.
@@ -953,6 +1026,14 @@ export default function Catalog({
         if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
         if (!keywords.every((kw) => p.keywords?.includes(kw))) return false;
         if (!q) return true;
+        // The fuzzy index, once it is here: multi-term, order-independent,
+        // typo-tolerant, and over every field `/all.json` carries — the
+        // licence, the vendor, the repository, the authors, none of which
+        // are on the record this island was handed.
+        if (scores) return scores.has(p.ref);
+        // Until then, and if the fetch never lands: the substring pass over
+        // the fields the card itself ships. Narrower on both axes, and the
+        // reason the search box is never dead while a chunk downloads.
         return [
           p.name,
           p.description ?? "",
@@ -963,18 +1044,30 @@ export default function Catalog({
           (p.keywords ?? []).join(" "),
         ].some((field) => field.toLowerCase().includes(q));
       }),
-    [packages, kinds, keywords, q],
+    [packages, kinds, keywords, q, scores],
   );
-  const shown = useMemo(
-    () =>
-      // `.filter()` already returns a fresh array, so sorting in place here
-      // mutates nothing the memo above holds — except in the `showDeprecated`
-      // branch, where `matching` IS that array. Copy before sorting.
-      (showDeprecated ? [...matching] : matching.filter((p) => !p.deprecated)).sort((a, b) =>
-        compare(a, b, sort, dir),
-      ),
-    [matching, showDeprecated, sort, dir],
-  );
+  const shown = useMemo(() => {
+    // `.filter()` already returns a fresh array, so sorting in place here
+    // mutates nothing the memo above holds — except in the `showDeprecated`
+    // branch, where `matching` IS that array. Copy before sorting.
+    const list = showDeprecated
+      ? [...matching]
+      : matching.filter((p) => !p.deprecated);
+    // Relevance is sorted here rather than in `compare`, because the score is
+    // a property of the query and not of the package — see `CHAINS`. Name
+    // breaks the tie, so equally-scored packages keep a total order and the
+    // list cannot reshuffle between renders.
+    if (sort === "relevance" && scores) {
+      return list.sort((a, b) => {
+        const d =
+          descending(scores.get(a.ref) ?? null, scores.get(b.ref) ?? null) ||
+          byName(a, b);
+        return dir === NATURAL.relevance ? d : -d;
+      });
+    }
+    return list.sort((a, b) => compare(a, b, sort, dir));
+  }, [matching, showDeprecated, sort, dir, scores]);
+
 
   /**
    * How many of `shown` are actually built.
@@ -1404,6 +1497,7 @@ export default function Catalog({
               <option value="name">name</option>
               <option value="updated">updated</option>
               {hasRatings && <option value="rating">rating</option>}
+              <option value="relevance">relevance</option>
             </select>
           </div>
           {/* Beside sort, because it answers the same kind of question — how
