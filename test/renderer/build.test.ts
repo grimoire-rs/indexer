@@ -788,6 +788,13 @@ describe("config reaches the rendered HTML", () => {
     expect(indexHtml).toContain('<section class="catalog"');
     expect(indexHtml).toContain('dataset.query = ""');
     expect(bundledCss).toMatch(/:root\[data-query\] \.catalog\{visibility:hidden/);
+    // Every input the island re-renders from is a reason to hold the paint.
+    // Miss one — `view` was the miss — and the server's cards paint, then
+    // flip to the stored table.
+    expect(indexHtml).toContain('["sort", "dir", "deprecated", "view"]');
+    for (const param of ["q", "kind", "kw"]) {
+      expect(indexHtml).toContain(`view.get("${param}")`);
+    }
   });
 
   // Shiki, configured rather than replaced. One theme left every block dark

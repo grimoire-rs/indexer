@@ -62,16 +62,18 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
 
       // Also before first paint: a deep link (a keyword chip on a package
       // page) or a stored preference means the catalog the server rendered —
-      // every package, empty search box, name order, deprecated hidden — is
-      // the wrong one. Flag it so CSS holds the catalog back rather than
-      // showing the full list and rearranging it a moment later. The island
-      // drops the flag once it has applied the view — which is the render
-      // after hydration, never the hydrating one itself; the timeout is the
-      // failsafe for an island that never hydrates, where a flash beats a
-      // blank page.
+      // every package, empty search box, name order, deprecated hidden, as
+      // cards — is the wrong one. Flag it so CSS holds the catalog back
+      // rather than showing the full list and rearranging it a moment
+      // later. The island drops the flag once it has applied the view —
+      // which is the render after hydration, never the hydrating one
+      // itself; the timeout is the failsafe for an island that never
+      // hydrates, where a flash beats a blank page.
       const view = new URLSearchParams(location.search);
-      const arranged = ["sort", "dir", "deprecated"].some((k) => pref("grim.catalog." + k));
-      if (view.get("q") || view.get("kind") || arranged) {
+      const arranged = ["sort", "dir", "deprecated", "view"].some((k) =>
+        pref("grim.catalog." + k),
+      );
+      if (view.get("q") || view.get("kind") || view.get("kw") || arranged) {
         document.documentElement.dataset.query = "";
         setTimeout(() => delete document.documentElement.dataset.query, 3000);
       }
