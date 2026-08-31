@@ -7,6 +7,14 @@ be added here freely without touching an assertion.
 One artifact per rendering state. Adding a state means adding an artifact and
 a row in the table below; it never means adding a second index.
 
+**Size is not one of the states.** A corporate index runs to hundreds of
+packages, and the toolbar, the keyword rail, the sort and the list view all
+have to hold at that size — but a state is demonstrated once, so cloning
+artifacts in here to reach it would only make the curated set harder to read.
+`npm run dev -- --bulk 250` clones this index in the scratch copy instead:
+every clone is a real package with its own ref, sidecar, logo, dates and vote
+count, and nothing is written back here.
+
 | Artifact | kind | The state it exists for |
 |---|---|---|
 | `code-review` | skill | Fully enriched: logo, all four support channels, `compatibility`, README + changelog + contents, deep tag cascade, 12 votes |
