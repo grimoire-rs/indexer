@@ -21,6 +21,41 @@ props `{ pkg }` → `{ pkg, compact }`.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-08-31
+
+### Fixed
+
+- **The sort control drew two borders when clicked.** Hover tints a control's
+  border to the accent and focus drew a 2px accent outline standing 1px clear
+  of it, so anyone who reached the control with a mouse had both at once — one
+  state reading as two lines with a gap between them. The ring merges onto the
+  border now, the way the card's focus state already did, and the offset comes
+  off every bordered control in the toolbar together rather than off the one
+  that showed it: the search field, the keyword overflow menu's search, both
+  sort halves and both view picks. Keyword chips gain the same ring, having
+  taken the browser's default until now.
+- **A long address no longer wraps the card's head onto a second line.** A
+  namespace breaks at its own slashes and dots, so a wide one took two rows and
+  left the card taller than its neighbours with the tail of the address against
+  the padding edge. It stays on one line and the overflow is trimmed from the
+  *front* — the registry host is on every address in an index and the
+  repository at the tail is what tells two apart — with the whole of it in the
+  element's `title`.
+- **Keyword chips could stutter, or stop part-way through the rail's slide.**
+  The rail's FLIP pass inverted each chip with an inline `transition: none` and
+  a `translate`, then dropped both on the next animation frame; any commit
+  landing inside that window left the chip carrying the offset with its
+  transition disabled, and nothing else took those off. It also measured seats
+  with `getBoundingClientRect`, which reports where a chip is *drawn*, so a
+  chip caught mid-slide recorded its animated box and the next inversion
+  compounded the error instead of correcting it. Neither window was rare: the
+  rail's own fit measurement re-commits whenever a rescore changes how many
+  chips fit. Seats now come from `offsetLeft`/`offsetTop`, which ignore
+  transforms and scroll, and the slide is a Web Animation — it starts without a
+  frame, writes nothing to `style`, and clears itself when it finishes or is
+  cancelled. `prefers-reduced-motion` is honoured by the effect rather than by
+  the stylesheet, and `--grim-duration-slow` is still its length.
+
 ## [0.5.1] - 2026-08-31
 
 ### Added
@@ -265,6 +300,7 @@ props `{ pkg }` → `{ pkg, compact }`.
   boot can leave a `.index-*` holding Vite's `deps_temp_<hash>`, which the
   dependency optimizer recreates after the removal has already returned.
 
-[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/grimoire-rs/indexer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/grimoire-rs/indexer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/grimoire-rs/indexer/compare/v0.4.4...v0.5.0
