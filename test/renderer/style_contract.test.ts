@@ -272,3 +272,35 @@ describe("the data-slot contract", () => {
     expect(found).toEqual(SLOTS);
   });
 });
+
+/**
+ * `content-visibility` and `subgrid` are mutually exclusive, and nothing says so.
+ *
+ * `content-visibility: auto` applies size containment, and a size-contained
+ * element cannot be a subgrid — the declaration degrades to `none` in silence.
+ * The table's rows are subgrid items, so a paint bound placed on them takes the
+ * column alignment with it: measured in Chromium 152, `.table .row` with
+ * `content-visibility: auto` computes `gridTemplateColumns: none` and lays every
+ * cell out as one sixth of the table, description included.
+ *
+ * It shipped once already (2a77c15) and survived review, because the check made
+ * at the time compared the first row's cell offsets against the last row's —
+ * which match perfectly when every row is the same independently-computed grid.
+ * This is the text form of the invariant, so the pairing cannot come back
+ * without someone deleting a test that names the reason.
+ */
+describe("subgrid rows", () => {
+  it("puts no content-visibility on a rule that declares subgrid", () => {
+    for (const [file, src] of SRC) {
+      // Each `selector { … }` block in the file, braces matched shallowly —
+      // enough for a flat stylesheet, and every rule here is flat.
+      for (const [, selector, body] of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/\bsubgrid\b/.test(body ?? "")) continue;
+        expect(
+          body,
+          `${file}: \`${selector?.trim()}\` declares subgrid, so it must not be size-contained`,
+        ).not.toMatch(/content-visibility/);
+      }
+    }
+  });
+});

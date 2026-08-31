@@ -871,6 +871,9 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           line-height: 1;
           padding: var(--grim-space-2) var(--grim-space-3);
         }
+        /* The two never coexist — the hint withdraws exactly when a query
+           appears, which is when the clear button is rendered — so they share
+           one corner rather than sitting beside each other. */
         .search-field:focus-within .search-hint,
         .search-field:has(input:not(:placeholder-shown)) .search-hint {
           display: none;
@@ -1506,13 +1509,20 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            the container rather than cutting square across it. */
         .table {
           display: grid;
-          /* logo | kind | name | description | updated. The two fixed-width
-             marks lead, so the names start on one line down the whole list
-             and the eye runs the column it actually reads. The name is
-             capped rather than `max-content`: an unbounded name ate the
-             description's space, and past the cap both clip instead. The
-             description is the only track that grows. */
-          grid-template-columns: auto auto minmax(8rem, 14rem) 1fr auto;
+          /* logo | kind | name | description | updated. The two marks lead,
+             so the names start on one line down the whole list and the eye
+             runs the column it actually reads.
+
+             Every track is sized to give the description whatever is left.
+             The marks are `min-content` — a 20px tile and a 16px glyph, and
+             nothing about them should reserve more than they draw. The name
+             is `fit-content(14rem)`: as wide as the longest name in the list
+             and no wider, capped, past which it clips. It was
+             `minmax(8rem, 14rem)`, and that 8rem floor was a hole — a list of
+             short names paid a fixed 8rem for them, so the description read
+             as pushed away from a column of empty space. */
+          grid-template-columns:
+            min-content min-content fit-content(14rem) 1fr auto;
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
           /* `xl`, the content-surface step — the same one the card wears.
@@ -1526,42 +1536,45 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         /* One more track when the index publishes ratings. Decided once per
            index, never per filter — see `PackageTable`. */
         .table.rated {
-          grid-template-columns: auto auto minmax(8rem, 14rem) 1fr auto auto;
+          grid-template-columns:
+            min-content min-content fit-content(14rem) 1fr auto auto;
         }
         .table .row {
           grid-column: 1 / -1;
           display: grid;
           grid-template-columns: subgrid;
           align-items: center;
-          gap: var(--grim-space-5);
+          /* One step tighter than the row's own padding. A 12px gutter either
+             side of a 16px glyph reads as a hole rather than as spacing. */
+          gap: var(--grim-space-4);
           padding: var(--grim-space-3) var(--grim-space-5);
           color: inherit;
           text-decoration: none;
           font-size: var(--grim-text-sm);
           transition: background-color var(--grim-duration-base) ease;
         }
-        /* Off-screen rows skip layout and paint, and skip fetching their
-           logo, exactly as `.grid > li` does for cards. The list view had no
-           such bound, which is most of why it cost three times what the card
-           view did to mount at 500 packages — a trace showed 139ms of
-           `ResourceFetcher::requestResource` alone, several hundred logos
-           requested for rows nobody had scrolled to.
+        /* NO `content-visibility` on a row, and the reason is load-bearing.
+           `content-visibility: auto` applies SIZE CONTAINMENT, and a
+           size-contained element cannot be a subgrid — the `subgrid` above
+           degrades to `none`, silently. Measured in Chromium 152 against a
+           real build: with it, `getComputedStyle(row).gridTemplateColumns`
+           reads `none` and every cell is one sixth of the table (181px each
+           at a 1280px viewport); without it the parent's tracks apply and the
+           description gets the 832px the `1fr` exists to give it.
 
-           `contain-intrinsic-size` is the measured row height. Reproduced in
-           Chromium 152: `content-visibility` on a `subgrid` item does NOT
-           break the column alignment the subgrid exists for — the first and
-           last rows' cells stay at identical offsets, before and after
-           scrolling the length of the list. That was the risk worth checking,
-           since a skipped row contributes nothing to the parent's track
-           sizing, and it is why the bound was not simply copied here to begin
-           with.
+           It shipped in 2a77c15 as a paint bound, and the check made at the
+           time — first and last rows' cells at identical offsets, before and
+           after scrolling — could not have caught this: when EVERY row is the
+           same independently-computed grid, the offsets match perfectly and
+           the alignment is fake. Any check here must read the row's own
+           `gridTemplateColumns`, or a cell's width against its content, never
+           two rows against each other. `style_contract.test.ts` holds the
+           text form of the invariant.
 
-           ponytail: this bounds the PAINT, not the Preact commit. Past a few
-           hundred packages the rest is windowing the list. */
-        .table .row {
-          content-visibility: auto;
-          contain-intrinsic-size: auto 34px;
-        }
+           What that commit bought is not lost. The logo fetches it was aimed
+           at are held off by `loading="lazy"` on the image itself, and the
+           list's real cost — building every row — is bounded by the window in
+           `Catalog.tsx`, which is that same commit's other half. */
         /* The rule belongs between rows, not under the last one — which the
            container's own border already draws. */
         .table .row + .row {
@@ -1707,10 +1720,11 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         @media (max-width: 40rem) {
           .table,
           .table.rated {
-            grid-template-columns: auto auto minmax(6rem, 1fr) auto;
+            grid-template-columns: min-content min-content minmax(6rem, 1fr) auto;
           }
           .table.rated {
-            grid-template-columns: auto auto minmax(6rem, 1fr) auto auto;
+            grid-template-columns:
+              min-content min-content minmax(6rem, 1fr) auto auto;
           }
           .t-desc {
             display: none;
