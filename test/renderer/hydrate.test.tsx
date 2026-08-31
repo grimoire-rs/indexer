@@ -770,3 +770,43 @@ describe("fuzzy search", () => {
     expect(cards(host).map((c) => c.name)).toEqual(["alpha", "bravo", "charlie"]);
   });
 });
+
+describe("the search field's clear button", () => {
+  beforeEach(() => {
+    history.replaceState({}, "", "/");
+  });
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+  });
+
+  it("is absent until there is something to clear", async () => {
+    const host = hydrateWithQuery(serverMarkup(), "");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The `/` hint owns the corner while the field is empty; a disabled or
+    // invisible button sharing it would be a second thing to lay out.
+    expect(host.querySelector("button.search-clear")).toBeNull();
+    expect(host.querySelector("kbd.search-hint")).not.toBeNull();
+  });
+
+  it("empties the query, the URL and the results, and hands focus back", async () => {
+    const host = hydrateWithQuery(serverMarkup(), "charlie");
+    await vi.waitFor(() =>
+      expect(host.querySelector("button.search-clear")).not.toBeNull(),
+    );
+    expect(cards(host).map((c) => c.name)).toEqual(["charlie"]);
+
+    host.querySelector<HTMLElement>("button.search-clear")!.click();
+
+    await vi.waitFor(() => expect(location.search).toBe(""));
+    expect(cards(host)).toHaveLength(PACKAGES.length);
+    // Focus goes back to the field, not to a button that just unmounted.
+    expect(document.activeElement).toBe(
+      host.querySelector('input[type="search"]'),
+    );
+    expect(host.querySelector("button.search-clear")).toBeNull();
+  });
+});

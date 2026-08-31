@@ -1210,6 +1210,31 @@ export default function Catalog({
           <kbd class="search-hint" aria-hidden="true">
             /
           </kbd>
+          {/* Ours, in the hint's own box and its own place — the browser's
+              built-in `type="search"` clear button lands in the same corner
+              wearing the UA's styling, which belongs to no theme this site
+              has. It is hidden in CSS and this replaces it, so the corner
+              holds exactly one control that looks like the rest of the
+              toolbar: the key hint when the field is empty, the same box
+              carrying an X when it is not.
+
+              Focus goes back to the field rather than staying on a button
+              that is about to unmount — the same thing Escape already does
+              from in here. */}
+          {query && (
+            <button
+              type="button"
+              class="search-clear"
+              aria-label="Clear search"
+              title="Clear search"
+              onClick={() => {
+                setQuery("");
+                searchRef.current?.focus();
+              }}
+            >
+              <X size={12} aria-hidden="true" />
+            </button>
+          )}
         </div>
         {/* One row, three groups, in the order they narrow: what sort of
             thing, then what it is about, then what the catalog is

@@ -855,12 +855,12 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            that is not yet in use, so it withdraws the moment the field is
            focused or holds a query — at which point it would only be
            sitting on top of what is being typed. */
-        .search-hint {
+        .search-hint,
+        .search-clear {
           position: absolute;
           right: 0.5rem;
           top: 50%;
           translate: 0 -50%;
-          pointer-events: none;
           border: var(--grim-border-width) solid var(--grim-color-border);
           border-bottom-width: 2px;
           border-radius: var(--grim-radius-inset);
@@ -871,11 +871,31 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           line-height: 1;
           padding: var(--grim-space-2) var(--grim-space-3);
         }
+        .search-hint {
+          pointer-events: none;
+        }
         /* The two never coexist — the hint withdraws exactly when a query
            appears, which is when the clear button is rendered — so they share
            one corner rather than sitting beside each other. */
         .search-field:focus-within .search-hint,
         .search-field:has(input:not(:placeholder-shown)) .search-hint {
+          display: none;
+        }
+        /* Sized to the glyph rather than to a text line, so the box matches
+           the hint's height instead of growing around an SVG on a baseline. */
+        .search-clear {
+          display: grid;
+          place-items: center;
+          cursor: pointer;
+        }
+        .search-clear:hover {
+          color: var(--grim-color-fg);
+        }
+        /* The UA's own clear button, gone: it renders in this same corner in
+           Chromium and Safari, in a style that answers to no token here, and
+           it cannot be restyled beyond hiding. Ours replaces it. */
+        .controls input[type="search"]::-webkit-search-cancel-button {
+          appearance: none;
           display: none;
         }
         /* One line, always. Wrapping was the defect: at a narrow width the
