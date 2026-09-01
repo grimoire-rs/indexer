@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  # Rewrite CHANGELOG.md from the full git history. `release:prepare` runs this
+  # with the new tag; on its own it refreshes the Unreleased section, which is
+  # what a commit landing between releases needs.
+  changelog:
+    desc: Regenerate CHANGELOG.md from git history
+    cmd: git-cliff --output CHANGELOG.md
+
+  # What the next release would say, without writing anything.
+  changelog:preview:
+    desc: Preview the unreleased changes
+    cmd: git-cliff --unreleased
+
+  # Full release preparation: pick the next version, write it into package.json
+  # and the lockfile, regenerate CHANGELOG.md under the new tag, run the gate.
+  # After this task succeeds, the human reviews and commits.
+  #
+  # Version selection:
+  #   task release:prepare                          # interactive menu: auto | patch | minor | major
+  #   task release:prepare BUMP=minor               # skip the menu, force a bump level
+  #   task release:prepare BUMP=auto VERSION=1.4.0  # pin an exact version (BUMP is then ignored)
+  #
+  # BUMP is a required enum: with interactive mode on (.taskrc.yml) and a TTY it
+  # renders a selection menu; on CI / no TTY it must be passed on the CLI.
+  #
+  # `auto` reads the level off the conventional-commit subjects since the last
+  # tag, under cliff.toml's [bump] rules — which say a feat is a minor bump and
+  # a breaking change is not yet a major one. It is a second opinion, not an
+  # authority: a subject that undersells its own change bumps too little, and
+  # the other three levels are for saying so.
+  prepare:
+    desc: 'Prepare a release (interactive: pick auto|patch|minor|major; or BUMP=<level> / VERSION=x.y.z)'
+    requires:
+      vars:
+        - name: BUMP
+          enum: [auto, patch, minor, major]
+    cmds:
+      # One shell: the new version is not knowable until npm has written it, so
+      # it cannot be a `sh:` var (those run before the first command).
+      #
+      # `--no-git-tag-version` is what keeps this a *preparation*: npm writes
+      # package.json and package-lock.json and stops, leaving the commit and the
+      # tag to the human. It also skips npm's clean-tree check, which would
+      # otherwise refuse to run on the branch the release is being cut from.
+      - |
+        set -eu
+        {{if .VERSION}}level="{{.VERSION | trimPrefix "v"}}"{{else if eq .BUMP "auto"}}level=$(git-cliff --bumped-version){{else}}level="{{.BUMP}}"{{end}}
+        next=$(npm version "${level}" --no-git-tag-version)
+        echo "Next version: ${next}"
+        git-cliff --tag "${next}" --output CHANGELOG.md
+      - task: :check
+      - |
+        version="v$(node -p 'require("./package.json").version')"
+        echo ""
+        echo "Release prepared (${version}). Review changes, then:"
+        echo "  git add -A && git commit -m 'release ${version#v}'"
+        echo "  git tag ${version}"
+        echo "  git push --atomic origin main ${version}"

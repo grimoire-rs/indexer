@@ -95,6 +95,32 @@ task dev -- --help
 
 `task --list` has the rest; `task check` is the whole gate CI runs.
 
+### Cutting a release
+
+`CHANGELOG.md` is generated from git history by git-cliff and rewritten whole
+on every release, so an entry is only ever as good as the commit subject it
+came from — write the subject for the person reading the changelog. Non-`feat`,
+non-`fix` types are grouped or skipped per `cliff.toml`. `task
+release:changelog:preview` shows what the next release would say.
+
+```sh
+task release:prepare                # menu: auto | patch | minor | major
+task release:prepare BUMP=minor     # or name the level outright
+```
+
+`auto` takes the level from those same subjects (`cliff.toml`'s `[bump]` rules:
+a feat is a minor bump, a breaking change is not yet a major one). It is a
+second opinion — a subject that undersells its change bumps too little, and the
+other three levels are for saying so.
+
+The task writes the version into `package.json` and the lockfile, regenerates
+`CHANGELOG.md` under the new tag, and runs `task check`. Nothing is committed:
+review the diff, then run the three commands it prints. Pushing the `v*` tag is
+what publishes — see `.github/workflows/release.yml`.
+
+`task release:changelog` regenerates the file without releasing, which is what
+a commit landing between releases needs.
+
 The docs site is a separate toolchain and deliberately not part of `check` —
 `check` must stay runnable with no Python present. `task docs:serve` previews
 it, `task docs:build` is the strict build the `pages` workflow gates PRs with.

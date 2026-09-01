@@ -9,6 +9,11 @@ version: "3"
 # the tests and the dev server all live in package.json, so there is no second
 # definition here to drift out of step with it.
 
+# Release preparation lives in its own file for the same reason grimoire's
+# does: it is the one flow that writes to the tree rather than reading it.
+includes:
+  release: ./taskfiles/release.taskfile.yml
+
 vars:
   # Single source of truth for the docs toolchain pin (see docs:build below).
   MKDOCS_MATERIAL: 9.7.7

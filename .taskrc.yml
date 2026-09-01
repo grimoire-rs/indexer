@@ -1,0 +1,4 @@
+# Enables Task's interactive prompt for a `requires.vars` enum — `task
+# release:prepare` with no BUMP renders a patch/minor/major menu instead of
+# failing. On CI (no TTY) the same task demands BUMP on the command line.
+interactive: true

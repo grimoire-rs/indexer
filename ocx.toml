@@ -20,6 +20,10 @@ grim = "ocx.sh/grimoire/cli:latest"
 actionlint = "ocx.sh/actionlint/actionlint:1"
 lychee = "ocx.sh/lychee/lychee:0"
 gitleaks = "ocx.sh/gitleaks/gitleaks:8"
+# `task release:prepare BUMP=auto` and `task release:changelog`. It never
+# writes CHANGELOG.md — see cliff.toml for why — so it is a release-time tool
+# on the same footing as the hygiene gates above rather than part of `check`.
+git-cliff = "ocx.sh/git-cliff/git-cliff:2"
 
 [group.node22.tools]
 nodejs = "ocx.sh/nodejs/node:22"

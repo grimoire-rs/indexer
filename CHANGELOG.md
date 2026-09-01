@@ -4,393 +4,283 @@ All notable changes to `@grimoire-rs/indexer` are recorded here, in
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> This file starts at `0.5.0`. Releases up to and including `v0.4.4` shipped
-> before it existed and are not reconstructed here — the git tags and
-> `git log v0.4.3..v0.4.4` are the record for those. Every release from the
-> next one on is written down here.
-
 Component overrides sit in the **Unstable** tier of the
 [stability table](docs/reference/theme-overlay.md#stability): their file paths
 and props may move in a minor release, and this file is where that is
-announced. Everything in the Contract tier moves only in a major.
-
-An entry for such a move carries both halves or it announces nothing an
-overrider can act on: the component's name, and the move itself as old → new —
-`PackageRow`: `components/PackageRow.tsx` → `components/list/PackageRow.tsx`,
-props `{ pkg }` → `{ pkg, compact }`.
+announced. Everything in the Contract tier moves only in a major — so a commit
+that moves one says which component and where, old → new, in its subject or
+body, because that is all a reader gets here.
 
 ## [Unreleased]
 
-## [0.5.3] - 2026-09-01
+### Added
+
+- Publish the forge host in providers.rating_host *(ratings)*
+- Carry the picked scope into the add-registry link *(renderer)*
+
+## [0.5.3] - 2026-08-31
 
 ### Added
 
-- **Search is fuzzy, and reaches every field an index publishes.** It was a
-  case-insensitive substring test over the seven fields the island is handed, so
-  a typo matched nothing and a package could not be found by its licence,
-  vendor, repository, authors or documentation. A query now splits on spaces
-  into terms that are AND-combined and order-independent, and each may land on a
-  different key — `astro grimoire` finds a package whose keywords carry one word
-  and whose vendor carries the other. The full record set comes from
-  `/all.json`, already published and already a frozen public URL, so it costs
-  the island no payload: it and the matcher load on the first keystroke and not
-  before, as an 8.5 KB gzipped chunk nothing preloads. Until they land, and if
-  the fetch fails, the substring pass stands — the field is never dead.
-- **`relevance`, a sort mode**, and the reason the fuzzy pass is worth having:
-  it orders by match score. It is offered, stored and server-rendered like every
-  other mode, and with no query to rank it answers alphabetically — the order
-  the catalog opens on anyway — so a reader can leave it set and have every
-  later search come back ranked.
-- **A clear button in the search field.** Chromium and Safari draw one of their
-  own, in the UA's styling, in the same corner the `/` hint occupies, and it
-  cannot be restyled beyond hiding. So it is hidden and the control is rendered:
-  the hint's exact box, carrying an X instead of the key. The two never coexist,
-  and clicking it returns focus to the field.
-- **`sitemap.xml`, and a `robots.txt` naming it.** Written by `buildSite` from
-  the package list it already holds: every package page stated once, with no
-  crawler obliged to render an island or scroll it. This site emitted neither
-  before, so the landing page was the only path to a detail page — and the
-  windowed catalog below would have made that path a thin one.
-- **A `<noscript>` catalog on the landing page**, listing every package. Without
-  JavaScript the island never hydrates, so the reader would otherwise get one
-  slice of cards under a toolbar that does nothing.
+- --bulk, to look at the catalog at corporate size *(dev)*
+- Fuzzy search across every field, with a relevance order *(renderer)*
+- Give the search field its own clear button *(renderer)*
 
 ### Changed
 
-- **The catalog builds a viewport of the index, not all of it.** At 500
-  packages it took 1.9s to appear for a reader whose stored view is the list and
-  1.5s to switch views; both are now under 50ms, and the landing page goes from
-  3.42MB to 795KB. The island builds one viewport's worth and *grows* the slice
-  as a sentinel below the list comes into view — a growing slice rather than
-  true virtualization, so an item that has been built stays built and find-in-page
-  keeps working over everything reached. The keyword rail's two geometry-reading
-  layout effects are gated on a signature of the visible chips rather than
-  running on every commit, and the filter, sort and rail chain is memoized.
-- **The island is shipped only the fields a card renders**, through a new
-  `CardPackage` type and `cardPackage()` projection exported from
-  `lib/catalog.ts`. Astro serializes island props into an attribute on
-  `<astro-island>`, so every field handed to `<Catalog>` was paid for twice on
-  the landing page: at 250 packages the attribute was 323,044 bytes, 17.5% of
-  the page, most of it fields no card or row reads. It is 201,554 now (-37.6%).
-  Three Unstable-tier components take the narrower type — `PackageCard`,
-  `PackageRow` and `CardLogo`, props `{ pkg: CatalogPackage }` →
-  `{ pkg: CardPackage }`. An override reading `license`, `authors`, `vendor`,
-  `documentation`, `compatibility`, `revision`, `support`, `repository`,
-  `title`, `owner`, `schema`, `tags` or an unknown enrichment key off `pkg` now
-  fails to compile rather than rendering `undefined` in the browser; the detail
-  pages are untouched, and read the full record as before.
-- **The list view's columns are sized for the description.** The two marks are
-  `min-content` rather than `auto` and the name is `fit-content(14rem)` rather
-  than `minmax(8rem, 14rem)` — that 8rem floor made a list of short names pay a
-  fixed 8rem, so the description started after a column of empty space. The
-  row's gutter drops a step with them.
+- Ship the island only the fields a card renders *(renderer)*
+- Build a viewport of the catalog, not all of it *(renderer)*
 
 ### Fixed
 
-- **The list view's rows lost their subgrid columns.** `content-visibility:
-  auto`, added as a paint bound, applies size containment — and a size-contained
-  element cannot be a subgrid, so `grid-template-columns: subgrid` degraded to
-  `none` in silence and every row computed its own equal-sixths grid. Every cell
-  lined up perfectly and the alignment was fake. The bound comes off; what it
-  was aimed at is held by `loading="lazy"` on the logo and by the window above.
-- **The agent badge cleared WCAG AA.** `--grim-color-kind-agent` was `#b0641a`,
-  4.484:1 against the white card and so under AA's 4.5 for the 11.5px badge it
-  tints; it is `#a05c17` now, 5.20:1. Its four siblings were audited at the same
-  time and clear it unaided, so they are unchanged, and so is the dark palette.
-- **A stored `table` view no longer flips after the first paint.** The pre-paint
-  gate listed the sort, dir and deprecated preferences only, so a reader whose
-  stored view is the list got the server's cards painted first and the island's
-  table a moment later. `?kw=` had the same gap on the other half of the
-  condition — the parameter a keyword chip on a package page links to was never
-  checked. Both lists are pinned by a test now.
-- **The sort control's focus ring stays off a mouse click.** Chromium matches
-  `:focus-visible` on a `<select>` after a plain click, so the accent ring lit on
-  click and stayed lit beside the thin neutral chips until the reader clicked
-  elsewhere. No selector distinguishes focus that arrived from a pointer, so the
-  element marks itself on `pointerdown` and a keypress or a blur clears it. The
-  keyboard path keeps both the ring and its focus.
+- Hold the paint for a stored view and a kw deep link *(renderer)*
+- Lift the agent badge to WCAG AA, and ratchet the floors *(renderer)*
+- Verify the pack shape under both npm majors the matrix ships *(ci)*
+- Restore the list view's subgrid columns *(renderer)*
+- Keep the sort ring off a pointer interaction *(renderer)*
 
 ## [0.5.2] - 2026-08-31
 
 ### Fixed
 
-- **The sort control drew two borders when clicked.** Hover tints a control's
-  border to the accent and focus drew a 2px accent outline standing 1px clear
-  of it, so anyone who reached the control with a mouse had both at once — one
-  state reading as two lines with a gap between them. The ring merges onto the
-  border now, the way the card's focus state already did, and the offset comes
-  off every bordered control in the toolbar together rather than off the one
-  that showed it: the search field, the keyword overflow menu's search, both
-  sort halves and both view picks. Keyword chips gain the same ring, having
-  taken the browser's default until now.
-- **A long address no longer wraps the card's head onto a second line.** A
-  namespace breaks at its own slashes and dots, so a wide one took two rows and
-  left the card taller than its neighbours with the tail of the address against
-  the padding edge. It stays on one line and the overflow is trimmed from the
-  *front* — the registry host is on every address in an index and the
-  repository at the tail is what tells two apart — with the whole of it in the
-  element's `title`.
-- **Keyword chips could stutter, or stop part-way through the rail's slide.**
-  The rail's FLIP pass inverted each chip with an inline `transition: none` and
-  a `translate`, then dropped both on the next animation frame; any commit
-  landing inside that window left the chip carrying the offset with its
-  transition disabled, and nothing else took those off. It also measured seats
-  with `getBoundingClientRect`, which reports where a chip is *drawn*, so a
-  chip caught mid-slide recorded its animated box and the next inversion
-  compounded the error instead of correcting it. Neither window was rare: the
-  rail's own fit measurement re-commits whenever a rescore changes how many
-  chips fit. Seats now come from `offsetLeft`/`offsetTop`, which ignore
-  transforms and scroll, and the slide is a Web Animation — it starts without a
-  frame, writes nothing to `style`, and clears itself when it finishes or is
-  cancelled. `prefers-reduced-motion` is honoured by the effect rather than by
-  the stylesheet, and `--grim-duration-slow` is still its length.
+- Merge the focus ring onto the control's own border *(renderer)*
+- Trim a long card address from the front *(renderer)*
+- Run the keyword rail's slide as a Web Animation *(renderer)*
 
-## [0.5.1] - 2026-08-31
+## [0.5.1] - 2026-08-30
 
 ### Added
 
-- **`grim-indexer dev --host [addr]`.** Bare, it binds every interface; with a
-  value, that address. Without it the server binds loopback only — Astro's own
-  default — which is unreachable from a dev container, a VM or a WSL guest,
-  where the port forwards and the connection then hangs against a socket that
-  is not listening for it. `npm run dev -- --host` takes the same two forms.
-  Bare `--host` puts the preview on your network; the CLI reference says so.
-- **`CodeBlock.astro`**, a reusable code block: the site's own frame, the same
-  Shiki theme pair every rendered README uses, the same copy button and toast,
-  and an optional VS Code button. Props
-  `{ code, lang?, name?, vscodeHref?, vscodeLabel? }`; `vscodeHref` is a plain
-  URL, so `vscodeUrl`, `vscodeVoteUrl`, `addRegistryUrl` and a hand-written
-  deep link all work. Worked example in
-  [Reuse shipped components](docs/how-to/reuse-components.md#code-blocks).
-- **`data-slot="code-block"`**, for it. Contract tier, like every other slot.
-- **A second argument on `registryAddCommand` and `registryScopeChoices`**,
-  the registry to build the command for — defaulting to the one in your config,
-  so nothing existing changes. It is what lets a setup page draw the "add
-  registry" bar for an index *other* than the site's own: a corporate index in
-  the hero and the public one further down.
-- **A clear button on the keyword filters**, in the catalog toolbar. Rendered
-  only while a keyword is picked, and it lifts the keywords alone — Escape is
-  still what clears the search and the kinds with them.
+- Add a --host flag to dev *(cli)*
+- Add CodeBlock, a code block an index's page can use *(renderer)*
+- Let the registry command builders take another index *(renderer)*
+- Add a clear button to the keyword filters *(renderer)*
+
+### Changed
+
+- Keep off-screen cards out of layout and paint *(renderer)*
+
+### Documentation
+
+- Record the unreleased changes *(changelog)*
 
 ### Fixed
 
-- **The keyword overflow menu opened invisibly.** Its panel was an absolutely
-  positioned child of the toolbar's filter row, which is a scroll container, so
-  the panel was cropped to the row and stretched the row's scroll extent — a
-  menu nobody could see, with a stray horizontal and vertical scrollbar to show
-  for it. It is a popover now, which puts it in the top layer, outside every
-  ancestor's `overflow`, and brings Escape and light dismiss with it. The
-  trigger is a `<button>` rather than a `<summary>`, so the toolbar's arrow-key
-  navigation now reaches it.
-- **The detail page's logo drifted down under a long description.** The header
-  centred the tile against the text beside it, so the same package's mark sat
-  at a different height on every page. It holds against the title now.
-- **Dropped the tinted square behind a package logo**, on the cards, the list
-  rows and the detail header alike. A logo is a designed mark already sitting
-  on its own ground, so the slot framed it twice — most visibly for the many
-  logos that are themselves a rounded square, which then sat inside a slightly
-  larger one. The slot still reserves the same box, so nothing shifts. The
-  dashed frame the broken-logo state drew goes with it — it read as a fault in
-  the layout rather than in the image; the slashed glyph is what says the logo
-  failed, and `role="img"` with a label is what announces it. The
-  initial-letter tile a package with no logo gets is unchanged: there the
-  coloured ground is the mark.
-- **The dev server's URL is a legal URL when the server binds an IPv6
-  address.** An unbracketed literal reads its own colons as a port, so
-  `http://::1:4321/` threw `ERR_INVALID_URL` at the first `new URL` against it
-  and took `dev:smoke` down with a message naming neither the address nor the
-  host. Wildcard binds still become `localhost`; anything carrying a colon is
-  bracketed.
-- **The detail page's logo tile is a fixed square.** `aspect-ratio: 1` derived
-  its width from the height the box had *before* `align-self: stretch` grew it,
-  so it rendered 56x93 beside a logo and 56x70 beside a letter — portrait,
-  never square, and narrow enough to read as bounding the image rather than
-  framing it.
-- **The list row's glyphs sit on the row's centre.** `vertical-align: middle`
-  aligns to half the parent's x-height, about 2px under the line's true middle
-  at this step, and the upvote arrow's optical nudge added a third pixel the
-  same way. The kind and rating cells are flex boxes now and centre their
-  contents as boxes.
-- **Keyword chips could freeze part-way through the rail's slide.** The rail
-  animates a rescore by inverting each chip with an inline `translate` and
-  dropping it on the next animation frame. A rescore that also changes how many
-  chips fit commits a second time, and that commit cancelled the frame before
-  it ran — leaving every moved chip parked at its offset with transitions
-  disabled. Deselecting the last keyword hit it most often, because that
-  rescore is the largest. The offsets are now cleared before each measurement
-  and on cleanup, so an interrupted slide resolves instead of sticking.
-- **Switching between the cards and list views repainted the whole catalog.**
-  Off-screen cards are skipped until they are scrolled to. The two views share
-  no element types, so a switch still rebuilds every item — past a few hundred
-  packages the answer is windowing the list, and this is not that.
+- Bracket an IPv6 address in the dev server's URL *(renderer)*
+- Make the detail page's logo tile a fixed square *(renderer)*
+- Centre the list row's glyphs on the row, not the x-height *(renderer)*
+- Open the keyword overflow menu in the top layer *(renderer)*
+- Stop keyword chips freezing part-way through the rail's slide *(renderer)*
+- Hold the detail logo against the title, and stop framing it *(renderer)*
 
 ## [0.5.0] - 2026-08-30
 
 ### Added
 
-- **Theme overlay.** A `theme/` directory in an index repo is copied over the
-  renderer's staged sources before every build. A file at a path the renderer
-  does not ship adds one — `theme/pages/setup.astro` becomes `/setup/` — and a
-  file at a path it does ship replaces it. Structure is customizable now, not
-  just CSS. Only on the staged-copy path: a caller-supplied `srcDir` is left
-  alone.
-- **Two paths the overlay refuses**, `theme/lib/**` and a root
-  `theme/content.config.ts`, so the renderer stays free to move its own helpers
-  and its one content-collection entrypoint. Each prints a line to stderr and
-  the build still succeeds. The same rule applies to `dev`'s mirror, because a
-  deny-list only one of the two writers honours lets an author develop against
-  a file the build then drops in silence. It is a compatibility guard, not a
-  security boundary: the copy does not follow symlinks either way.
-- **`@grim/*` import specifier**, resolving to the renderer's sources so an
-  added page reaches the layout, components and helpers without a relative
-  path that encodes how deep it sits under `pages/`. It resolves *after* the
-  overlay, so an index that replaced a component imports its own.
-- **`@grim-original/*`**, the same tree as it was *before* the overlay ran, so
-  an override can wrap the file it replaced instead of owning it outright.
-  `@grim/*` cannot serve that purpose once the theme has taken the path, and
-  the package's `exports` do not publish the Astro sources for a deep import.
-- **One stderr line per overlaid path that replaces a shipped file**, naming
-  the path and the indexer version that shipped it. That is what makes the
-  Unstable tier below honest without a manifest. A path that only adds a file
-  is not logged.
-- **`dev` mirrors `theme/**` edits** into the staged tree, so a page reloads as
-  it is saved. It creates `theme/` first if it is absent — a directory added
-  after the server started now mirrors instead of 404ing forever — and removes
-  it again on shutdown if you left it empty. Deletes are still not mirrored;
-  restart for those. A fault in the platform's recursive-watch backend disables
-  mirroring with a message rather than taking the server down.
-- **`nav` config key.** An ordered `{label, href}` list that takes the header
-  over. Unset, it synthesizes exactly what the header has always shown, so an
-  index that predates the key renders unchanged; `[]` leaves the theme toggle
-  standing alone.
-- **`notice` config key.** One line above the page content, in the site's own
-  width, on every page, carrying `data-slot="site-notice"`. Named `notice`
-  rather than `banner` because `--grim-color-banner-*` is the existing amber
-  palette for the deprecated-package banner, and a key called `banner` would
-  invite an index runner to override that token family by mistake.
-- **`nav[].external` and `footerLinks[].external`.** Optional per entry, and it
-  decides only the new-tab affordance — the deployment base prefix is applied
-  either way. Unset keeps the old inference from the href's shape. `false` is
-  the case that inference cannot express: an absolute URL that is still your
-  own site, a staging host or an intranet mirror.
-- **A build-time warning for a `nav` or `footerLinks` href that leads nowhere.**
-  A `/`-rooted href matching no emitted route and no `public/` file prints
-  `nav[0].href "/setup/": nothing is published at that path — the link will
-  404`. It warns and never fails: a path served by something outside the build
-  is indistinguishable from a typo, and refusing a whole site over a footer
-  typo is worse than the typo. Checked after the build, which is the one moment
-  both the emitted routes and every `public/` layer exist at once.
-- **A warning for an unrecognised top-level key in `index.config.json`**,
-  naming the key. Without it a typo — or a config predating the `banner` →
-  `notice` rename — loaded clean and silently rendered nothing.
-- **`init` scaffolds `theme/README.md` and a `tsconfig.json`** mapping
-  `@grim/*` for editors. The README states where a page goes and which parts of
-  the overlay are promised, which a `.gitkeep` could not; both reserve `theme/`
-  for git equally well. `theme/pages/` is no longer created empty. The build
-  does not read that tsconfig.
-- **A documentation site** (MkDocs Material, Diátaxis), built `--strict` as the
-  docs' pre-merge gate and published to GitHub Pages. `task docs:build`,
-  `docs:serve`, `docs:clean` — deliberately not part of `task check`, which
-  must stay runnable with no Python toolchain.
-- **Individually replaceable components**: `SiteHeader`, `SiteFooter`,
-  `CommandBar`, `CopyButton`, `CardLogo`, `PackageCard`, `PackageRow`.
-- **This changelog**, which two docs pages already made the sole mitigation for
-  the Unstable tier. It ships in the npm tarball, so the copy that matches your
-  pinned version is `node_modules/@grimoire-rs/indexer/CHANGELOG.md`.
-- **`npm run typecheck:tests`**, type-checking the `test` tree under its own
-  `tsconfig.test.json`. Deliberately not wired into `task check` yet: the tree
-  has 95 real type errors, which is its own piece of work.
+- Carry the rating thread URL into the catalog *(renderer)*
+- Redraw the package card, and keep the view across a visit *(renderer)*
+- Give the detail page its right column back *(renderer)*
+- Pick keyword chips by splitting power *(renderer)*
+- Give the catalog a keyword facet and a list view *(renderer)*
+- Ship square, behind one radius knob *(renderer)* **BREAKING**
+- **Migration:** every corner is square by default. `--grim-radius-base` is the whole decision — `0px` now, `4px` restores the rounding of `0.4.x` and earlier in one line. The four measurement steps derive from it and hold their ratios; overriding one step directly still beats the derivation, so a consumer wanting square surfaces and rounded controls sets that step and ignores the knob.  Four steps at 4/6/8/10px was a distinction nobody perceived — they were only pickable after their roles were written down, and the package list had already ended up on the wrong one silently. Square reads as the developer tool this is, and `pill` stays off the knob because a chip is a
+- Show the package logo in the list view *(renderer)*
+- Add nav and notice, behind one URL guard for every link value *(config)* **BREAKING**
+- **Migration:** `footerLinks[].href` now accepts a site-root path as well as an absolute URL, and both link keys are validated when the config loads, so a
+- Lay an index repo's theme/ over the shipped sources *(renderer)*
+- Scaffold theme/README.md and an editor tsconfig that loads *(init)* **BREAKING**
+- **Migration:** `init` no longer creates `theme/pages/.gitkeep`. An index scaffolded before this keeps its own copy; nothing removes it.
 
 ### Changed
 
-- **`footerLinks[].href` now accepts a site-root path** (`/setup/`) as well as
-  an absolute `http(s)` URL — previously `http(s)` only. `nav` takes the same
-  rule from one shared validator, and so now do `logo` and `favicon`, which had
-  three different answers between them and one that validated nothing. Both
-  link keys are checked when the config *loads*, so a `javascript:` or
-  protocol-relative href fails the build with the key that carried it, rather
-  than reaching a rendered anchor. A bare relative path is still refused: it
-  would resolve against whichever page carries the link, and the detail pages
-  sit two levels deep.
-- **`/\host/x` and userinfo are refused everywhere a config value becomes a
-  URL.** Browsers read `/\host/x` the way they read `//host/x`, and
-  `https://good.test@evil.test/` resolves to `evil.test` while reading as
-  `good.test`. Two of the four validators already rejected userinfo; all four
-  do now.
-- **Footer links go through the deployment base prefix, and honour the same
-  new-tab rule as the header.** They did neither before. **This changes an
-  existing site:** an `https://` footer link now opens in a new tab. Set
-  `"external": false` on the entry to keep it in the same tab.
-- **`Base.astro` no longer contains the header and footer markup** — they are
-  `SiteHeader.astro` and `SiteFooter.astro`. Neither takes props: everything
-  they draw is build-time config. The head, the centered `main`, the copy toast
-  and every default style still come from the layout.
-- **The platform-preselect loop moved into `Base.astro`**, so a `<CommandBar
-  detect />` on a page you added under `theme/pages/` preselects the visitor's
-  own platform. It used to run only on the shipped landing page, so the same
-  markup elsewhere silently showed the configured first choice instead.
-- **`Catalog.tsx` no longer contains the card and row markup** — they are
-  `PackageCard.tsx` and `PackageRow.tsx`, and they *do* take props, because a
-  component that hydrates in the browser cannot read the build-time payload.
-  Those props are the contract the Unstable tier is about.
-- **The install/registry/package command boxes are one `CommandBar`**, with
-  their choices derived in `@grim/lib/commands` — so a page an index adds can
-  draw the site's real install bar from the site's own config instead of
-  restating the command in a code block that drifts.
-- **The renderer ships square.** `--grim-radius-base` is `0px`; set it to `4px`
-  to restore the rounding of `0.4.x` and earlier in one line.
-- **Radius tokens are named for their role**: `--grim-radius-sm`/`-md`/`-lg`/
-  `-xl` are now `-code`, `-inset`, `-control` and `-surface`, and they derive
-  from `--grim-radius-base` rather than carrying their own values. `-pill` is
-  unchanged and off the knob. An override under an old name is silently
-  ignored, like any unknown property.
-- **The list view leads with the package logo**, then the name, then the kind
-  mark.
-- **The README is a pointer to the docs site.** The theming contract, the stats
-  sidecar schema and the CLI reference moved into `docs/`.
-- **The scaffolded `tsconfig.json` sets `module` and `moduleResolution`** —
-  `esnext`/`bundler`, what actually reads those specifiers — and no longer sets
-  `baseUrl`, which is deprecated on the pinned TypeScript and made the file
-  fail to load. It stays free of `extends` on purpose.
-- **The docs workflow splits `configure-pages` into its own job**, so the job
-  that resolves and executes unpinned transitive PyPI packages holds
-  `contents: read` and nothing else — `id-token: write` is a job-wide grant.
-  lychee now checks the external links `mkdocs --strict` never resolves and,
-  with `--include-fragments`, the `#anchor` half of the internal ones, which
-  `--strict` logs at INFO and exits 0 on.
-- **eslint and vitest skip `.agents/worktrees/`.** Both tools walk the tree
-  themselves rather than asking git, and neither knew about a path `.gitignore`
-  had carried all along: eslint found a `tsconfig.json` per worktree and
-  reported a parse error on every file in the repo, and vitest collected and
-  ran each worktree's whole suite. A `.gitignore` entry and a tool's own ignore
-  list are two independent claims.
+- Name the radius tokens for their role *(renderer)* **BREAKING**
+- **Migration:** `--grim-radius-sm`, `-md`, `-lg` and `-xl` are now `--grim-radius-code`, `-inset`, `-control` and `-surface`. `-pill` is unchanged and no value moved. A `customCss` override under an old name is silently ignored, like any unknown custom property; `README.md` carries the migration note.  Every other family in `tokens.css` names the role a value plays rather than its size — that is the rule this sheet states about itself, and the radius scale was the one family breaking it. The cost was not cosmetic: with nothing saying which step a surface should take, the package list ended up on the control step next to cards on the surface step, and the two corners disagreed. That is fixed here too.  The contract comment now publishes what each step is for, and warns against picking by eye — the same radius on a shorter box reads as more curve, so two corners that look different are often the same step.
+- Lead the list row with logo, name, then kind *(renderer)*
+- Put the kind mark before the name in the list *(renderer)*
+- Make the header, footer, command bar and cards replaceable *(renderer)* **BREAKING**
+- **Migration:** an `https://` footer link now opens in a new tab. Set
+
+### Documentation
+
+- Write down the local loop -- direnv, task, and the dev index
+- Publish a documentation site, and start a changelog
 
 ### Fixed
 
-- **Scaffold → `npm install` → build was broken end to end.** An index repo has
-  its own `node_modules`, and the staged root Astro builds in sits inside it,
-  so `preact-render-to-string` resolved to a second copy of preact. The first
-  hook rendered died with `Cannot read properties of undefined (reading
-  'context')`, in a stack naming preact and lucide and nothing that leads back
-  to dependency resolution. Every preact-touching module is pinned to one copy
-  now, and `preact-render-to-string` is a declared dependency so it resolves
-  under an isolated install layout too.
-- **A replaced header with no theme toggle no longer breaks the rest of the
-  page.** The `#theme-toggle` lookup in `Base.astro` is null-safe, so the copy
-  buttons, the picker wiring and the toast still run.
-- **A `tsconfig.json` in the index repo that cannot be parsed is now named.**
-  It made the build fail while rendering a page with an error about preact; the
-  usual cause is an `extends` pointing into a `node_modules` that has not been
-  installed yet.
-- **`dev` cleans up after itself.** Stopping the server is idempotent, and a
-  failure part-way through staging removes the scratch directory rather than
-  leaving it in the index repo. One case is not fixable from inside shutdown
-  and is written up in the docs: interrupting `dev` within about a second of
-  boot can leave a `.index-*` holding Vite's `deps_temp_<hash>`, which the
-  dependency optimizer recreates after the removal has already returned.
+- Hang the kind watermark off the corner by a share of its size *(renderer)*
+- Point the dev fixture at the real extension id *(dev)*
+
+## [0.4.4] - 2026-08-29
+
+### Fixed
+
+- Upload the tally -- a dotfile artifact was silently dropped *(ratings)*
+
+## [0.4.3] - 2026-08-28
+
+### Fixed
+
+- Stop locking threads by default -- a locked one cannot be voted on *(ratings)* **BREAKING**
+
+## [0.4.2] - 2026-08-28
+
+### Added
+
+- Publish zero-vote threads so a first vote can be cast *(ratings)* **BREAKING**
+
+## [0.4.1] - 2026-08-28
+
+### Added
+
+- Make the whole theming surface a token contract *(renderer)* **BREAKING**
+- **Migration:** every CSS custom property is renamed. The unnamespaced tokens (`--accent`, `--bg`, `--fg`, and the rest) are now `--grim-color-*`, and space, type, radius, border width, motion and elevation become overridable for the first time under `--grim-space-*`, `--grim-text-*`, `--grim-radius-*`, `--grim-border-width`, `--grim-duration-*` and `--grim-shadow-*`. A `theme.css` written against 0.4.0 or earlier stops applying silently rather than erroring.
+- Publish a checkpoint, and seed the sidecars from it *(enrich)*
+
+### Fixed
+
+- Stop reading a large page as a transport failure *(ratings)*
+- Stop every run dying on PAGE_SIZE at import *(ratings)*
+
+## [0.4.0] - 2026-08-26
+
+### Added
+
+- Publish a stats.json sidecar from the index's own forge (#5) *(ratings)*
+- Carry grim's annotation fields, and date every package *(enrich)*
+- Show provenance and support, and publish the updated signal *(renderer)*
+
+### Documentation
+
+- Document the second stat, and release 0.4.0
+
+## [0.3.1] - 2026-07-30
+
+### Documentation
+
+- Point at the index template repository
+
+## [0.3.0] - 2026-07-30
+
+### Added
+
+- Own the pipeline in the index repo, and harden the gate *(ci)* **BREAKING**
+- **Migration:** the reusable workflows `grimoire-rs/indexer/.github/workflows/index-{pages,validate}.yml` and the GitLab remote include are gone. An index scaffolded on 0.2.x keeps working on its pinned tag; to move, bump the dependency, add a `ci` block to index.config.json, run `npm run ci`, and delete the old thin callers - `ci --check` reports them as stale.
+
+## [0.2.2] - 2026-07-28
+
+### Fixed
+
+- Stop defaulting the keys that name one specific index *(config)*
+
+## [0.2.1] - 2026-07-28
+
+### Fixed
+
+- Stop gitignoring the index's own public/ directory *(init)*
+
+## [0.2.0] - 2026-07-28
+
+### Added
+
+- Write a contents sidecar from the artifact payload *(enrich)*
+- Add a header logo, and let an index drop the attribution *(config)*
+- Rebuild the hero and the package page *(renderer)*
+
+## [0.1.9] - 2026-07-28
+
+### Added
+
+- Offer the index as a one-click VS Code add-registry link *(renderer)*
+
+## [0.1.8] - 2026-07-28
+
+### Fixed
+
+- Hand the gate every changed path, unfiltered *(validate)*
+
+## [0.1.7] - 2026-07-28
+
+### Added
+
+- Read package READMEs, logos and versions from the registry (#1) *(enrich)*
+
+## [0.1.6] - 2026-07-28
+
+### Fixed
+
+- Give the GitLab gate the git it shells out to *(ci)*
+
+## [0.1.5] - 2026-07-28
+
+### Fixed
+
+- Resolve every internal URL against the site's base path *(renderer)*
+
+## [0.1.4] - 2026-07-28
+
+### Documentation
+
+- Say the gate does not cover a first-party announce *(init)*
+- Record what the live end-to-end trial settled
+
+### Fixed
+
+- Point --with-skills announce at the scaffolded repo *(init)*
+- Name the status check branch protection can require *(init)*
+
+## [0.1.3] - 2026-07-28
+
+### Fixed
+
+- Ship the reusable workflows the scaffold points at *(ci)*
+
+## [0.1.2] - 2026-07-28
+
+### Fixed
+
+- Declare the repository provenance attests to
+
+## [0.1.1] - 2026-07-28
+
+### Added
+
+- Add the grimoire-index renderer, gate and CLI
+
+### Changed
+
+- Publish as @grimoire-rs/indexer
+- Name the binary grim-indexer
+
+### Documentation
+
+- State the real status and warn off the broken 0.1.0
+
+### Fixed
+
+- Declare a bin npm will not silently strip
 
 [Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.3...HEAD
 [0.5.3]: https://github.com/grimoire-rs/indexer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/grimoire-rs/indexer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/grimoire-rs/indexer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/grimoire-rs/indexer/compare/v0.4.4...v0.5.0
+[0.4.4]: https://github.com/grimoire-rs/indexer/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/grimoire-rs/indexer/compare/v0.4.2...v0.4.3
+[0.4.2]: https://github.com/grimoire-rs/indexer/compare/v0.4.1...v0.4.2
+[0.4.1]: https://github.com/grimoire-rs/indexer/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/grimoire-rs/indexer/compare/v0.3.3...v0.4.0
+[0.3.1]: https://github.com/grimoire-rs/indexer/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/grimoire-rs/indexer/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/grimoire-rs/indexer/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/grimoire-rs/indexer/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/grimoire-rs/indexer/compare/v0.1.9...v0.2.0
+[0.1.9]: https://github.com/grimoire-rs/indexer/compare/v0.1.8...v0.1.9
+[0.1.8]: https://github.com/grimoire-rs/indexer/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/grimoire-rs/indexer/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/grimoire-rs/indexer/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/grimoire-rs/indexer/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/grimoire-rs/indexer/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/grimoire-rs/indexer/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/grimoire-rs/indexer/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/grimoire-rs/indexer/tree/v0.1.1
+
