@@ -11,7 +11,7 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
-## [Unreleased]
+## [0.5.4] - 2026-09-01
 
 ### Added
 
@@ -259,7 +259,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
-[Unreleased]: https://github.com/grimoire-rs/indexer/compare/v0.5.3...HEAD
+[0.5.4]: https://github.com/grimoire-rs/indexer/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/grimoire-rs/indexer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/grimoire-rs/indexer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/grimoire-rs/indexer/compare/v0.5.0...v0.5.1
