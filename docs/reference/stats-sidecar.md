@@ -11,7 +11,11 @@ none of them writes it.
 {
   "schema_version": 1,
   "generated_at": "2026-08-18T09:30:00Z",
-  "providers": { "rating": "github", "updated": "indexer" },
+  "providers": {
+    "rating": "github",
+    "rating_host": "api.github.com",
+    "updated": "indexer"
+  },
   "entries": {
     "ghcr.io/acme/code-review": {
       "rating": {
@@ -30,6 +34,7 @@ none of them writes it.
 | `schema_version` | int | Monotonic. Currently `1`. |
 | `generated_at` | string | RFC 3339, UTC. |
 | `providers` | object | Which backend produced each signal, keyed by stat name. `providers.rating` is `"github"` or `"gitlab"`. |
+| `providers.rating_host` | string | The forge host those threads live on — host authority only (`host` or `host:port`), no scheme and no path. Derived from the GraphQL endpoint the tally run actually used, so a GHES or self-managed GitLab index publishes its own instance with no extra configuration. Absent ⇒ the consumer's built-in default for `providers.rating`. |
 | `entries` | object | Keyed by artifact ref, **exactly as that ref appears in `all.json`**. |
 | `entries[ref]` | object | One key per signal. |
 | `entries[ref].rating.up` | int | Upvotes, `0` included. A thread that exists but has no votes is published as `0`, so its `url` is there to vote at. |
@@ -40,6 +45,15 @@ none of them writes it.
 `target` and `url` are opaque: no client parses one and no client constructs
 one. They differ per forge and may change shape without a `schema_version`
 bump, which is exactly what "opaque" buys.
+
+**`rating_host` is the one `providers` key that is not carried forward.**
+Every other key survives a run that did not produce it; this one is
+replaced or dropped on each tally, because it names an endpoint a consumer
+will send a credential to and a seeded value may describe an instance the
+index no longer uses. Consumers apply their own rules to it — `grim`
+accepts it only as a bare host, refuses a loopback form from a remote
+index, and requires `--token-host` before it will send an injected
+credential there.
 
 **`entries[ref]` is a bag of stats, not a record.** A ref may carry `updated`
 and no `rating`, or the reverse. A further signal arrives as a sibling key

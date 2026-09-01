@@ -198,7 +198,7 @@ describe("a complete run", () => {
     expect(stats()).toEqual({
       schema_version: 1,
       generated_at: expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/) as unknown,
-      providers: { rating: "github" },
+      providers: { rating: "github", rating_host: "api.github.com" },
       entries: {
         "ghcr.io/acme/one": {
           rating: { up: 6, target: "D_ghcr.io/acme/one", url: expect.any(String) as unknown },
@@ -284,7 +284,60 @@ describe("R-2 — nothing empties a published rating set", () => {
     // run created for the same ref, which is the bag-of-stats shape working.
     expect(entries["ghcr.io/acme/two"].downloads).toEqual({ total: 12 });
     expect(entries["ghcr.io/acme/two"].rating).toMatchObject({ up: 0 });
-    expect(stats().providers).toEqual({ rating: "github", downloads: "registry" });
+    expect(stats().providers).toEqual({
+      rating: "github",
+      downloads: "registry",
+      rating_host: "api.github.com",
+    });
+  });
+});
+
+describe("providers.rating_host", () => {
+  it("publishes the host of the endpoint the run actually used", async () => {
+    // A GHES instance: the CI runner predefines the endpoint, so the host is
+    // derived rather than configured and cannot disagree with where the
+    // threads were created.
+    vi.stubEnv("GITHUB_GRAPHQL_URL", "https://ghe.corp.example/api/graphql");
+    scaffold();
+    routes({
+      pages: [
+        json({
+          data: {
+            repository: {
+              discussions: { pageInfo: { hasNextPage: false }, nodes: [] },
+            },
+          },
+        }),
+      ],
+    });
+    expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(0);
+    expect((stats().providers as Record<string, unknown>).rating_host).toBe("ghe.corp.example");
+  });
+
+  it("replaces a stale host carried by the seed", async () => {
+    // Unlike every other `providers` key, this one is not carried forward:
+    // it names an endpoint a consumer sends a credential to, and the seed's
+    // value may describe an instance this index no longer uses.
+    scaffold();
+    routes({
+      seed: json({
+        schema_version: 1,
+        generated_at: "2026-01-01T00:00:00Z",
+        providers: { rating: "github", rating_host: "old.corp.example" },
+        entries: {},
+      }),
+      pages: [
+        json({
+          data: {
+            repository: {
+              discussions: { pageInfo: { hasNextPage: false }, nodes: [] },
+            },
+          },
+        }),
+      ],
+    });
+    expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(0);
+    expect((stats().providers as Record<string, unknown>).rating_host).toBe("api.github.com");
   });
 });
 

@@ -65,6 +65,24 @@ function forgeEnv(provider: "github" | "gitlab"): { api: string; project: string
   return { api: api ?? "", project, token };
 }
 
+/**
+ * The forge host to publish as `providers.rating_host`, derived from the
+ * GraphQL endpoint this run actually talked to.
+ *
+ * Derived rather than configured, so it can never disagree with where the
+ * threads were created — and derived per run, so an operator who moves the
+ * instance publishes the new host without touching `index.config.json`.
+ * `undefined` for an endpoint that does not parse, which drops the key
+ * rather than publishing a value no consumer could dial.
+ */
+function ratingHost(api: string): string | undefined {
+  try {
+    return new URL(api).host || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Every ref in `index/`. The tally runs before `build`, so `all.json` does not exist yet. */
 function desiredRefs(root: string, findMetadataFiles: (dir: string) => string[]): string[] {
   const refs: string[] = [];
@@ -161,7 +179,15 @@ export async function ratings(root: string): Promise<ExitCode> {
 
   for (const conflict of result.conflicts) console.error(conflictWarning(conflict));
 
-  const doc = statsDocument(mergeStats(seed, "rating", cfg.provider, result.fresh));
+  const merged = mergeStats(seed, "rating", cfg.provider, result.fresh);
+  // Replaced or dropped every run, never carried: a seed's `rating_host` is a
+  // claim about an endpoint this run may no longer be using, and a consumer
+  // sends a credential to it.
+  const providers = { ...merged.providers };
+  const host = ratingHost(forge.api);
+  if (host === undefined) delete providers.rating_host;
+  else providers.rating_host = host;
+  const doc = statsDocument({ ...merged, providers });
   fs.writeFileSync(path.join(rootDir, STATS_FILE), JSON.stringify(doc, null, 2) + "\n");
 
   console.log(logLine(result));
