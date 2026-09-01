@@ -14,7 +14,11 @@ const { config, packages } = data;
 // One-click counterpart of the `grim config registry add` line: the VS Code
 // extension registers a URI handler that writes the registry after a modal
 // confirmation. Null whenever the link would not work — see `addRegistryUrl`.
-const addRegistry = addRegistryUrl(config.vscodeExtension, config.registry);
+//
+// Scoped `global` because that is the choice the picker beside it starts on;
+// picking Project rewrites this href from `data-os-href` (see `__grimPick`),
+// so the two halves of the bar never disagree about where the write lands.
+const addRegistry = addRegistryUrl(config.vscodeExtension, config.registry, "global");
 
 // The extension's own marketplace page — the one thing on this page that
 // helps a visitor who does not have it installed yet.
@@ -91,6 +95,7 @@ const scopeChoices = registryScopeChoices(config);
                   <a
                     slot="action"
                     class="seg brand-link"
+                    data-os-link
                     href={addRegistry}
                     title="Add this index via VS Code"
                     aria-label="Add this index via VS Code"

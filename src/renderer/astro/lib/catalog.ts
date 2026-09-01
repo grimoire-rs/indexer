@@ -238,6 +238,13 @@ const REGISTRY_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
  * `vscode://<publisher.extension>/add-registry?index=<url>&alias=<name>` — the
  * one-click counterpart of the `grim config registry add` line beside it.
  *
+ * `scope` carries the Scope picker sitting in the same bar, so the button
+ * writes where the copyable command says it would. The extension clamps it
+ * rather than trusting it — with no folder open the write is global whatever
+ * the link asked for — and words its confirmation modal off the RESULT, so a
+ * page steering a machine-wide write is what the user reads before agreeing.
+ * Omitting it leaves the extension on its own host-derived default.
+ *
  * Null unless the link would actually work: the handler takes https only (an
  * index locator is fetched with whatever credentials the user configures for
  * it), refuses embedded credentials, and caps the URL at 2048 characters.
@@ -247,6 +254,7 @@ const REGISTRY_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
 export function addRegistryUrl(
   extension: string | null,
   registry: { alias: string; index: string } | null,
+  scope?: "global" | "project",
 ): string | null {
   if (!extension || !registry || !REGISTRY_ALIAS.test(registry.alias)) return null;
   let url: URL;
@@ -258,6 +266,7 @@ export function addRegistryUrl(
   if (url.protocol !== "https:" || url.username !== "" || url.password !== "") return null;
   if (url.href.length > 2048) return null;
   const query = new URLSearchParams({ index: url.href, alias: registry.alias });
+  if (scope) query.set("scope", scope);
   return `vscode://${extension}/add-registry?${query.toString()}`;
 }
 

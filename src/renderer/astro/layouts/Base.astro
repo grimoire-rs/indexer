@@ -104,6 +104,12 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         for (const glyph of bar.querySelectorAll("[data-os-glyph]")) {
           glyph.hidden = glyph.dataset.osGlyph !== pick.dataset.osName;
         }
+        // The action segment follows the choice where it has one to follow:
+        // the registry bar's VS Code link carries the scope the command names,
+        // so picking Global cannot leave the button writing project config.
+        // A choice with no href leaves the link alone rather than blanking it.
+        const link = bar.querySelector("[data-os-link]");
+        if (link && pick.dataset.osHref) link.href = pick.dataset.osHref;
       };
 
       // The platform a bar should start on, or null for one this visitor's

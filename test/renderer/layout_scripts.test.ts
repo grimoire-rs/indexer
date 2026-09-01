@@ -130,3 +130,47 @@ describe("C-012 — the layout preselects the host platform", () => {
     expect(doc.querySelector('[data-os-name="Linux"]')!.getAttribute("aria-checked")).toBe("true");
   });
 });
+
+/** The registry bar: a scope picker whose choices each carry their own deep
+ *  link, plus the action segment that link belongs to. */
+const SCOPE_BAR = `
+  <div class="cmd-bar" data-os-switch data-os-noun="registry add command">
+    <div data-copy="grim --global config registry add hub --index https://index.test/">
+      <code>grim --global config registry add hub --index https://index.test/</code>
+    </div>
+    <button data-os-pick="grim --global config registry add hub --index https://index.test/"
+            data-os-name="Global" data-os-href="vscode://ext/add-registry?alias=hub&amp;scope=global"
+            aria-checked="true"></button>
+    <button data-os-pick="grim config registry add hub --index https://index.test/"
+            data-os-name="Project" data-os-href="vscode://ext/add-registry?alias=hub&amp;scope=project"
+            aria-checked="false"></button>
+    <a data-os-link href="vscode://ext/add-registry?alias=hub&amp;scope=global"></a>
+  </div>
+`;
+
+describe("C-012 — the scope picker steers the VS Code link too", () => {
+  // The extension honours `scope=` on `/add-registry`, so the button has to
+  // follow the picker: someone who picked Project and clicked the icon used
+  // to get the global write the initial href named.
+  it("rewrites the action link when a scope is picked", () => {
+    const doc = renderPage(SCOPE_BAR);
+
+    doc.querySelector<HTMLElement>('[data-os-name="Project"]')!.click();
+
+    expect(doc.querySelector("[data-os-link]")!.getAttribute("href")).toBe(
+      "vscode://ext/add-registry?alias=hub&scope=project",
+    );
+  });
+
+  // The install bar has an action link too — the marketplace page — and its
+  // platform choices carry no href. Blanking it on every pick would drop it.
+  it("leaves an action link alone for a choice carrying no href", () => {
+    const doc = renderPage(
+      DETECTING_BAR.replace("</div>\n", '<a data-os-link href="https://marketplace.test/"></a></div>\n'),
+    );
+
+    expect(doc.querySelector("[data-os-link]")!.getAttribute("href")).toBe(
+      "https://marketplace.test/",
+    );
+  });
+});

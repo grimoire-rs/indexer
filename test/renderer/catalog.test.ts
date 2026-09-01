@@ -31,6 +31,20 @@ describe("addRegistryUrl", () => {
     expect(parsed.get("index")).toBe("https://index.grimoire.rs/");
   });
 
+  it("carries the scope the picker beside it names", () => {
+    const registry = { alias: "hub", index: "https://index.grimoire.rs" };
+
+    // `scope=` is what the extension reads to override its host-derived
+    // default, so picking Global on the page cannot land a project write.
+    for (const scope of ["global", "project"] as const) {
+      const parsed = new URLSearchParams(new URL(addRegistryUrl(EXT, registry, scope)!).search);
+      expect(parsed.get("scope")).toBe(scope);
+      expect(parsed.get("alias")).toBe("hub");
+    }
+    // Omitted rather than guessed, which leaves the extension on its default.
+    expect(addRegistryUrl(EXT, registry)).not.toContain("scope");
+  });
+
   it("is null when there is nothing to link to", () => {
     expect(addRegistryUrl(null, { alias: "hub", index: "https://index.test" })).toBeNull();
     expect(addRegistryUrl(EXT, null)).toBeNull();

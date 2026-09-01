@@ -48,6 +48,7 @@ const { choices, label, title } = Astro.props;
             aria-checked={i === 0 ? "true" : "false"}
             data-os-pick={choice.command}
             data-os-name={choice.name}
+            data-os-href={choice.href}
           >
             {choice.path ? <BrandMark path={choice.path} /> : choice.Icon && <choice.Icon size={16} />}
             <span>{choice.name}</span>

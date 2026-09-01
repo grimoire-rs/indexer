@@ -21,6 +21,7 @@ import {
   mdiPenguin,
 } from "@mdi/js";
 import type { RegistryHint, ResolvedSiteConfig } from "../../../config.js";
+import { addRegistryUrl } from "./catalog.js";
 
 // Re-exported so an index's own page can name the shape it passes to the two
 // functions below without reaching past `@grim/lib/*` into the package's
@@ -45,6 +46,13 @@ export interface Choice {
   path?: string;
   /** Lucide component, taking a `size` prop. */
   Icon?: (props: { size?: number }) => unknown;
+  /**
+   * Where the bar's action segment should point once this choice is picked.
+   * Only the registry bar has one — a deep link that has to agree with the
+   * scope the command beside it names — and a bar whose choices carry none
+   * leaves its action link exactly as rendered.
+   */
+  href?: string;
 }
 
 /**
@@ -115,9 +123,16 @@ export function registryScopeChoices(
 ): Choice[] {
   const add = registryAddCommand(config, registry);
   if (!add) return [];
+  const link = (scope: "global" | "project") =>
+    addRegistryUrl(config.vscodeExtension, registry, scope) ?? undefined;
   return [
-    { name: "Global", command: `grim --global ${add.slice("grim ".length)}`, Icon: Globe },
-    { name: "Project", command: add, Icon: FolderRoot },
+    {
+      name: "Global",
+      command: `grim --global ${add.slice("grim ".length)}`,
+      Icon: Globe,
+      href: link("global"),
+    },
+    { name: "Project", command: add, Icon: FolderRoot, href: link("project") },
   ];
 }
 
