@@ -11,6 +11,12 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.5.5] - 2026-09-09
+
+### Added
+
+- Show when the index was last built *(renderer)*
+
 ## [0.5.4] - 2026-09-01
 
 ### Added
@@ -259,6 +265,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.5.5]: https://github.com/grimoire-rs/indexer/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/grimoire-rs/indexer/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/grimoire-rs/indexer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/grimoire-rs/indexer/compare/v0.5.1...v0.5.2
