@@ -993,10 +993,26 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            between the two rows belonging to neither. */
         .result-count {
           margin: 0;
+          align-self: end;
+          color: var(--grim-color-muted);
+          font-size: var(--grim-text-sm);
+        }
+        /* Rides beside the count as a second caption, and carries the
+           `margin-right: auto` that used to sit on the count — the pair holds
+           the left end together, and the sort group stays pinned right. */
+        .index-updated {
           margin-right: auto;
           align-self: end;
           color: var(--grim-color-muted);
           font-size: var(--grim-text-sm);
+        }
+        /* Two captions of the same weight, one row's gap apart, read as one
+           run-on sentence. The dot is decoration and belongs in CSS rather
+           than in the accessibility tree — the count already announces
+           itself, and this would be read out beside it as "middle dot". */
+        .index-updated::before {
+          content: "·";
+          margin-right: var(--grim-space-4);
         }
         /* Pressed state borrows the deprecation colour rather than the
            accent, so "deprecated entries are in view" is signalled by the

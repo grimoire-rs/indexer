@@ -5,11 +5,12 @@
 // handler refuses anything it should not write, and this mirrors those rules
 // so a config that cannot produce a working link renders no button rather
 // than one that silently does nothing when clicked.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   addRegistryUrl,
   externalUrl,
+  indexAgo,
   lastUpdated,
   resolveMemberRef,
   vscodeUrl,
@@ -172,5 +173,46 @@ describe("lastUpdated", () => {
 
   it("is undefined when the package carries no date at all", () => {
     expect(lastUpdated(pkg({}))).toBeUndefined();
+  });
+});
+
+// The catalog's own render stamp is the one date in this codebase that starts
+// at zero, so it is the only one that ever reaches `timeAgo`'s seconds
+// division. `indexAgo` is the floor that keeps it out.
+describe("indexAgo", () => {
+  const AT = "2026-01-01T12:00:00Z";
+  const at = (offsetMs: number) => {
+    vi.setSystemTime(new Date(Date.parse(AT) + offsetMs));
+    return indexAgo(AT);
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("says less than a minute for the whole first minute", () => {
+    vi.useFakeTimers();
+    // A freshly deployed index, read immediately: never "0 seconds ago".
+    expect(at(0)).toBe("less than a minute ago");
+    expect(at(25_000)).toBe("less than a minute ago");
+    expect(at(59_999)).toBe("less than a minute ago");
+  });
+
+  it("counts in minutes and up from there", () => {
+    vi.useFakeTimers();
+    expect(at(60_000)).toBe("1 minute ago");
+    expect(at(120_000)).toBe("2 minutes ago");
+    expect(at(3 * 3_600_000)).toBe("3 hours ago");
+  });
+
+  it("reads a stamp from the future as fresh, not as a countdown", () => {
+    vi.useFakeTimers();
+    // A reader whose own clock is behind. "in 4 minutes" would be the index
+    // telling them it has not been published yet.
+    expect(at(-4 * 60_000)).toBe("less than a minute ago");
+  });
+
+  it("renders nothing for an unparseable stamp, as timeAgo does", () => {
+    expect(indexAgo("not a date")).toBe("");
   });
 });

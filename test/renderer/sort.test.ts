@@ -198,6 +198,9 @@ describe("deprecated visibility", () => {
     { name: "zulu", rating: { up: 1 }, created: "2026-09-01T00:00:00Z" },
   ].map(pkg) as unknown as CatalogPackage[];
 
+  /** The render stamp the toolbar shows; nothing here asserts on it. */
+  const BUILT_AT = "2026-01-01T00:00:00Z";
+
   const DEFAULT_ORDER: Record<Sort, string[]> = {
     name: ["alpha", "zulu"],
     updated: ["zulu", "alpha"],
@@ -229,7 +232,7 @@ describe("deprecated visibility", () => {
     history.replaceState({}, "", "/");
     const host = document.createElement("div");
     document.body.append(host);
-    render(h(Catalog, { packages: ROWS, vscodeExtension: null }), host);
+    render(h(Catalog, { packages: ROWS, vscodeExtension: null, builtAt: BUILT_AT }), host);
     return host;
   }
 

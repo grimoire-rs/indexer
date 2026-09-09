@@ -360,6 +360,16 @@ const UPDATED_KEY = "updated";
 const UPDATED_PROVIDER = "indexer";
 
 /**
+ * Now, as RFC 3339 UTC to the second — the shape `statsDocument` writes, every
+ * ratings fixture pins, and the catalog's index-updated stamp carries. One
+ * function so the two callers cannot drift into two spellings of the same
+ * instant.
+ */
+function stamp(): string {
+  return new Date().toISOString().replace(/\.\d+Z$/, "Z");
+}
+
+/**
  * `.stats.json`, as far as the site cares: the ratings it joins onto cards,
  * and the two document-level fields it carries over rather than re-deriving.
  * Everything else — other per-ref stats, other providers, keys added later —
@@ -446,12 +456,7 @@ function publishedStats(
   return {
     schema_version:
       typeof stats?.schema_version === "number" ? stats.schema_version : SCHEMA_VERSION,
-    // RFC 3339 UTC to the second — the shape `statsDocument` writes and every
-    // fixture pins.
-    generated_at:
-      typeof stats?.generated_at === "string"
-        ? stats.generated_at
-        : new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+    generated_at: typeof stats?.generated_at === "string" ? stats.generated_at : stamp(),
     ...merged,
   };
 }
@@ -702,7 +707,10 @@ async function resolveInputs(opts: BuildSiteOptions) {
   // `base` — which covers everything Astro emits itself — and the same value
   // reaches the hand-written URLs through `astro/lib/base.ts`. Domain-rooted
   // sites yield "/", Astro's own default, so nothing about them moves.
-  return { config, packages, css, stats, base: new URL(config.site).pathname };
+  // Taken here rather than at the call site so `buildSite` and `devSite` stamp
+  // the same way — a dev preview shows when the server started, which is the
+  // honest answer to the same question.
+  return { config, packages, css, stats, builtAt: stamp(), base: new URL(config.site).pathname };
 }
 
 /**
@@ -712,7 +720,7 @@ async function resolveInputs(opts: BuildSiteOptions) {
 function inlineConfig(
   opts: BuildSiteOptions,
   staged: Awaited<ReturnType<typeof stage>>,
-  { config, packages, css, base }: Awaited<ReturnType<typeof resolveInputs>>,
+  { config, packages, css, builtAt, base }: Awaited<ReturnType<typeof resolveInputs>>,
 ) {
   return {
     // The staged dir, never the index repo — see `stage`.
@@ -736,7 +744,7 @@ function inlineConfig(
     },
     vite: {
       define: {
-        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css }),
+        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, builtAt }),
         __GRIMOIRE_BASE__: JSON.stringify(base),
       },
       // What a page under `theme/pages/` imports the shipped components and

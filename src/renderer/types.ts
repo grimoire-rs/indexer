@@ -91,4 +91,18 @@ export interface GrimoireData {
   packages: CatalogPackage[];
   /** Contents of `config.customCss`, already read from disk. Empty = none. */
   css: string;
+  /**
+   * When this render ran, RFC 3339 UTC to the second — the same shape the
+   * stats sidecar's `generated_at` carries.
+   *
+   * Stamped fresh on every build, deliberately: it is what the catalog shows
+   * as its "updated" stamp, and the two timestamps already in the data answer a
+   * different question. `stats.json`'s `generated_at` is carried forward
+   * across builds so its published bytes stay stable, and a package's
+   * `updated` is when that one artifact last moved.
+   *
+   * The cost is that the landing page's HTML differs on every rebuild of an
+   * unchanged index. `all.json` — the frozen byte contract — is untouched.
+   */
+  builtAt: string;
 }

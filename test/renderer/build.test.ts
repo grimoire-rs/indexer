@@ -1267,3 +1267,33 @@ describe("discovery", () => {
     expect(robots).toContain("Sitemap: https://index.example.test/sitemap.xml");
   });
 });
+
+/**
+ * The build's own stamp, which the catalog's toolbar shows as "updated …".
+ *
+ * It is the one value on the page that cannot be a literal in a fixture: it
+ * is taken at render time, so what is pinned is its shape and where it lands.
+ */
+describe("the index-updated stamp", () => {
+  it("reaches the toolbar as a <time> carrying the build instant", () => {
+    const el = /<time class="index-updated"[^>]*>/.exec(indexHtml)?.[0];
+    expect(el, "no index-updated stamp on the landing page").toBeDefined();
+    // RFC 3339 UTC to the second — the same shape `stats.json`'s
+    // `generated_at` carries, and what `<time datetime>` needs to be
+    // machine-readable at all.
+    const stamp = /datetime="([^"]*)"/.exec(el ?? "")?.[1];
+    expect(stamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    // The absolute instant is in an attribute, not only in the text: Preact
+    // does not re-diff attributes while hydrating, and a reader with no
+    // JavaScript never gets past the text the build wrote.
+    expect(el).toContain(`title="${stamp}"`);
+  });
+
+  it("leaves `stats.json`'s own stamp alone", async () => {
+    // Two timestamps, two questions. `generated_at` is carried forward across
+    // builds so the published sidecar's bytes stay stable; the build stamp is
+    // fresh every run. Reading the same clock must not have merged them.
+    const stats = JSON.parse(await site.read("stats.json")) as { generated_at: string };
+    expect(stats.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  });
+});

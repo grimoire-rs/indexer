@@ -18,7 +18,7 @@ import {
 import { PackageCard } from "./PackageCard.js";
 import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
-import { lastUpdated, type CardPackage } from "../lib/catalog.js";
+import { indexAgo, lastUpdated, type CardPackage } from "../lib/catalog.js";
 import { withBase } from "../lib/base.js";
 // TYPE-ONLY, and it has to stay that way: `../lib/search.js` is the only
 // module that pulls `fuzzysort` in, and it is loaded with `await import()`
@@ -306,9 +306,12 @@ function PackageTable({
 export default function Catalog({
   packages,
   vscodeExtension,
+  builtAt,
 }: {
   packages: CardPackage[];
   vscodeExtension: string | null;
+  /** When this site was rendered, RFC 3339 UTC. See `GrimoireData.builtAt`. */
+  builtAt: string;
 }) {
   // Empty on the first render, ALWAYS — `?q=…` is applied a beat later, in
   // the layout effect below. This is not a style preference, it is the one
@@ -707,6 +710,29 @@ export default function Catalog({
     const onPop = () => applyView();
     addEventListener("popstate", onPop);
     return () => removeEventListener("popstate", onPop);
+  }, []);
+
+  // Keeps the index-updated stamp honest on a tab left open. Nothing but a
+  // re-render is wanted, so the state is a counter nothing reads — `indexAgo`
+  // is recomputed from `builtAt` in the render below.
+  //
+  // A minute is the label's granularity (see `indexAgo`), so half a minute
+  // bounds how long it can sit on the wrong side of a boundary. It has to be
+  // shorter than the unit, not equal to it: at one tick per minute a stamp
+  // that turned "1 minute ago" at t=61s kept reading "less than a minute ago"
+  // until t=120s, which is a label that looks frozen because it is.
+  // Cleared on unmount — an interval outliving its component keeps calling
+  // `setState` on a dead tree.
+  //
+  // Hydration needs no help here. This island's first client render is
+  // deliberately not seeded from `location` (see `query` above) because Preact
+  // does not diff props while hydrating — but it DOES diff text children, and
+  // this stamp is a text child. A page served from cache hours after the build
+  // renders the server's "now" and corrects itself on hydration.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
   }, []);
 
   // The query, into the URL — so it can be shared, and so Back lands on the
@@ -1475,6 +1501,18 @@ export default function Catalog({
               ? `${counted.length} packages`
               : `${shown.length} of ${counted.length} packages`}
           </p>
+          {/* When this site was rendered — the answer to "am I looking at a
+              stale index?", which the per-package stamps cannot give.
+
+              Outside the `role="status"` above deliberately: that region
+              re-announces on every keystroke, and the build time has not
+              changed. `datetime` and `title` carry the absolute instant, for
+              a machine and for a reader who wants the exact time — and for
+              anyone with JavaScript off, since the relative text is then
+              frozen at whatever the build wrote. */}
+          <time class="index-updated" datetime={builtAt} title={builtAt}>
+            updated {indexAgo(builtAt)}
+          </time>
           {/* Held at the far end, away from the chips: choosing an order is
               not filtering. Both halves take an ordinary tab stop; a select
               owns ArrowLeft/Right for its options, so neither can join the

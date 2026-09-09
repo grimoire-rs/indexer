@@ -174,6 +174,25 @@ export function timeAgo(iso: string): string {
   return RTF.format(Math.round(duration), "years");
 }
 
+/**
+ * `timeAgo` for the index's own render stamp, where a minute is the floor.
+ *
+ * A package's `updated` is days or months old, so `timeAgo` never reaches its
+ * seconds division for one. The build stamp starts at zero and passes through
+ * it on every fresh deploy, and second-by-second precision is both useless
+ * here — nobody needs to know the index is 25 seconds old rather than 40 —
+ * and actively misleading, because the label only repaints on a timer: a
+ * number that names a second and then holds it reads as a broken clock.
+ *
+ * The same branch absorbs a stamp in the future, which is a reader whose
+ * clock is behind, not an index published ahead of time.
+ */
+export function indexAgo(iso: string): string {
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "";
+  return Date.now() - ms < 60_000 ? "less than a minute ago" : timeAgo(iso);
+}
+
 /** A bare address, which `support.contact` is far more likely to hold than a URL. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

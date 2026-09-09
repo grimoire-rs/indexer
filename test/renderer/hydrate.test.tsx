@@ -31,6 +31,11 @@ import type { CatalogPackage } from "../../src/renderer/types.js";
 // Normally injected by Vite `define` at build time.
 (globalThis as Record<string, unknown>).__GRIMOIRE_BASE__ = "/";
 
+// The render stamp the island shows as "updated …". Fixed, so every case
+// below renders the same text for it; the one case that cares about the value
+// supplies its own.
+const BUILT_AT = "2026-01-01T00:00:00Z";
+
 const PACKAGES = [
   { namespace: "acme", name: "alpha", kind: "skill", logo: "/alpha.svg", ref: "r.test/acme/alpha" },
   { namespace: "acme", name: "bravo", kind: "rule", logo: "/bravo.svg", ref: "r.test/acme/bravo" },
@@ -46,7 +51,7 @@ const PACKAGES = [
 /** What the build ships: every package, because the server has no `location`. */
 function serverMarkup(): string {
   const host = document.createElement("div");
-  render(<Catalog packages={PACKAGES} vscodeExtension={null} />, host);
+  render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={BUILT_AT} />, host);
   const html = host.innerHTML;
   render(null, host);
   return html;
@@ -59,7 +64,7 @@ function hydrateWithQuery(markup: string, query: string): HTMLElement {
   host.innerHTML = markup;
   document.body.append(host);
   mounted.push(host);
-  hydrate(<Catalog packages={PACKAGES} vscodeExtension={null} />, host);
+  hydrate(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={BUILT_AT} />, host);
   return host;
 }
 
@@ -107,7 +112,7 @@ describe("catalog hydration with a seeded query", () => {
     // every assertion below becomes vacuous.
     history.replaceState({}, "", "/?q=charlie");
     const host = document.createElement("div");
-    render(<Catalog packages={PACKAGES} vscodeExtension={null} />, host);
+    render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={BUILT_AT} />, host);
     expect(host.querySelectorAll("li.card")).toHaveLength(PACKAGES.length);
   });
 
@@ -165,7 +170,7 @@ describe("the view round-trips", () => {
     const host = document.createElement("div");
     document.body.append(host);
     mounted.push(host);
-    render(<Catalog packages={DEPRECATED} vscodeExtension={null} />, host);
+    render(<Catalog packages={DEPRECATED} vscodeExtension={null} builtAt={BUILT_AT} />, host);
     return host;
   }
 
@@ -230,7 +235,7 @@ describe("the view round-trips", () => {
   it("does not read a preference during the first render", () => {
     localStorage.setItem("grim.catalog.deprecated", "1");
     const host = document.createElement("div");
-    render(<Catalog packages={DEPRECATED} vscodeExtension={null} />, host);
+    render(<Catalog packages={DEPRECATED} vscodeExtension={null} builtAt={BUILT_AT} />, host);
     expect([...host.querySelectorAll("li.card h2 a")].map((a) => a.textContent)).not.toContain(
       "delta",
     );
@@ -333,7 +338,7 @@ describe("the keyword facet", () => {
     const host = document.createElement("div");
     document.body.append(host);
     mounted.push(host);
-    render(<Catalog packages={TAGGED} vscodeExtension={null} />, host);
+    render(<Catalog packages={TAGGED} vscodeExtension={null} builtAt={BUILT_AT} />, host);
     return host;
   }
 
@@ -570,7 +575,7 @@ describe("the keyword rail's reorder slide", () => {
     const host = document.createElement("div");
     document.body.append(host);
     mounted.push(host);
-    render(<Catalog packages={SHARED} vscodeExtension={null} />, host);
+    render(<Catalog packages={SHARED} vscodeExtension={null} builtAt={BUILT_AT} />, host);
     return host;
   }
 
@@ -636,7 +641,7 @@ describe("the keyword overflow menu", () => {
     const host = document.createElement("div");
     document.body.append(host);
     mounted.push(host);
-    render(<Catalog packages={MANY} vscodeExtension={null} />, host);
+    render(<Catalog packages={MANY} vscodeExtension={null} builtAt={BUILT_AT} />, host);
     return host;
   }
 
@@ -838,7 +843,7 @@ describe("the sort combo's focus mark", () => {
     const host = document.createElement("div");
     document.body.append(host);
     mounted.push(host);
-    render(<Catalog packages={PACKAGES} vscodeExtension={null} />, host);
+    render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={BUILT_AT} />, host);
     return host.querySelector<HTMLSelectElement>("select.sort-field")!;
   }
 
@@ -885,5 +890,78 @@ describe("the sort combo's focus mark", () => {
 
     select.blur();
     expect(select.dataset.pointer).toBeUndefined();
+  });
+});
+
+/**
+ * The index-updated stamp, which is the one thing on this page that goes
+ * stale while nobody touches it — a catalog left open overnight would
+ * otherwise still read "now".
+ *
+ * Fake timers move `Date.now()` as well as the interval, which is the whole
+ * reason this can be asserted at all: `timeAgo` reads the clock.
+ */
+describe("the index-updated stamp", () => {
+  const AT = "2026-01-01T00:00:00Z";
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(AT));
+  });
+
+  afterEach(() => {
+    unmountAll();
+    vi.useRealTimers();
+    document.body.innerHTML = "";
+  });
+
+  function stamp(host: HTMLElement): HTMLTimeElement {
+    const el = host.querySelector<HTMLTimeElement>("time.index-updated");
+    if (!el) throw new Error("no index-updated stamp rendered");
+    return el;
+  }
+
+  it("re-renders itself as time passes, with no reload", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={AT} />, host);
+
+    expect(stamp(host).textContent?.trim()).toBe("updated less than a minute ago");
+
+    // Still inside the minute: the label must not have started counting
+    // seconds, which is the form that looks frozen between ticks.
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(stamp(host).textContent?.trim()).toBe("updated less than a minute ago");
+
+    // Past the boundary, plus one tick to notice it.
+    await vi.advanceTimersByTimeAsync(50_000);
+    expect(stamp(host).textContent?.trim()).toBe("updated 1 minute ago");
+  });
+
+  it("carries the absolute instant in attributes, for a reader with no JS", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={AT} />, host);
+
+    expect(stamp(host).getAttribute("datetime")).toBe(AT);
+    expect(stamp(host).getAttribute("title")).toBe(AT);
+  });
+
+  it("stops ticking once the island is gone", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={AT} />, host);
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    render(null, host);
+    const spy = vi.spyOn(console, "error");
+    await vi.advanceTimersByTimeAsync(600_000);
+
+    // An interval outliving its component calls `setState` on a dead tree.
+    expect(spy).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    spy.mockRestore();
   });
 });
