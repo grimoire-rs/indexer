@@ -66,6 +66,26 @@ export interface CatalogPackage extends IndexRecord {
    * absence, and none of them is an error. The site is anonymous — it is built
    * once for everyone — so this is a count and never a "you voted" state.
    */
+  /**
+   * Pulls joined from the `stats.json` sidecar at build time. Absent means
+   * **unknown**, and never zero — exactly as `rating` does: an index that
+   * publishes no sidecar, a ref the sidecar omits, and a ref carrying other
+   * stats but no `downloads` are the same absence, and none of them is an
+   * error. Only Artifactory exposes these counters at all, so most indexes
+   * have the key on no package.
+   */
+  downloads?: {
+    /** Every pull the producer could attribute to the artifact. */
+    total: number;
+    /**
+     * Per-release counts keyed by the **release tag** — the same strings
+     * `tags` carries, so the detail page's rail looks one up directly. A
+     * floating tag (`latest`, `1.35`) is deliberately absent: it aliases a
+     * release whose count is already in this map, and giving it a number of
+     * its own would read as a second, separate figure.
+     */
+    versions?: Record<string, number>;
+  };
   rating?: {
     up: number;
     /**

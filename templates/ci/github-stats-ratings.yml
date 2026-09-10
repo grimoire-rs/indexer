@@ -1,0 +1,10 @@
+
+      # `npx --no` refuses to fetch anything `npm ci` did not install, so the
+      # renderer that tallies is the one package-lock.json pins - the same
+      # reviewed-fact rule every other job here follows. Spelled as `npx`
+      # rather than an npm script so an index scaffolded before ratings existed
+      # turns them on by re-rendering CI, with no package.json edit.
+      - name: Tally ratings
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --no grim-indexer ratings

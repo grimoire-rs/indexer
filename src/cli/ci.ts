@@ -19,6 +19,7 @@ import {
   type CiOutcome,
 } from "../ci.js";
 import { CONFIG_FILE } from "../config.js";
+import { loadDownloadsConfig } from "../downloads/config.js";
 import { loadRatingsConfig } from "../ratings/config.js";
 import { EXIT, type ExitCode } from "./exit.js";
 
@@ -33,10 +34,15 @@ function report(outcome: CiOutcome): void {
 export async function ci(root: string, flags: CiFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
   const resolved = resolveCi(await loadCiConfig(rootDir));
-  // Read separately from the `ci` block, and by the block's own reader — the
-  // render and the `--check` re-render must see the same two answers, or an
-  // index that turned ratings on would fail its own drift guard on every push.
-  const files = renderCi(resolved, await loadRatingsConfig(rootDir));
+  // Read separately from the `ci` block, and each by the block's own reader —
+  // the render and the `--check` re-render must see the same three answers, or
+  // an index that turned a collector on would fail its own drift guard on
+  // every push.
+  const files = renderCi(
+    resolved,
+    await loadRatingsConfig(rootDir),
+    await loadDownloadsConfig(rootDir),
+  );
 
   if (flags.check) {
     const outcomes = await checkCi(rootDir, files);

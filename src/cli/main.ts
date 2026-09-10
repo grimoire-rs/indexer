@@ -15,6 +15,7 @@ import { dev } from "./dev.js";
 import { enrich, type EnrichFlags } from "./enrich.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 import { init } from "./init.js";
+import { downloads } from "./downloads.js";
 import { ratings } from "./ratings.js";
 import { validate, type ValidateFlags } from "./validate.js";
 
@@ -213,6 +214,14 @@ export async function run(argv: string[]): Promise<number> {
     .description("tally the forge's upvote counters into .stats.json (needs the `ratings` block)")
     .action(async (root: string) => {
       code = await ratings(root);
+    });
+
+  program
+    .command("downloads")
+    .argument("[root]", "index repo root", ".")
+    .description("count Artifactory's download counters into .stats.json (needs the `downloads` block)")
+    .action(async (root: string) => {
+      code = await downloads(root);
     });
 
   program

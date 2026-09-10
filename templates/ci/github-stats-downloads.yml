@@ -1,0 +1,16 @@
+
+      # Artifactory's own per-artifact download counters. No forge exposes
+      # these - GHCR and GitLab publish no such API at all - so this step is
+      # rendered only for an index whose `downloads` block names an Artifactory
+      # instance.
+      #
+      # Read is the whole permission it needs: `stat.downloads` is not
+      # admin-gated. Grant it on every repository this index lists - a missing
+      # read permission is SILENT in AQL (HTTP 200, no rows, no error), so the
+      # command cross-checks the repository list and fails rather than
+      # publishing a zero that looks like a fact.
+{{githubDownloadsAuth}}
+      - name: Count downloads
+        env:
+          GRIM_DOWNLOADS_TOKEN: {{githubDownloadsToken}}
+        run: npx --no grim-indexer downloads

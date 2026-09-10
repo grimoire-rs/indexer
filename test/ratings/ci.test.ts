@@ -102,14 +102,14 @@ describe("ratings absent — the pipeline is unchanged (C-013)", () => {
     }
   });
 
-  it("emits no ratings job, no schedule and no seed step", () => {
+  it("emits no stats job, no schedule and no seed step", () => {
     const github = load("github");
-    expect(jobs(github).ratings).toBeUndefined();
+    expect(jobs(github).stats).toBeUndefined();
     expect(jobs(github).build.needs).toBeUndefined();
     expect((github.on as Record<string, unknown>).schedule).toBeUndefined();
 
     const gitlab = load("gitlab");
-    expect(jobs(gitlab)["grim-indexer:ratings"]).toBeUndefined();
+    expect(jobs(gitlab)["grim-indexer:stats"]).toBeUndefined();
     expect(jobs(gitlab).pages.rules).toEqual([
       { if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH" },
     ]);
@@ -122,11 +122,11 @@ describe("ratings absent — the pipeline is unchanged (C-013)", () => {
   });
 });
 
-describe("the generated ratings job — GitHub", () => {
+describe("the generated stats job — GitHub", () => {
   it("runs the ratings verb in its own job, with write access to discussions only", () => {
-    const ratings = jobs(load("github", RATINGS)).ratings;
+    const ratings = jobs(load("github", RATINGS)).stats;
 
-    expect(ratings, "pages.yml has no `ratings` job").toBeDefined();
+    expect(ratings, "pages.yml has no `stats` job").toBeDefined();
     expect(ratings.steps?.map((step) => step.run ?? "").join("\n")).toContain(VERB);
     expect(ratings.permissions).toEqual({ contents: "read", discussions: "write" });
   });
@@ -134,7 +134,7 @@ describe("the generated ratings job — GitHub", () => {
   it("deploys even when the tally failed, which is the whole of S-012", () => {
     const build = jobs(load("github", RATINGS)).build;
 
-    expect(build.needs).toBe("ratings");
+    expect(build.needs).toBe("stats");
     expect(build.if).toBe("always()");
   });
 
@@ -156,7 +156,7 @@ describe("the generated ratings job — GitHub", () => {
   // uploaded nothing, so `build` fell back to the seed and published an empty
   // rating set while every job was green.
   it("uploads the tally even though the sidecar is a dotfile", () => {
-    const steps = jobs(load("github", RATINGS)).ratings.steps ?? [];
+    const steps = jobs(load("github", RATINGS)).stats.steps ?? [];
     const upload = steps.find((step) => (step.uses ?? "").includes("upload-artifact"));
 
     expect(upload, "no artifact upload").toBeDefined();
@@ -183,19 +183,19 @@ describe("the generated ratings job — GitHub", () => {
   });
 });
 
-describe("the generated ratings job — GitLab", () => {
+describe("the generated stats job — GitLab", () => {
   it("runs the ratings verb in its own job, serialized by a resource group", () => {
-    const ratings = jobs(load("gitlab", RATINGS))["grim-indexer:ratings"];
+    const ratings = jobs(load("gitlab", RATINGS))["grim-indexer:stats"];
 
-    expect(ratings, ".gitlab-ci.yml has no ratings job").toBeDefined();
+    expect(ratings, ".gitlab-ci.yml has no stats job").toBeDefined();
     expect([...(ratings.before_script ?? []), ...(ratings.script ?? [])].join("\n")).toContain(VERB);
-    expect(ratings.resource_group).toBe("grim-ratings");
+    expect(ratings.resource_group).toBe("grim-stats");
     expect(ratings.artifacts?.paths).toContain(STATS_FILE);
   });
 
   it("deploys even when the tally failed, which is the whole of S-012", () => {
     const doc = load("gitlab", RATINGS);
-    const ratings = jobs(doc)["grim-indexer:ratings"];
+    const ratings = jobs(doc)["grim-indexer:stats"];
     const pages = jobs(doc).pages;
 
     // A failed tally must not block the deploy that carries the seed forward.
@@ -213,7 +213,7 @@ describe("the generated ratings job — GitLab", () => {
     const doc = load("gitlab", RATINGS);
     const schedule = { if: '$CI_PIPELINE_SOURCE == "schedule"' };
 
-    expect(jobs(doc)["grim-indexer:ratings"].rules).toContainEqual(schedule);
+    expect(jobs(doc)["grim-indexer:stats"].rules).toContainEqual(schedule);
     expect(jobs(doc).pages.rules).toContainEqual(schedule);
     expect(jobs(load("gitlab")).pages.rules).not.toContainEqual(schedule);
   });

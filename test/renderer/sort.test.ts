@@ -28,6 +28,7 @@ type Row = {
   ref?: string;
   created?: string | null;
   rating?: { up: number };
+  downloads?: { total: number };
   deprecated?: string | null;
 };
 
@@ -133,8 +134,42 @@ describe("rating", () => {
   });
 });
 
+describe("downloads", () => {
+  it("chains downloads desc, then updated desc, then name", () => {
+    const rows = [
+      { name: "b-newer", downloads: { total: 500 }, created: "2026-08-01T00:00:00Z" },
+      { name: "a-older", downloads: { total: 500 }, created: "2026-01-01T00:00:00Z" },
+      { name: "z-top", downloads: { total: 9000 }, created: "2020-01-01T00:00:00Z" },
+      { name: "d-tied", downloads: { total: 7 }, created: "2026-03-03T00:00:00Z" },
+      { name: "c-tied", downloads: { total: 7 }, created: "2026-03-03T00:00:00Z" },
+    ];
+    expect(order(rows, "downloads")).toEqual(["z-top", "b-newer", "a-older", "c-tied", "d-tied"]);
+  });
+
+  // Same rule as an unrated row, and it matters more here: only an
+  // Artifactory-backed index publishes these at all, so "no count" is
+  // overwhelmingly "nobody measured" rather than "nobody pulled it".
+  it("sorts uncounted last, below even an explicit zero", () => {
+    const rows = [
+      { name: "uncounted" },
+      { name: "zero", downloads: { total: 0 } },
+      { name: "one", downloads: { total: 1 } },
+    ];
+    expect(order(rows, "downloads")).toEqual(["one", "zero", "uncounted"]);
+  });
+
+  it("keeps an all-uncounted catalog ordered by date then name", () => {
+    const rows = [
+      { name: "zulu", created: "2026-02-02T00:00:00Z" },
+      { name: "alpha" },
+      { name: "kilo", created: "2026-09-09T00:00:00Z" },
+    ];
+    expect(order(rows, "downloads")).toEqual(["kilo", "zulu", "alpha"]);
+  });
+});
+
 describe("every mode", () => {
-  const modes: Sort[] = ["name", "updated", "rating"];
+  const modes: Sort[] = ["name", "updated", "rating", "downloads"];
 
   // rev_df_f Warn-2: `compare()` used to pin every deprecated row to the
   // bottom regardless of sort mode. Dropped: grim's own browse order

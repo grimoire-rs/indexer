@@ -109,6 +109,27 @@ PR inline any readable file into the published site.
 See [Theme tokens](theme-tokens.md) and
 [Brand the site](../how-to/customize-branding.md).
 
+## Stats collectors
+
+Two more top-level blocks the site config does not own: `ratings` and
+`downloads`. Each is read by its own loader, each is optional, and the absence
+of a block is how that collector stays off. Adding one changes the generated
+CI, so re-render with `npm run ci` afterwards.
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `downloads.baseUrl` | string | *(required)* | The Artifactory **REST** root, e.g. `https://artifactory.example.com/artifactory`. https only, and the only host the collector ever dials |
+| `downloads.oidcProvider` | string | *(none)* | The JFrog OIDC identity-mapping name. Set it and the generated GitHub job exchanges the workflow's id-token for a short-lived token; leave it and the job reads `GRIM_DOWNLOADS_TOKEN` from a secret. GitHub only |
+
+There is deliberately **no repository map** under `downloads`: the Artifactory
+repository key is the first path segment of each ref and the image path is the
+rest, so a map would be a second copy of what `index/` already says. And no
+token key — the credential comes from the job, never from a committed file.
+
+`ratings` is documented with the sidecar it produces. See
+[The `stats.json` sidecar](stats-sidecar.md) for both blocks in full, for the
+published shape, and for why the two collectors share one CI job.
+
 ## Structure
 
 Not a config key: `theme/` is a directory, not a setting. See

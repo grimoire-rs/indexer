@@ -9,21 +9,29 @@
 // hydrated island cannot read the build-time payload — so its props ARE a
 // contract, and they are the reason component overrides are documented as
 // unstable for now.
-import { ArrowBigUp } from "lucide-preact";
+import { ArrowBigUp, ArrowDownToLine } from "lucide-preact";
 import { CardLogo } from "./CardLogo.js";
 import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "./KindMark.js";
 import { withBase } from "../lib/base.js";
-import { lastUpdated, timeAgo, type CardPackage } from "../lib/catalog.js";
+import {
+  compactCount,
+  exactCount,
+  lastUpdated,
+  timeAgo,
+  type CardPackage,
+} from "../lib/catalog.js";
 
 export interface PackageRowProps {
   pkg: CardPackage;
   /** Whether this index publishes ratings at all — decided once, not per row. */
   hasRatings: boolean;
+  /** Same, for download counts. Only an Artifactory-backed index has any. */
+  hasDownloads: boolean;
   /** The catalog's own arrow-key navigation. */
   onKeyDown: (event: KeyboardEvent) => void;
 }
 
-export function PackageRow({ pkg: p, hasRatings, onKeyDown }: PackageRowProps) {
+export function PackageRow({ pkg: p, hasRatings, hasDownloads, onKeyDown }: PackageRowProps) {
   const at = lastUpdated(p);
   const ago = at && timeAgo(at) ? timeAgo(at) : null;
   return (
@@ -105,6 +113,22 @@ export function PackageRow({ pkg: p, hasRatings, onKeyDown }: PackageRowProps) {
             </time>
           )}
         </span>
+        {hasDownloads && (
+          // Same shape as the rating cell beside it, and for the same reason:
+          // a fixed right-aligned box so the glyph lands in one place down the
+          // column whatever the count is. The figure is abbreviated because
+          // these run to seven digits; the exact number is in the `title`.
+          <span class="t-downloads">
+            {p.downloads && (
+              <>
+                <span class="t-count" title={`${exactCount(p.downloads.total)} downloads`}>
+                  {compactCount(p.downloads.total)}
+                </span>
+                <ArrowDownToLine size={13} aria-hidden="true" />
+              </>
+            )}
+          </span>
+        )}
         {hasRatings && (
           // Count first, arrow after it, both held at the right edge.
           // The count sits in a fixed right-aligned box, so the digits

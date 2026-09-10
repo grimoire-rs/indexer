@@ -130,6 +130,28 @@ Ratings are additive and absent-by-default: an index that publishes no sidecar,
 a ref the sidecar omits, and a ref carrying other stats but no `rating` are the
 same absence, and none of them is an error.
 
+## `grim-indexer downloads`
+
+Count Artifactory's own per-artifact download counters into `.stats.json`. Needs
+the `downloads` block in `index.config.json`, and a credential in the
+environment — `JF_ACCESS_TOKEN` (what `jfrog/setup-jfrog-cli` exports, OIDC
+included) or `GRIM_DOWNLOADS_TOKEN`. Read on the listed repositories is the
+whole permission: `stat.downloads` is not admin-gated.
+
+Absent-by-default on the same terms as `rating`, and it matters more here — no
+forge publishes a container download counter at all, so for most indexes the key
+is on no package. An absent count means **nobody measured**, never that nobody
+pulled: the command publishes no key rather than a zero.
+
+It fails the run (69) rather than publishing an absence when the credential
+cannot read a listed repository. Artifactory's AQL answers `HTTP 200` with no
+rows and no error in that case, which is indistinguishable from "nothing has
+been pulled yet", so the repository list is checked first.
+
+Runs ahead of `ratings` in the generated `stats` job and leaves `.stats.json`
+for it to seed from. See [the sidecar reference](stats-sidecar.md) for the
+published shape and for why both collectors share one job.
+
 ## Exit codes
 
 Aligned with BSD `sysexits.h`, the same way `grim` itself is — semantic codes

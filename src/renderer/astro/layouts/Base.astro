@@ -1388,7 +1388,11 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            its width on a narrow card. They live in `.card-tags` below. */
         .card-head {
           display: grid;
-          grid-template-columns: auto minmax(0, 1fr) auto;
+          /* Two trailing `auto` tracks, not one: the download figure and the
+             rating pair are independent — an index can publish either, both,
+             or neither — and a track that holds nothing collapses to zero
+             width, so the present one still lands on the card's right edge. */
+          grid-template-columns: auto minmax(0, 1fr) auto auto;
           align-items: center;
           column-gap: var(--grim-space-4);
         }
@@ -1411,9 +1415,23 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            went down to the address line, which is what stopped the name
            being squeezed between two of them. */
         .card-head .rating-group {
+          grid-column: 4;
+          grid-row: 1;
+          justify-self: end;
+        }
+        /* A plain figure, deliberately unlike the rating pill beside it: that
+           one is a control and wears a border to say so, and giving this the
+           same chrome would invite a click that does nothing. */
+        .card-head .download-count {
           grid-column: 3;
           grid-row: 1;
           justify-self: end;
+          display: flex;
+          align-items: center;
+          gap: var(--grim-space-2);
+          font-size: var(--grim-text-2xs);
+          font-variant-numeric: tabular-nums;
+          color: var(--grim-color-muted);
         }
         /* Texture, not an icon: oversized and hung off the card's own
            bottom-right corner, so `overflow: hidden` clips it to the rounded
@@ -1587,11 +1605,21 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           border-radius: var(--grim-radius-surface);
           overflow: hidden;
         }
-        /* One more track when the index publishes ratings. Decided once per
-           index, never per filter — see `PackageTable`. */
+        /* One more track per optional count column. Each is decided once per
+           index, never per filter — see `PackageTable`.
+
+           Three rules rather than one, and it is not redundancy: the track
+           list is a single fixed value per class combination, so "rated" and
+           "counted" cannot each contribute a track on their own. Downloads
+           takes the first of the two, ratings the last. */
+        .table.counted,
         .table.rated {
           grid-template-columns:
             min-content min-content fit-content(14rem) 1fr auto auto;
+        }
+        .table.rated.counted {
+          grid-template-columns:
+            min-content min-content fit-content(14rem) 1fr auto auto auto;
         }
         .table .row {
           grid-column: 1 / -1;
@@ -1712,11 +1740,13 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            The two sit next to each other rather than at opposite sides of a
            wide cell — they are one reading, and the gap that separated them
            was the cell's width showing through. */
-        .t-rating {
+        .t-rating,
+        .t-downloads {
           justify-content: flex-end;
           color: var(--grim-color-muted);
         }
-        .t-rating svg {
+        .t-rating svg,
+        .t-downloads svg {
           margin-left: var(--grim-space-2);
         }
         /* The two cells that carry a glyph centre it as a box, not on the
@@ -1728,7 +1758,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            fixed-width count plus its arrow, so there is no text here for
            `text-overflow` to elide. */
         .t-kind,
-        .t-rating {
+        .t-rating,
+        .t-downloads {
           display: flex;
           align-items: center;
         }
@@ -1736,13 +1767,20 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            inherits it: a fixed box, right-aligned, in tabular figures. Without
            the fixed box a three-digit count would push its own arrow right of
            the one above it. Geometry — it holds four digits at this step. */
-        .t-votes {
+        .t-votes,
+        .t-count {
           /* Never shrunk to its digits: the box is what holds the arrow
              after it in one place down the column. */
           flex: none;
           width: 2rem;
           text-align: right;
           font-variant-numeric: tabular-nums;
+        }
+        /* Half a step wider than the vote box. A download count is abbreviated
+           rather than truncated (`8.2K`, `171M`), and a decimal point plus a
+           unit letter is wider than four digits at this step. */
+        .t-count {
+          width: 2.5rem;
         }
         /* Every cell names its own column rather than being auto-placed.
            Auto-placement fills tracks in document order, so the moment a cell
@@ -1764,21 +1802,34 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .t-updated {
           grid-column: 5;
         }
-        .t-rating {
+        /* Downloads takes the first optional track, ratings the last — so
+           whether ratings sits in column 6 or 7 depends on whether the
+           downloads column is there at all. */
+        .t-downloads {
           grid-column: 6;
+        }
+        .table.rated .t-rating {
+          grid-column: 6;
+        }
+        .table.rated.counted .t-rating {
+          grid-column: 7;
         }
         /* Narrow viewports lose the description rather than scroll sideways:
            it is context for the name beside it, and the detail page states it
            in full. The remaining cells move up a track with it, so no empty
            column and no stray gap is left behind. */
         @media (max-width: 40rem) {
-          .table,
-          .table.rated {
+          .table {
             grid-template-columns: min-content min-content minmax(6rem, 1fr) auto;
           }
+          .table.counted,
           .table.rated {
             grid-template-columns:
               min-content min-content minmax(6rem, 1fr) auto auto;
+          }
+          .table.rated.counted {
+            grid-template-columns:
+              min-content min-content minmax(6rem, 1fr) auto auto auto;
           }
           .t-desc {
             display: none;
@@ -1786,8 +1837,14 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           .t-updated {
             grid-column: 4;
           }
-          .t-rating {
+          .t-downloads {
             grid-column: 5;
+          }
+          .table.rated .t-rating {
+            grid-column: 5;
+          }
+          .table.rated.counted .t-rating {
+            grid-column: 6;
           }
         }
 

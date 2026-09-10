@@ -356,7 +356,7 @@ describe("ratings", () => {
     expect(html).not.toContain("\u26a0");
   });
 
-  it("offers rating as a third sort field, and relevance as a fourth", () => {
+  it("offers rating and downloads as sort fields, and relevance last", () => {
     const select = indexHtml.match(/<select class="sort-field"[\s\S]*?<\/select>/)![0]!;
     // `[^>]*`: the selected option carries `selected` ahead of its `value`.
     // `relevance` is in the SERVER render, unconditionally — the island's
@@ -367,8 +367,132 @@ describe("ratings", () => {
       "name",
       "updated",
       "rating",
+      "downloads",
       "relevance",
     ]);
+  });
+});
+
+// The same join, one stat over. Only Artifactory exposes these counters, so an
+// index with no `downloads` block renders none of this — which makes "absent
+// means unknown, never zero" the property worth pinning.
+describe("downloads", () => {
+  it("joins the sidecar onto the cards by ref, abbreviated with the exact figure in the title", () => {
+    // code-review: rated AND counted, so the two figures share a card head.
+    expect(indexHtml).toContain('title="8,241 downloads"');
+    expect(indexHtml).toContain(">8.2K<");
+    // bare: counted and unrated — a ref carrying one stat and not the other.
+    expect(indexHtml).toContain('title="91 downloads"');
+  });
+
+  // Every level of absence: refs the sidecar omits (`test-writer`), refs it
+  // carries with a `rating` and no `downloads` (`starter-pack`, `rust-style`).
+  // None renders a zero.
+  it("leaves everything else uncounted, and renders no zero", () => {
+    expect(indexHtml.match(/class="download-count"/g)).toHaveLength(2);
+    expect(indexHtml).not.toContain("0 downloads");
+  });
+
+  it("gives the table its own column class, kept independent of the rating one", () => {
+    // Three track lists, because a fixed `grid-template-columns` cannot have
+    // each class contribute a track on its own.
+    expect(bundledCss).toContain(".table.counted");
+    expect(bundledCss).toContain(".table.rated.counted");
+  });
+
+  // Downloads is the FIRST of the two optional columns, so it sits at a fixed
+  // track and ratings is the one that moves: 6 on its own, 7 behind downloads.
+  it("puts the count ahead of the votes, and moves the votes rather than it", () => {
+    // The minifier merges selectors that share a declaration, so match the
+    // selector and its track separately rather than one literal string.
+    const track = (selector: string): string[] =>
+      [...bundledCss.matchAll(/([^{}]*)\{grid-column:(\d)\}/g)]
+        .filter(([, sel]) => sel!.split(",").includes(selector))
+        .map(([, , col]) => col!);
+
+    // The narrow layout drops the description, so each track is one lower there.
+    expect(track(".t-downloads").sort()).toEqual(["5", "6"]);
+    expect(track(".table.rated .t-rating").sort()).toEqual(["5", "6"]);
+    expect(track(".table.rated.counted .t-rating").sort()).toEqual(["6", "7"]);
+  });
+
+  // Exact figures here, not the abbreviated ones the catalog shows: the rail is
+  // the precise view, and a compact column reads ragged.
+  it("shows the total and the pinned release unfolded, and the rest behind", () => {
+    const panel = /<section class="downloads"[\s\S]*?<\/section>/.exec(detailHtml)![0]!;
+    const rows = (html: string): string[][] =>
+      [...html.matchAll(/<th scope="row"[^>]*>([^<]*)<\/th><td[^>]*>([^<]*)</g)].map((m) => [
+        m[1]!,
+        m[2]!,
+      ]);
+
+    // `1.2.3` is this package's `version`, so it stands with the total.
+    const lead = panel.slice(0, panel.indexOf("<details"));
+    expect(rows(lead)).toEqual([
+      ["total", "8,241"],
+      ["1.2.3", "7,100"],
+    ]);
+
+    // Everything else folds away, and the summary says how much before a reader
+    // opens it. No row for `latest`, `1` or `1.2` — each aliases a release
+    // whose count is already one of these.
+    const fold = panel.slice(panel.indexOf("<details"));
+    expect(/<summary[^>]*>([\s\S]*?)<\/summary>/.exec(fold)![1]!.replace(/<[^>]+>/g, "").trim()).toBe(
+      "older versions",
+    );
+    expect(rows(fold)).toEqual([["1.1.0", "1,141"]]);
+  });
+
+  // `<details>` cannot wrap a `<tr>`, so the unfolded rows and the folded ones
+  // cannot share a table. `table-layout: fixed` is what makes the two read as
+  // one: the column widths come from the rule, not from each table's content,
+  // so the figures stay in one column across the seam.
+  it("sizes both tables from the rule so the figures share one column", () => {
+    expect(bundledCss).toMatch(/\.downloads[^{]*table[^{]*\{[^}]*table-layout:fixed/);
+    expect(bundledCss).toMatch(/\.downloads[^{]*th[^{]*\{[^}]*width:55%/);
+  });
+
+  // A package published often reaches dozens of releases, and the rail is a
+  // column beside the page rather than the page.
+  it("caps and scrolls the opened fold, reachable from a keyboard", () => {
+    const panel = /<section class="downloads"[\s\S]*?<\/section>/.exec(detailHtml)![0]!;
+    const box = /<div class="dl-scroll"[^>]*>/.exec(panel)![0]!;
+
+    // A scrollable region with no name and no tab stop cannot be reached
+    // without a pointer.
+    expect(box).toContain('role="region"');
+    expect(box).toContain('tabindex="0"');
+    expect(box).toContain("aria-label=");
+    expect(bundledCss).toMatch(/\.dl-scroll[^{]*\{[^}]*max-height:18rem/);
+    expect(bundledCss).toMatch(/\.dl-scroll[^{]*\{[^}]*overflow-y:auto/);
+  });
+
+  // `latest`, `1` and `1.2` alias the release whose count is already a row in
+  // that table. A figure beside the pill too would read as a second, separate
+  // one — and the pills are a copy control, not a data column.
+  it("leaves the version pills bare", () => {
+    const rail = /<aside class="detail-rail"[\s\S]*?<\/aside>/.exec(detailHtml)![0]!;
+    expect(rail).not.toContain("version-downloads");
+    expect(rail).not.toContain("version-pair");
+  });
+
+  // A disclosure with nothing behind it is a control that cannot do anything.
+  it("offers no disclosure when the total belongs to no release", async () => {
+    // `bare` carries a total and no `versions` at all — every group the producer
+    // kept wore a channel tag, so there is no breakdown to fold.
+    const html = await readOut("p/registry.example/team/bare/index.html");
+    const panel = /<section class="downloads"[\s\S]*?<\/section>/.exec(html)![0]!;
+
+    expect(panel).toContain("91");
+    expect(panel).not.toContain("<details");
+    // The same table, with the one row it has — not a second layout for one row.
+    expect(panel.match(/<tr/g)).toHaveLength(1);
+  });
+
+  it("renders nothing at all for a package the sidecar does not count", async () => {
+    const html = await readOut("p/github.com/acme/rust-style/index.html");
+    expect(html).not.toContain(">Downloads</h2>");
+    expect(html).not.toContain("version-downloads");
   });
 });
 
@@ -752,7 +876,17 @@ describe("config reaches the rendered HTML", () => {
     // A quarter turn: closed points right at the row it opens, open points
     // down at it.
     expect(bundledCss).toMatch(/\.older\[[^\]]+\]\[open\][^{]*svg\{transform:rotate\(90deg\)/);
-    expect(detailHtml).toMatch(/<summary[^>]*>\s*<svg[\s\S]*?<\/svg>\s*older versions\s*<\/summary>/);
+    // Both folds in the rail are worded identically, and neither carries a
+    // count. They hold different sets — Versions keeps every tag outside the
+    // cascade, rolling ones included, where Downloads keeps full releases only
+    // — so two numbers a few rows apart would disagree about one package with
+    // nothing on the page to explain why.
+    const rail = /<aside class="detail-rail"[\s\S]*?<\/aside>/.exec(detailHtml)![0]!;
+    expect(
+      [...rail.matchAll(/<summary[^>]*>\s*<svg[\s\S]*?<\/svg>\s*([^<]*?)\s*<\/summary>/g)].map(
+        (m) => m[1],
+      ),
+    ).toEqual(["older versions", "older versions"]);
   });
 
   // Both halves, because either alone is a dead end: the page emits the

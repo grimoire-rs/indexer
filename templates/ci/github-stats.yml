@@ -1,22 +1,25 @@
-
-  # Tallies the forge's own upvote counters into `.stats.json` - the sidecar
+  # Collects every signal `stats.json` carries into `.stats.json` - the sidecar
   # `build` joins onto the catalog and the deploy publishes beside all.json.
   #
   # Its own job, ahead of `build`, because `build` has to run even when this
-  # one fails. A tally that cannot reach the forge must never empty a published
-  # rating set (R-2), and the only way to keep the previous one is to deploy
-  # without a fresh tally - see the seed step in `build`.
+  # one fails. A collector that cannot reach its backend must never empty a
+  # published stat (R-2), and the only way to keep the previous one is to
+  # deploy without a fresh one - see the seed step in `build`.
   #
-  # Turn ratings off by deleting the `ratings` block from index.config.json and
-  # re-rendering. That stops the tally, but the last one stays published:
+  # ONE job for every collector, not one job each, and that is correctness
+  # rather than thrift: each collector writes a WHOLE fresh document seeded
+  # from the published one, so two jobs both seeding from the published copy
+  # would each drop the other's key, and `build` downloads exactly one
+  # artifact anyway. Here they run in series in one shell and each seeds from
+  # the file the one before it left.
+  #
+  # Turn a collector off by deleting its block from index.config.json and
+  # re-rendering. That stops the collection, but the last one stays published:
   # deleting `stats.json` from the deploy is the other half of the rollback.
-  ratings:
+  stats:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      # The only write anything in this pipeline is granted, and it is what a
-      # vote is: threads live on the forge, nothing is committed here.
-      discussions: write
+      contents: read{{githubStatsPermissions}}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,17 +32,7 @@
 
       - name: Install
         run: npm ci --ignore-scripts
-
-      # `npx --no` refuses to fetch anything `npm ci` did not install, so the
-      # renderer that tallies is the one package-lock.json pins - the same
-      # reviewed-fact rule every other job here follows. Spelled as `npx`
-      # rather than an npm script so an index scaffolded before ratings existed
-      # turns them on by re-rendering CI, with no package.json edit.
-      - name: Tally ratings
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --no grim-indexer ratings
-
+{{githubDownloadsStep}}{{githubRatingsStep}}
       # `error` rather than the default warning: a run that reported success
       # and wrote nothing is a bug, and the failure mode it would otherwise
       # produce - `build` silently falling back to the seed - looks exactly
@@ -49,7 +42,7 @@
           name: grim-stats
           path: .stats.json
           # `.stats.json` is a dotfile, and upload-artifact skips hidden files
-          # unless told otherwise. Without this the tally succeeds, uploads
+          # unless told otherwise. Without this the job succeeds, uploads
           # nothing, and `build` carries the seed forward - a wipe that reads
           # as a healthy deploy, which is exactly what R-2 exists to prevent.
           include-hidden-files: true

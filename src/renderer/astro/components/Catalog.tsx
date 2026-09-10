@@ -43,7 +43,7 @@ function kindOrder(kind: string): number {
  * the catalog opens on anyway — so a reader can leave the catalog set to it
  * and have every later search come back ranked without touching the control.
  */
-export type Sort = "name" | "updated" | "rating" | "relevance";
+export type Sort = "name" | "updated" | "rating" | "downloads" | "relevance";
 export type Dir = "asc" | "desc";
 /** Roomy cards, or the same packages as a scannable list. */
 export type View = "cards" | "table";
@@ -82,6 +82,7 @@ export const NATURAL: Record<Sort, Dir> = {
   name: "asc",
   updated: "desc",
   rating: "desc",
+  downloads: "desc",
   relevance: "desc",
 };
 
@@ -131,11 +132,21 @@ const byUpdated: Key = (a, b) => descending(updatedAt(a), updatedAt(b));
 const byRating: Key = (a, b) =>
   descending(a.rating?.up ?? null, b.rating?.up ?? null);
 
+/**
+ * Most pulled first. Uncounted is its own bucket at the bottom and never a
+ * zero, for the same reason unrated is: only an Artifactory-backed index
+ * publishes these at all, so "no count" is overwhelmingly "nobody measured"
+ * rather than "nobody pulled it".
+ */
+const byDownloads: Key = (a, b) =>
+  descending(a.downloads?.total ?? null, b.downloads?.total ?? null);
+
 /** Each mode as a chain of keys, most significant first. */
 const CHAINS: Record<Sort, Key[]> = {
   name: [byName],
   updated: [byUpdated, byName],
   rating: [byRating, byUpdated, byName],
+  downloads: [byDownloads, byUpdated, byName],
   // Relevance cannot be a key here: a score belongs to a query, not to a
   // package, so it is not on the record `compare` is handed. `shown` sorts
   // that mode itself.
@@ -272,17 +283,21 @@ function columnCount(cards: HTMLElement[]): number {
 function PackageTable({
   packages,
   hasRatings,
+  hasDownloads,
   onKeyDown,
   rootRef,
 }: {
   packages: CardPackage[];
   hasRatings: boolean;
+  hasDownloads: boolean;
   onKeyDown: (event: KeyboardEvent) => void;
   rootRef: { current: HTMLElement | null };
 }) {
   return (
     <div
-      class={hasRatings ? "table rated" : "table"}
+      class={["table", hasDownloads && "counted", hasRatings && "rated"]
+        .filter(Boolean)
+        .join(" ")}
       data-slot="package-table"
       ref={(el) => {
         rootRef.current = el;
@@ -293,6 +308,7 @@ function PackageTable({
           key={`${p.namespace}/${p.name}`}
           pkg={p}
           hasRatings={hasRatings}
+          hasDownloads={hasDownloads}
           onKeyDown={onKeyDown}
         />
       ))}
@@ -1217,6 +1233,7 @@ export default function Catalog({
   // no ratings gets no rating chip for the same reason.
   const hasDeprecated = packages.some((p) => p.deprecated);
   const hasRatings = packages.some((p) => p.rating);
+  const hasDownloads = packages.some((p) => p.downloads);
 
   return (
     <section class="catalog" data-slot="catalog">
@@ -1598,6 +1615,7 @@ export default function Catalog({
               <option value="name">name</option>
               <option value="updated">updated</option>
               {hasRatings && <option value="rating">rating</option>}
+              {hasDownloads && <option value="downloads">downloads</option>}
               <option value="relevance">relevance</option>
             </select>
           </div>
@@ -1640,6 +1658,7 @@ export default function Catalog({
         <PackageTable
           packages={visible}
           hasRatings={hasRatings}
+          hasDownloads={hasDownloads}
           onKeyDown={onCardKeyDown}
           rootRef={gridRef}
         />

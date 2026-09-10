@@ -9,7 +9,7 @@
 // hydrated island cannot read the build-time payload — so its props ARE a
 // contract, and they are the reason component overrides are documented as
 // unstable for now.
-import { ArrowBigUp } from "lucide-preact";
+import { ArrowBigUp, ArrowDownToLine } from "lucide-preact";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { CardLogo } from "./CardLogo.js";
@@ -17,6 +17,8 @@ import { CopyButton } from "./CopyButton.js";
 import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "./KindMark.js";
 import { withBase } from "../lib/base.js";
 import {
+  compactCount,
+  exactCount,
   externalUrl,
   lastUpdated,
   timeAgo,
@@ -107,6 +109,17 @@ export function PackageCard({
               {p.name}
             </a>
           </h2>
+          {/* Pulls, left of the votes. A figure and not a control: no
+              registry offers a URL that downloads on click, and the
+              artifact's own install line is already on the card. Abbreviated
+              because these reach seven digits; the exact number is in the
+              `title`. */}
+          {p.downloads && (
+            <span class="download-count" title={`${exactCount(p.downloads.total)} downloads`}>
+              <ArrowDownToLine size={13} aria-hidden="true" />
+              {compactCount(p.downloads.total)}
+            </span>
+          )}
           {/* A count and two ways to add to it — never a "you voted"
               state: the page is prerendered once for everyone, so it
               cannot know whether *you* did, and showing "not voted"

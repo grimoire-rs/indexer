@@ -2,7 +2,8 @@
   "schema_version": 1,
   "generated_at": "2026-08-28T09:30:00Z",
   "providers": {
-    "rating": "github"
+    "rating": "github",
+    "downloads": "artifactory"
   },
   "entries": {
     "ghcr.io/acme/starter-pack": {
@@ -24,11 +25,53 @@
         "up": 12,
         "target": "DIC_kwDOAbc123",
         "url": "https://github.com/grimoire-rs/index/discussions/42"
+      },
+      "downloads": {
+        "total": 8241,
+        "versions": {
+          "1.2.3": 7100,
+          "1.1.0": 1141
+        },
+        "as_of": "2026-08-28T09:30:00Z"
       }
     },
     "ghcr.io/acme/many-versions": {
       "rating": {
         "up": 8
+      },
+      "downloads": {
+        "total": 2427791,
+        "versions": {
+          "5.7.2": 921004,
+          "5.7.1": 571022,
+          "5.7.0": 354033,
+          "5.6.4": 219500,
+          "5.6.3": 136090,
+          "5.6.2": 84375,
+          "5.6.1": 52312,
+          "5.6.0": 32433,
+          "5.5.0": 20108,
+          "5.4.3": 12466,
+          "5.4.2": 7728,
+          "5.4.1": 4791,
+          "5.4.0": 2970,
+          "5.3.1": 1841,
+          "5.3.0": 1141,
+          "5.2.0": 707,
+          "5.1.0": 438,
+          "5.0.0": 271,
+          "4.9.9": 168,
+          "4.9.8": 104,
+          "4.8.1": 64,
+          "4.8.0": 39,
+          "4.7.0": 24,
+          "4.6.2": 14,
+          "4.6.1": 8,
+          "4.6.0": 7,
+          "4.5.0": 7,
+          "4.0.0": 7
+        },
+        "as_of": "2026-08-28T09:30:00Z"
       }
     },
     "ghcr.io/acme/ghost-logo": {
@@ -68,8 +111,11 @@
     },
     "ghcr.io/acme/bean-counter": {
       "downloads": {
-        "total": 4213,
-        "last": "2026-08-20"
+        "total": 412,
+        "versions": {
+          "0.1.0": 412
+        },
+        "as_of": "2026-08-28T09:30:00Z"
       }
     },
     "ghcr.io/acme/gone": {

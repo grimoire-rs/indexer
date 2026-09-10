@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { CliError, EXIT } from "./cli/exit.js";
 import { CONFIG_FILE, SiteConfigError } from "./config.js";
+import type { DownloadsConfig } from "./downloads/config.js";
 import type { RatingsConfig } from "./ratings/config.js";
 import { fromTemplate } from "./templates.js";
 
@@ -258,21 +259,38 @@ function grimReleaseBase(grimVersion: string): string {
 const VERIFY_PATHS = [CONFIG_FILE, "package.json", "package-lock.json", ".github/workflows/**"];
 
 /**
- * How often a scheduled run re-tallies. Off the hour deliberately — GitHub
- * asks for it, and every index that picked `0 * * * *` would queue against the
- * same minute.
+ * How often a scheduled run re-collects the stats sidecar. Off the hour
+ * deliberately — GitHub asks for it, and every index that picked `0 * * * *`
+ * would queue against the same minute.
  */
-const RATINGS_CRON = "23 * * * *";
+const STATS_CRON = "23 * * * *";
+
+/**
+ * The JFrog **platform** URL the OIDC exchange authenticates against, derived
+ * from the REST base the collector dials.
+ *
+ * Derived rather than configured: `downloads.baseUrl` is
+ * `https://<host>/artifactory` and `JF_URL` is `https://<host>`, so a second
+ * key would be the same host written twice with a chance to disagree. A
+ * non-standard context path keeps whatever precedes `/artifactory`.
+ */
+function jfrogPlatformUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/artifactory$/, "");
+}
 
 /**
  * Render the complete CI file set. Nothing touches disk — the caller writes
  * it or diffs it against what is committed.
  *
- * `ratings` absent means the `ratings` block is absent from
- * `index.config.json`, and every file renders exactly as it did before the
+ * Both stats blocks absent means neither `ratings` nor `downloads` is in
+ * `index.config.json`, and every file renders exactly as it did before either
  * feature existed — no job, no schedule, no seed step.
  */
-export function renderCi(ci: ResolvedCiConfig, ratings?: RatingsConfig): Map<string, string> {
+export function renderCi(
+  ci: ResolvedCiConfig,
+  ratings?: RatingsConfig,
+  downloads?: DownloadsConfig,
+): Map<string, string> {
   const base: Record<string, string> = {
     nodeVersion: ci.nodeVersion,
     defaultBranch: ci.defaultBranch,
@@ -284,6 +302,52 @@ export function renderCi(ci: ResolvedCiConfig, ratings?: RatingsConfig): Map<str
   // trimmed because the template supplies one on the placeholder's own line —
   // keeping both would leave a stray blank line, or an empty block would not.
   const block = (rel: string) => fromTemplate(rel, base).replace(/\n$/, "");
+  // One job, rendered when either collector is configured.
+  const stats = ratings !== undefined || downloads !== undefined;
+  // The job's own pieces, resolved before the job is rendered: `render` is
+  // single-pass, so a block handed in as a value must already be complete.
+  //
+  // Downloads first, so the ratings collector seeds from its output rather
+  // than from the published document it started from.
+  //
+  // The trailing newline is KEPT on a step block, unlike `block()`: each of
+  // these templates opens with a blank line, which a preceding block's trimmed
+  // newline would otherwise swallow — two steps run together with no blank
+  // line between them. The OIDC auth block keeps its newline for the same
+  // reason (it ends in a step, and the next line is another step), while the
+  // secret block drops it so its comment stays contiguous with the one above.
+  const githubDownloadsStep = downloads
+    ? fromTemplate("ci/github-stats-downloads.yml", {
+        ...base,
+        githubDownloadsAuth: downloads.oidcProvider
+          ? fromTemplate("ci/github-stats-oidc.yml", {
+              ...base,
+              jfrogUrl: jfrogPlatformUrl(downloads.baseUrl),
+              jfrogOidcProvider: downloads.oidcProvider,
+            })
+          : block("ci/github-stats-secret.yml"),
+        // The action's documented `oidc-token` output, not an environment
+        // variable it is assumed to export.
+        githubDownloadsToken: downloads.oidcProvider
+          ? "${{ steps.jfrog.outputs.oidc-token }}"
+          : "${{ secrets.GRIM_DOWNLOADS_TOKEN }}",
+      })
+    : "";
+  const statsJobVars = {
+    ...base,
+    // Each line is granted only by the collector that needs it. `discussions:
+    // write` is the only write anything in this pipeline is granted, and it is
+    // what a vote is; `id-token: write` is what the OIDC exchange reads, and an
+    // index on a stored secret must not have it.
+    githubStatsPermissions:
+      (ratings ? "\n      discussions: write" : "") +
+      (downloads?.oidcProvider ? "\n      id-token: write" : ""),
+    githubDownloadsStep,
+    githubRatingsStep: ratings ? fromTemplate("ci/github-stats-ratings.yml", base) : "",
+    gitlabDownloadsScript: downloads ? block("ci/gitlab-stats-downloads.sh") : "",
+    gitlabRatingsScript: ratings ? block("ci/gitlab-stats-ratings.sh") : "",
+  };
+  const statsBlock = (rel: string) => fromTemplate(rel, statsJobVars).replace(/\n$/, "");
   const vars: Record<string, string> = {
     ...base,
     header: fromTemplate("ci/header.txt", base),
@@ -291,27 +355,33 @@ export function renderCi(ci: ResolvedCiConfig, ratings?: RatingsConfig): Map<str
     gitlabEnrichScript: ci.enrich ? block("ci/gitlab-enrich.sh") : "",
     verifyPaths: VERIFY_PATHS.map((entry) => `      - ${entry}`).join("\n"),
     gitlabVerifyJob: ci.allowManualEdits ? "" : block("ci/gitlab-verify.yml"),
-    // Ratings, on both forges: a tally job, a schedule to re-run it on, and
-    // the seed step that carries the published sidecar forward when the tally
-    // did not run or did not finish. Nothing here is rendered when the block
-    // is absent, so an index that never turns ratings on keeps the pipeline it
-    // already committed, byte for byte.
+    // The stats sidecar, on both forges: one collection job, a schedule to
+    // re-run it on, and the seed step that carries the published sidecar
+    // forward when the job did not run or did not finish. Nothing here is
+    // rendered when both blocks are absent, so an index that turns neither on
+    // keeps the pipeline it already committed, byte for byte.
     //
-    // The build/pages job must depend on the tally and run anyway: R-2 says a
-    // failed tally may never empty a published rating set, and the only way to
-    // keep the previous one is to deploy without a fresh one.
-    githubRatingsJob: ratings ? block("ci/github-ratings.yml") : "",
-    githubRatingsSeedSteps: ratings ? block("ci/github-ratings-seed.yml") : "",
-    githubRatingsSchedule: ratings ? `\n  schedule:\n    - cron: "${RATINGS_CRON}"` : "",
-    githubRatingsBuildKeys: ratings ? "\n    needs: ratings\n    if: always()" : "",
-    gitlabRatingsJob: ratings ? block("ci/gitlab-ratings.yml") : "",
-    gitlabRatingsSeedScript: ratings ? block("ci/gitlab-ratings-seed.sh") : "",
-    // One `rules:` entry, so a scheduled pipeline deploys the tally it just
-    // ran. Deliberately no `needs:` — the tally is in an earlier stage, so
+    // ONE job for both collectors rather than one each, and that is
+    // correctness: each writes a WHOLE fresh document seeded from the
+    // published one, so two jobs would each drop the other's key and `build`
+    // downloads exactly one artifact. In one job they run in series and each
+    // seeds from the file the one before it left (`localOrPublishedSeed`).
+    //
+    // The build/pages job must depend on it and run anyway: R-2 says a failed
+    // collector may never empty a published stat, and the only way to keep the
+    // previous one is to deploy without a fresh one.
+    githubStatsJob: stats ? statsBlock("ci/github-stats.yml") : "",
+    githubStatsSeedSteps: stats ? block("ci/github-stats-seed.yml") : "",
+    githubStatsSchedule: stats ? `\n  schedule:\n    - cron: "${STATS_CRON}"` : "",
+    githubStatsBuildKeys: stats ? "\n    needs: stats\n    if: always()" : "",
+    gitlabStatsJob: stats ? statsBlock("ci/gitlab-stats.yml") : "",
+    gitlabStatsSeedScript: stats ? block("ci/gitlab-stats-seed.sh") : "",
+    // One `rules:` entry, so a scheduled pipeline deploys the document it just
+    // collected. Deliberately no `needs:` — the job is in an earlier stage, so
     // `pages` already receives its artifact, and adding `needs:` would move
     // `pages` off stage ordering and let it deploy past a failed `verify-ci`.
-    // `allow_failure` on the tally job is what lets a failed one through.
-    gitlabRatingsPagesRule: ratings ? '\n    - if: $CI_PIPELINE_SOURCE == "schedule"' : "",
+    // `allow_failure` on the stats job is what lets a failed one through.
+    gitlabStatsPagesRule: stats ? '\n    - if: $CI_PIPELINE_SOURCE == "schedule"' : "",
     // GitHub only — `validateCi` refuses the GitLab combination outright, so
     // there is no silently-inert case to render around here.
     githubAutoMergeJob: ci.autoMerge ? block("ci/github-automerge.yml") : "",

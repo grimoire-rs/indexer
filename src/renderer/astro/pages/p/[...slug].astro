@@ -35,6 +35,7 @@ import { withBase } from "../../lib/base";
 import {
   compareVersions,
   deprecationNote,
+  exactCount,
   externalUrl,
   lastUpdated,
   resolveMemberRef,
@@ -95,6 +96,24 @@ const older = tags.filter((t) => !cascade.includes(t));
 // wherever it was published — the exact release is one of the things latest
 // currently points at, not the default.
 const defaultTag = cascade.includes("latest") ? "latest" : (pkg.version ?? cascade[0]);
+
+// The Downloads panel's per-release rows, newest first. `Object.entries` rather than a keyed lookup — the map
+// is JSON from the sidecar, so indexing it by a tag named `constructor` would
+// read a function off the prototype; iterating own entries cannot.
+//
+// Floating tags (`latest`, `5.7`) are deliberately absent from the map: each
+// aliases a release whose count is already a row here, so a figure of its own
+// would read as a second, separate one.
+const releaseDownloads = Object.entries(pkg.downloads?.versions ?? {}).sort(([a], [b]) =>
+  compareVersions(a, b),
+);
+// The pinned release stands with the total, unfolded: it is what an untagged
+// `grim add` installs, so it is the one per-release figure a reader came for.
+// Everything else is behind the fold — a package published often has dozens of
+// releases, and a rail that lists all of them is a page of numbers nobody
+// asked for.
+const leadDownloads = releaseDownloads.filter(([tag]) => tag === pkg.version);
+const restDownloads = releaseDownloads.filter(([tag]) => tag !== pkg.version);
 
 // The forge the repository link points at, drawn as its own mark. `mdiGit`
 // is the honest fallback for a host with no brand in the set — it still says
@@ -412,6 +431,13 @@ const headMarkColor = pkg.deprecated
             </div>
             {older.length > 0 && (
               <details class="older">
+                {/* No count, deliberately, and the Downloads fold below says
+                    the same. The two folds count different things — this one
+                    holds every tag outside the cascade, rolling ones included,
+                    while Downloads holds full releases only, because a rolling
+                    tag aliases a release whose figure is already there. So two
+                    numbers a few rows apart would disagree about the same
+                    package with nothing on the page to explain why. */}
                 <summary>
                   <ChevronRight size={14} aria-hidden="true" />
                   older versions
@@ -420,6 +446,67 @@ const headMarkColor = pkg.deprecated
                   {older.map((tag) => (
                     <VersionMenu pkgRef={pkg.ref} tag={tag} />
                   ))}
+                </div>
+              </details>
+            )}
+          </section>
+        )}
+
+        {pkg.downloads && (
+          <section class="downloads">
+            <h2>Downloads</h2>
+            {/* Two tables that read as one. `<details>` cannot wrap a `<tr>`,
+                so the total and the pinned release cannot share a table with
+                rows that fold away — but `table-layout: fixed` gives both
+                tables the same two columns, so the figures sit in one column
+                down the panel and the seam is only the rule under the total.
+
+                `scope="row"` so a figure is announced with the release it
+                belongs to. */}
+            <table>
+              <tbody>
+                <tr class="dl-total">
+                  <th scope="row">total</th>
+                  <td>{exactCount(pkg.downloads.total)}</td>
+                </tr>
+                {leadDownloads.map(([tag, count]) => (
+                  <tr>
+                    <th scope="row">{tag}</th>
+                    <td>{exactCount(count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {restDownloads.length > 0 && (
+              <details class="older dl-fold">
+                {/* Worded exactly like the Versions fold above it, count
+                    included — which is to say neither carries one. See there. */}
+                <summary>
+                  <ChevronRight size={14} aria-hidden="true" />
+                  older versions
+                </summary>
+                {/* Capped and scrolled rather than left to run: a package
+                    published often reaches dozens of releases, and the rail is
+                    a column beside the page, not the page. `tabindex` and the
+                    name are what make a scroll box reachable from a keyboard —
+                    a scrollable region with neither is unreachable without a
+                    pointer. */}
+                <div
+                  class="dl-scroll"
+                  role="region"
+                  aria-label="Downloads per release"
+                  tabindex="0"
+                >
+                  <table>
+                    <tbody>
+                      {restDownloads.map(([tag, count]) => (
+                        <tr>
+                          <th scope="row">{tag}</th>
+                          <td>{exactCount(count)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </details>
             )}
@@ -912,6 +999,69 @@ const headMarkColor = pkg.deprecated
     display: flex;
     flex-wrap: wrap;
     gap: var(--grim-space-2);
+  }
+  /* Exact figures here, not the abbreviated ones the catalog column shows:
+     this is the precise view, and a compact column reads ragged (`921K` beside
+     `402.1K`).
+
+     `table-layout: fixed` is what makes two tables read as one: with it the
+     column widths come from this rule rather than from each table's own
+     content, so the total's figure and a release's figure sit in the same
+     column even though a `<details>` stands between them. Without it the two
+     tables size independently and the seam shows as a jog in the numbers. */
+  .downloads table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: var(--grim-text-sm);
+  }
+  .downloads th {
+    /* The label column. Clipped rather than wrapped — a prerelease tag can be
+       long, and a version that wraps to two lines breaks the row rhythm the
+       figures are read against. */
+    width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-weight: 400;
+    color: var(--grim-color-muted);
+    padding: var(--grim-space-1) 0;
+  }
+  .downloads td {
+    text-align: right;
+    /* Tabular figures, so 921,004 and 2,427,791 line up digit for digit. */
+    font-variant-numeric: tabular-nums;
+    color: var(--grim-color-fg);
+    padding: var(--grim-space-1) 0;
+  }
+  /* The total is the figure the panel is named after; the release under it is
+     the one a reader came for. A rule separates both from the fold. */
+  .downloads .dl-total th,
+  .downloads .dl-total td {
+    font-weight: 600;
+    color: var(--grim-color-fg);
+  }
+  .downloads .dl-total + tr th,
+  .downloads .dl-total + tr td {
+    border-top: var(--grim-border-width) solid var(--grim-color-border);
+    padding-top: var(--grim-space-2);
+  }
+  /* `.older` carries the chevron and the summary layout; this is the one
+     difference — the fold sits under the lead table, not under a heading. */
+  .dl-fold {
+    margin-top: var(--grim-space-3);
+  }
+  /* A package published often reaches dozens of releases. The rail is a column
+     beside the page, so the open fold is capped and scrolls rather than
+     growing the page by a screenful of numbers. Roughly eleven rows. */
+  .dl-scroll {
+    max-height: 18rem;
+    overflow-y: auto;
+  }
+  .dl-scroll:focus-visible {
+    outline: 2px solid var(--grim-color-accent);
+    outline-offset: 2px;
   }
   .older {
     margin-top: var(--grim-space-5);

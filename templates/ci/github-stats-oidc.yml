@@ -1,0 +1,13 @@
+      #
+      # OIDC rather than a stored secret: the action exchanges this workflow's
+      # own id-token for a short-lived Artifactory token, so nothing long-lived
+      # is held anywhere. Create the identity mapping in the JFrog platform
+      # (Administration -> Identity and Access -> OIDC), name it in
+      # `downloads.oidcProvider`, and give the user or group it maps to read on
+      # the repositories.
+      - id: jfrog
+        uses: jfrog/setup-jfrog-cli@deda456d982fc5e9a7a020b63eb0d2968aedd33e # v5.1.0
+        env:
+          JF_URL: {{jfrogUrl}}
+        with:
+          oidc-provider-name: {{jfrogOidcProvider}}

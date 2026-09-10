@@ -1,11 +1,11 @@
 # The `stats.json` sidecar
 
 An index may publish `stats.json` beside `all.json`. It carries per-artifact
-signals that are not part of a package's own metadata — today two: `rating`,
-the upvote count on the forge thread that owns that artifact, and `updated`,
-when that artifact last moved. It is the read contract every client shares:
-`grim`, this renderer, and the VS Code extension all read the same file, and
-none of them writes it.
+signals that are not part of a package's own metadata — today three: `rating`,
+the upvote count on the forge thread that owns that artifact; `downloads`, how
+often the artifact was pulled; and `updated`, when that artifact last moved. It
+is the read contract every client shares: `grim`, this renderer, and the VS Code
+extension all read the same file, and none of them writes it.
 
 ```json
 {
@@ -14,6 +14,7 @@ none of them writes it.
   "providers": {
     "rating": "github",
     "rating_host": "api.github.com",
+    "downloads": "artifactory",
     "updated": "indexer"
   },
   "entries": {
@@ -22,6 +23,11 @@ none of them writes it.
         "up": 12,
         "target": "DIC_kwDOAbc123",
         "url": "https://github.com/acme/index/discussions/42"
+      },
+      "downloads": {
+        "total": 8241,
+        "versions": { "1.2.3": 7100, "1.1.0": 1141 },
+        "as_of": "2026-09-10T12:41:37Z"
       },
       "updated": { "at": "2026-07-01T10:00:00+00:00" }
     }
@@ -40,6 +46,9 @@ none of them writes it.
 | `entries[ref].rating.up` | int | Upvotes, `0` included. A thread that exists but has no votes is published as `0`, so its `url` is there to vote at. |
 | `entries[ref].rating.target` | string | The forge's own id for the thread. **Opaque.** |
 | `entries[ref].rating.url` | string | Where a human goes to vote. **Opaque.** |
+| `entries[ref].downloads.total` | int | Every pull the producer could attribute to the artifact, releases and channel tags alike. |
+| `entries[ref].downloads.versions` | object | Optional. Per-release counts, keyed by the **release tag exactly as it appears in that artifact's `tags`**, so a client looks one up directly. A floating tag (`latest`, `1.35`) is deliberately absent: it aliases a release whose count is already here, and a figure of its own would read as a second, separate one. Absent ⇒ no release carried a count. |
+| `entries[ref].downloads.as_of` | string | RFC 3339, UTC. When the counters were read. |
 | `entries[ref].updated.at` | string | RFC 3339. When the artifact last moved. |
 
 `target` and `url` are opaque: no client parses one and no client constructs
@@ -60,10 +69,16 @@ and no `rating`, or the reverse. A further signal arrives as a sibling key
 with a sibling entry in `providers`; that is additive and needs no version
 bump.
 
-Some fixtures under `test/ratings/fixtures/` carry a `downloads` key. It is
-there as an *unknown* key — the thing a reader must carry forward without
-understanding — and is **not a specification**. No producer writes it, its
-shape is not fixed, and a client must not code against it.
+`downloads.versions` does not sum to `downloads.total`, and that is not a bug.
+A pull of a tag no release owns — a channel tag like `canary`, or a tag the
+publisher has since moved — is real traffic with no release to attribute it to,
+so it counts toward the total and gets no row. Treat `total` as the figure and
+`versions` as the breakdown of the part that could be attributed.
+
+Some fixtures under `test/ratings/fixtures/` carry a `stars` key. It is there as
+an *unknown* key — the thing a reader must carry forward without understanding —
+and is **not a specification**. No producer writes it, its shape is not fixed,
+and a client must not code against it.
 
 ## Absent is first-class
 
@@ -76,6 +91,7 @@ Five distinct levels of absence. None of them is an error, a warning above
 | `entries` | Nothing is rated yet |
 | A ref within `entries` | That artifact has no stats at all |
 | `rating` on a ref that is present | No rating thread exists for it — not the same as a thread with `up: 0`. Any other stat on that ref is unaffected |
+| `downloads` on a ref that is present | Nobody measured this artifact's pulls — **not** that nobody pulled it. Most registries expose no counter at all, so this is the normal case rather than the exception, and a consumer must never render it as `0` |
 | `rating` on a rendered catalog entry | Unrated. No consumer may assume the field is there |
 
 ## Reading a document you do not fully understand
@@ -101,8 +117,9 @@ that saw its current digest. `build` joins that onto the document it
 publishes. An index that runs `enrich` gets it whether or not it wants
 ratings.
 
-`rating` is opt-in. Add a `ratings` block to `index.config.json` and re-render
-CI (`npm run ci`). The block is optional; without it nothing is tallied.
+`rating` and `downloads` are each opt-in, and each has its own block in
+`index.config.json`. Re-render CI (`npm run ci`) after adding one; without the
+block nothing is collected.
 
 ```jsonc
 "ratings": {
@@ -133,20 +150,61 @@ never a comment, so a reply cannot forge a marker either way. Turn it on if you
 would rather moderate nothing and have checked that your forge still lets a
 human react; GitHub Discussions are untested here.
 
-Re-rendering with the block present adds one job to the generated pipeline
-(`ratings` on GitHub, `grim-indexer:ratings` on GitLab), an hourly schedule, and
-a seed step in the deploy. The seed step is what keeps a failed tally from
-emptying a published rating set: it reads the currently published `stats.json`
-and carries it forward per stat key, and it fails the job rather than treating
-an unreadable seed as an empty one.
+`downloads` needs Artifactory. No forge publishes a container download counter
+at all — GHCR shows exact per-version figures on its HTML package page and in
+no API, GitLab has none either — so this is a backend for a self-hosted index
+whose artifacts live on Artifactory, and scraping a web page was rejected as a
+data source. An index on `ghcr.io` gets no `downloads` key, and that absence is
+how the feature stays off.
+
+```jsonc
+"downloads": {
+  "baseUrl": "https://artifactory.example.com/artifactory",
+  "oidcProvider": "github-grim"  // optional; GitHub only
+}
+```
+
+`baseUrl` is the Artifactory **REST** root and is required, https only. It is
+the only host the collector ever dials: the Artifactory repository key and the
+image path are both derived from each ref (the first path segment and the rest),
+so there is no map to configure and nothing contributor-supplied ever becomes a
+URL. A ref on some other host is skipped.
+
+The credential comes from the job, never from this file. With `oidcProvider`
+set, the generated GitHub job exchanges the workflow's own id-token for a
+short-lived Artifactory token — create the identity mapping in the JFrog
+platform under Administration → Identity and Access → OIDC and name it here.
+Without it, the job reads `GRIM_DOWNLOADS_TOKEN` from a secret. GitLab always
+takes the secret route. Either way the token needs **read** and nothing more:
+`stat.downloads` is not admin-gated.
+
+Grant that read on every repository the index lists. A missing read permission
+is silent in Artifactory's AQL — it answers `HTTP 200` with no rows and no
+error, which is indistinguishable from "nothing has been pulled yet" — so the
+collector cross-checks `GET /api/repositories` and fails the run rather than
+publishing a zero that looks like a fact.
+
+Re-rendering with either block present adds one job to the generated pipeline
+(`stats` on GitHub, `grim-indexer:stats` on GitLab), an hourly schedule, and a
+seed step in the deploy. The seed step is what keeps a failed collector from
+emptying a published stat: it reads the currently published `stats.json` and
+carries it forward per stat key, and it fails the job rather than treating an
+unreadable seed as an empty one.
+
+**One job for both collectors, not one each**, and that is correctness rather
+than thrift. Each collector writes a *whole fresh* document seeded from the
+published one, so two jobs both seeding from the published copy would each drop
+the other's key. In one job they run in series and each seeds from the file the
+one before it left.
 
 ## Turning it off
 
 Two steps, and the first alone is not enough:
 
-1. Remove the `ratings` block and re-render CI. That stops the tally.
+1. Remove the `ratings` (or `downloads`) block and re-render CI. That stops the
+   collection.
 2. **Delete the published `stats.json` from the deploy.** Until it is gone the
-   last tally keeps being served, frozen, forever.
+   last document keeps being served, frozen, forever.
 
 After both, clients read a 404 and every artifact shows as unrated on its next
 refresh — unless the index still runs `enrich`, in which case the next build

@@ -396,14 +396,15 @@ function validateLinks(raw: Record<string, unknown>, key: string): void {
  * — a future `SiteConfig` key with no default is a compile error rather than
  * a silently-narrow allowlist that warns about a field the renderer reads.
  *
- * `ci` and `ratings` are not `SiteConfig` keys and are not an oversight: the
- * file is shared. `loadCiConfig` (`src/ci.ts`) reads `.ci` and
- * `loadRatingsConfig` (`src/ratings/config.ts`) reads `.ratings` out of this
- * same document, and neither block is declared on `SiteConfig`. Drop either
- * name and every index that configures CI or ratings — which is most of
+ * `ci`, `ratings` and `downloads` are not `SiteConfig` keys and are not an
+ * oversight: the file is shared. `loadCiConfig` (`src/ci.ts`) reads `.ci`,
+ * `loadRatingsConfig` (`src/ratings/config.ts`) reads `.ratings` and
+ * `loadDownloadsConfig` (`src/downloads/config.ts`) reads `.downloads` out of
+ * this same document, and none of those blocks is declared on `SiteConfig`.
+ * Drop a name and every index that configures that feature — which is most of
  * them — gets a warning about a key that is doing its job.
  */
-const KNOWN_KEYS = new Set([...Object.keys(DEFAULT_CONFIG), "ci", "ratings"]);
+const KNOWN_KEYS = new Set([...Object.keys(DEFAULT_CONFIG), "ci", "ratings", "downloads"]);
 
 function validate(raw: unknown): SiteConfig {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {

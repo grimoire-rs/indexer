@@ -370,7 +370,7 @@ function stamp(): string {
 }
 
 /**
- * `.stats.json`, as far as the site cares: the ratings it joins onto cards,
+ * `.stats.json`, as far as the site cares: the two stats it joins onto cards,
  * and the two document-level fields it carries over rather than re-deriving.
  * Everything else — other per-ref stats, other providers, keys added later —
  * is read by nobody here and republished untouched, which is what keeps the
@@ -380,7 +380,14 @@ interface StatsFile {
   schema_version?: unknown;
   generated_at?: unknown;
   providers?: Record<string, unknown>;
-  entries?: Record<string, { rating?: { up?: number; url?: unknown } } | undefined>;
+  entries?: Record<
+    string,
+    | {
+        rating?: { up?: number; url?: unknown };
+        downloads?: { total?: number; versions?: unknown };
+      }
+    | undefined
+  >;
 }
 
 /**
@@ -413,6 +420,39 @@ function withRatings(packages: CatalogPackage[], stats: StatsFile | null): Catal
     // otherwise inlined into every visitor's HTML.
     const url = typeof rating.url === "string" ? rating.url : undefined;
     return { ...p, rating: url ? { up: rating.up, url } : { up: rating.up } };
+  });
+}
+
+/**
+ * Join download counts onto packages by ref. A ref the sidecar omits keeps no
+ * key at all — absent means unknown, and a zero would read as "nobody pulled
+ * this", which is a different claim and usually a false one.
+ */
+function withDownloads(packages: CatalogPackage[], stats: StatsFile | null): CatalogPackage[] {
+  const entries = stats?.entries;
+  if (!entries) return packages;
+  return packages.map((p) => {
+    const downloads = entries[p.ref]?.downloads;
+    if (typeof downloads?.total !== "number") return p;
+    // Every key and value is checked rather than trusted: the producer wrote
+    // this, but so did whatever published the seed it merged over, and a
+    // malformed `versions` must leave the total standing rather than reach a
+    // template. Keys come off the wire, so the map is built from a null
+    // prototype — `__proto__` in a tag name cannot become a prototype write.
+    const versions: Record<string, number> = Object.create(null) as Record<string, number>;
+    const raw = downloads.versions;
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      for (const [tag, count] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof count === "number") versions[tag] = count;
+      }
+    }
+    return {
+      ...p,
+      downloads:
+        Object.keys(versions).length > 0
+          ? { total: downloads.total, versions }
+          : { total: downloads.total },
+    };
   });
 }
 
@@ -696,7 +736,7 @@ async function stageInto(
 async function resolveInputs(opts: BuildSiteOptions) {
   const config = resolveConfig(opts.config);
   const sidecar = await readStats(opts.root);
-  const packages = withRatings(await readPackages(opts.outDir), sidecar);
+  const packages = withDownloads(withRatings(await readPackages(opts.outDir), sidecar), sidecar);
   // Downstream of the join, because the `updated` it publishes is read off
   // the packages themselves.
   const stats = publishedStats(packages, sidecar);

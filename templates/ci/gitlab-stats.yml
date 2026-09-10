@@ -1,0 +1,38 @@
+
+# Collects every signal `stats.json` carries into `.stats.json` - the sidecar
+# the `pages` job joins onto the catalog and publishes beside all.json.
+#
+# Its own job, ahead of `pages`, because `pages` has to run even when this one
+# fails. A collector that cannot reach its backend must never empty a published
+# stat (R-2), and the only way to keep the previous one is to deploy without a
+# fresh one - hence `allow_failure`, which still reds the pipeline and still
+# lets the deploy through, and hence `optional: true` on the `pages` job's
+# `needs`.
+#
+# ONE job for every collector, not one job each, and that is correctness rather
+# than thrift: each collector writes a WHOLE fresh document seeded from the
+# published one, so two jobs both artifacting `.stats.json` would hand `pages`
+# two complete documents and whichever arrived last would drop the other's key.
+# Here they run in series in one shell and each seeds from the file the one
+# before it left.
+#
+# `resource_group` is a correctness requirement, not tuning: two overlapping
+# runs can interleave a stale document over a fresh one. It serializes them.
+# Set the group's process mode to `oldest_first` once in Settings -> CI/CD, so
+# a queued run cannot overtake the one ahead of it - that part has no YAML.
+grim-indexer:stats:
+  stage: test
+  resource_group: grim-stats
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - npm ci --cache .npm --prefer-offline --ignore-scripts
+  script:
+    # `npx --no` refuses to fetch anything `npm ci` did not install, so the
+    # renderer that collects is the one package-lock.json pins.
+{{gitlabDownloadsScript}}{{gitlabRatingsScript}}
+  artifacts:
+    paths:
+      - .stats.json

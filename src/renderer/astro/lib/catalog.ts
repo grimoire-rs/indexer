@@ -46,6 +46,7 @@ export type CardPackage = Pick<
   | "replacedBy"
   | "logo"
   | "rating"
+  | "downloads"
 >;
 
 /** The keys of `CardPackage`, as one list the projection actually iterates. */
@@ -64,6 +65,7 @@ const CARD_FIELDS = [
   "replacedBy",
   "logo",
   "rating",
+  "downloads",
 ] as const satisfies readonly (keyof CardPackage)[];
 
 /**
@@ -149,6 +151,32 @@ export function compareVersions(a: string, b: string): number {
     }
   }
   return 0;
+}
+
+/**
+ * A download count at the width a table column can hold — `412`, `8.2K`,
+ * `171M`.
+ *
+ * Not cosmetic: these counters run into the millions on a popular artifact,
+ * and the column is sized for the digits it shows on every row. The exact
+ * figure stays reachable through the element's `title`, which is where
+ * {@link exactCount} puts it.
+ *
+ * The locale is explicit. With none, the runtime derives one from OS region
+ * settings and how ICU was built, so the same build formats differently on a
+ * laptop and on a CI runner — a rendered-output diff with no source change.
+ */
+const COMPACT = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+export function compactCount(n: number): string {
+  return n < 1000 ? String(n) : COMPACT.format(n);
+}
+
+/** The same count in full, for a `title` — `171,343,334`. */
+const EXACT = new Intl.NumberFormat("en");
+
+export function exactCount(n: number): string {
+  return EXACT.format(n);
 }
 
 // MDN-standard Intl.RelativeTimeFormat rollup (no date library).

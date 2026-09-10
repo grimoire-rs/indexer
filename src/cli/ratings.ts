@@ -83,8 +83,14 @@ function ratingHost(api: string): string | undefined {
   }
 }
 
-/** Every ref in `index/`. The tally runs before `build`, so `all.json` does not exist yet. */
-function desiredRefs(root: string, findMetadataFiles: (dir: string) => string[]): string[] {
+/**
+ * Every ref in `index/`. A producer runs before `build`, so `all.json` does not
+ * exist yet — and `index/` is the only place a ref is authoritative anyway.
+ *
+ * Shared with `downloads`: both producers want the same list, validated the
+ * same way, and two walks of the same tree would be two chances to disagree.
+ */
+export function desiredRefs(root: string, findMetadataFiles: (dir: string) => string[]): string[] {
   const refs: string[] = [];
   for (const file of findMetadataFiles(path.join(root, "index"))) {
     let meta: unknown;
@@ -154,10 +160,17 @@ export async function ratings(root: string): Promise<ExitCode> {
   const { findMetadataFiles } = await import("../data/index.js");
   const desired = desiredRefs(rootDir, findMetadataFiles);
 
-  const { loadSeed, mergeStats, statsDocument, STATS_FILE } = await import("../ratings/seed.js");
+  const { localOrPublishedSeed, mergeStats, statsDocument, STATS_FILE } = await import("../ratings/seed.js");
   // Read before the forge work: it fails the run on anything but a genuine 404,
   // and failing before a single thread is created is the cheaper order.
-  const seed = await loadSeed(`${site.replace(/\/+$/, "")}/stats.json`);
+  //
+  // A `.stats.json` already on disk wins over the published copy — `downloads`
+  // runs ahead of this in the same job, and its output is what must be carried
+  // forward rather than the published document it started from.
+  const seed = await localOrPublishedSeed(
+    path.join(rootDir, STATS_FILE),
+    `${site.replace(/\/+$/, "")}/stats.json`,
+  );
 
   const { createRatingProvider } = await import("../ratings/provider.js");
   const { conflictWarning, logLine, reconcile } = await import("../ratings/reconcile.js");

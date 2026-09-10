@@ -69,6 +69,15 @@ describe("stats.json v1 fixtures", () => {
     expect(doc.tally_duration_ms).toBeDefined();
     expect((doc.entries as Record<string, Record<string, Record<string, unknown>>>)[RATED].rating.down).toBe(1);
     expect(readRating(doc, RATED)?.up).toBe(3);
+    // A stat name no reader knows, at both levels the schema is open at: a
+    // `providers` key and a per-ref stat. `downloads` used to stand for this
+    // and no longer can — it is specified now — so the property this fixture
+    // exists to hold needs a key that is still genuinely unknown.
+    expect((doc.providers as Record<string, unknown>).stars).toBe("somewhere");
+    expect(readRating(doc, "ghcr.io/acme/starter-pack")).toBeUndefined();
+    expect((doc.entries as Record<string, Record<string, unknown>>)["ghcr.io/acme/starter-pack"].stars).toEqual({
+      count: 9,
+    });
   });
 
   it("reads a document whose providers.rating value it does not know", () => {

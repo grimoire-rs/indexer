@@ -15,6 +15,8 @@
 // empty one, and treating it as empty is exactly how a published rating set
 // gets silently replaced with nothing. So a fetch that did not clearly say
 // "there is nothing here" fails the run instead.
+import fs from "node:fs/promises";
+
 import { CliError, EXIT } from "../cli/exit.js";
 import { request } from "../validate/adapters/http.js";
 
@@ -82,21 +84,49 @@ export async function loadSeed(url: string): Promise<StatsSeed> {
     );
   }
 
+  return seedFromText(response.body, `the published stats.json at ${url}`);
+}
+
+/**
+ * The seed a producer merges over when more than one producer runs in the same
+ * job: an on-disk `.stats.json` an earlier producer already wrote, else the
+ * published document.
+ *
+ * This is what makes the producers chainable without a second artifact. Each
+ * one writes a *whole fresh* document seeded from what it read, so two runs
+ * that both seed from the published copy clobber each other — the second would
+ * carry forward the published `downloads` rather than the one the first just
+ * computed. Preferring the file closes that, and it is the same precedence the
+ * generated CI already applies in YAML: a fresh sidecar beats the published one.
+ *
+ * A file that is present and does not parse is a hard error, never an empty
+ * seed — the same rule {@link loadSeed} applies to an unreadable fetch.
+ */
+export async function localOrPublishedSeed(file: string, url: string): Promise<StatsSeed> {
+  let text: string;
+  try {
+    text = await fs.readFile(file, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return loadSeed(url);
+    throw err;
+  }
+  return seedFromText(text, `${file}, written by an earlier producer in this run,`);
+}
+
+/** The two carried maps out of one stats document's text. `where` names it in every error. */
+function seedFromText(text: string, where: string): StatsSeed {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(response.body) as unknown;
+    parsed = JSON.parse(text) as unknown;
   } catch (err) {
     throw new CliError(
-      `the published stats.json at ${url} did not parse (${(err as Error).message}) — ` +
+      `${where} did not parse (${(err as Error).message}) — ` +
         `refusing to treat an unreadable seed as an empty one`,
       EXIT.data,
     );
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new CliError(
-      `the published stats.json at ${url} is not a JSON object`,
-      EXIT.data,
-    );
+    throw new CliError(`${where} is not a JSON object`, EXIT.data);
   }
 
   // Absence *within* a document that parsed is first-class — a site that
@@ -107,8 +137,8 @@ export async function loadSeed(url: string): Promise<StatsSeed> {
   // the same silent emptying the parse guard above refuses, one layer in.
   const doc = parsed as Record<string, unknown>;
   return {
-    providers: object(doc.providers, "providers", url) as Record<string, string>,
-    entries: object(doc.entries, "entries", url) as StatEntries,
+    providers: object(doc.providers, "providers", where) as Record<string, string>,
+    entries: object(doc.entries, "entries", where) as StatEntries,
   };
 }
 
@@ -118,11 +148,11 @@ export async function loadSeed(url: string): Promise<StatsSeed> {
  *
  * @throws {CliError} `EXIT.data` when `value` is present but not an object.
  */
-function object(value: unknown, key: string, url: string): Record<string, never> {
+function object(value: unknown, key: string, where: string): Record<string, never> {
   if (value === undefined || value === null) return {};
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new CliError(
-      `the published stats.json at ${url} has a '${key}' that is not an object ` +
+      `${where} has a '${key}' that is not an object ` +
         `(${Array.isArray(value) ? "array" : typeof value}) — refusing to treat a malformed seed as an empty one`,
       EXIT.data,
     );

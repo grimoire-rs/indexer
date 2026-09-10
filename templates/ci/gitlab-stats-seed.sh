@@ -1,24 +1,24 @@
 
-      # Invariant R-2. GitLab hands this job the ratings artifact before the
-      # script runs, so `.stats.json` being present means a tally completed -
-      # and a completed tally has already merged itself over this same
-      # published copy, per stat key. Only when there is none does the
-      # published copy get carried forward untouched, which is what must happen
-      # when the tally failed or was skipped.
+      # Invariant R-2. GitLab hands this job the `stats` artifact before the
+      # script runs, so `.stats.json` being present means that job completed -
+      # and a completed one has already merged itself over this same published
+      # copy, per stat key. Only when there is none does the published copy get
+      # carried forward untouched, which is what must happen when the `stats`
+      # job failed or was skipped.
       #
       # `|| true` is forbidden here. It cannot tell a genuine 404 from a DNS
-      # failure, a TLS error, a 5xx or a truncated body - and if the tally also
-      # failed, the deploy would then publish a site with no sidecar at all,
+      # failure, a TLS error, a 5xx or a truncated body - and if the `stats` job
+      # also failed, the deploy would then publish a site with no sidecar at all,
       # the exact wipe R-2 exists to prevent. So the status code is captured
       # and branched on: 404 is an empty seed, a 2xx that parses is the merge
       # base, anything else fails the job.
       #
       # One source. The seed URL is `site` from index.config.json, read out of
       # the checkout here - the same key, the same file and the same run as
-      # the tally that produced the artifact this job was handed. Not baked in
+      # the job that produced the artifact this one was handed. Not baked in
       # at render time on purpose: a pipeline rendered before `site` was last
-      # edited would seed from one URL while the tally read the other, which
-      # is the divergence this step exists to close.
+      # edited would seed from one URL while the collectors read the other,
+      # which is the divergence this step exists to close.
       #
       # Deliberately NOT cross-checked against `CI_PAGES_URL`. That variable
       # is always a subdomain of `CI_PAGES_DOMAIN` and never reflects a custom
@@ -34,8 +34,8 @@
         https://*) ;;
         # Not defaulted: the built-in default names the first-party index, and
         # seeding from someone else's published stats would merge their
-        # ratings into this one's sidecar. TLS because the fetched document
-        # decides every published rating - `--proto '=https'` below would
+        # stats into this one's sidecar. TLS because the fetched document
+        # decides every published stat - `--proto '=https'` below would
         # refuse it anyway, in curl's words instead of these.
         *)
           echo "grim-indexer: index.config.json needs an explicit https \`site\` - the seed is read from <site>/stats.json (got '$SITE_URL')" >&2
@@ -61,7 +61,7 @@
         }
         code=$(curl -sS --proto '=https' --tlsv1.2 --max-time 30 \
           -o .stats.json.seed -w '%{http_code}' "$SITE_URL/stats.json") || {
-          echo "grim-indexer: could not read the published stats.json - refusing to deploy a site that would empty every published rating" >&2
+          echo "grim-indexer: could not read the published stats.json - refusing to deploy a site that would empty every published stat" >&2
           exit 1
         }
         case "$code" in
