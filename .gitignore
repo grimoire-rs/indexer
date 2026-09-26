@@ -39,6 +39,9 @@ site/
 .claude/*
 !.claude/rules.md
 !.claude/rules/
+# grim writes `claudeMdExcludes` here so the rules' support directories
+# (`.claude/rules/<name>/`) stay out of unconditional context.
+!.claude/settings.json
 
 # Ephemeral agent worktrees (hex work packages). Never committed.
 .agents/worktrees/

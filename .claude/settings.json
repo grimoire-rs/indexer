@@ -1,0 +1,6 @@
+{
+  "claudeMdExcludes": [
+    "**/.claude/rules/css-theming/**",
+    "**/.claude/rules/typescript-quality/**"
+  ]
+}

@@ -2,8 +2,8 @@
 lock_version = 3
 declaration_hash_version = 1
 declaration_hash = "sha256:1ff2d60f3357ee0fa0dc45057d0a1118c6f3625c1c53c632f4fcdef8b2c26a4c"
-generated_by = "ocx 0.6.0"
-generated_at = "2026-09-01T23:25:55Z"
+generated_by = "ocx 0.6.3"
+generated_at = "2026-09-26T23:18:17Z"
 
 [[tool]]
 name = "actionlint"
@@ -62,12 +62,12 @@ group = "default"
 repository = "ocx.sh/grimoire/cli"
 
 [tool.platforms]
-"darwin/amd64" = "sha256:21d53f543441f99db1e7163296bd1af21f19af94bf11ff2155c37d5de914c6b3"
-"darwin/arm64" = "sha256:50e4e8a74acdc381acbb21f2d2fa0576b933675b716960f1d3a5b313c8e3a08e"
-"linux/amd64" = "sha256:a8ae19ecbc4091fefd0cb5fb4ea66f451d7cf1891223c014690cb83f08b90ae9"
-"linux/arm64" = "sha256:31a34f8ad31b580b50d020b9d483fbae0c2b3a2d705e593d93d2a70e55cff11e"
-"windows/amd64" = "sha256:da3ea2488f70d71219b2e899f1fbc46ab047bfc4613a4cf3142fe26549dc9941"
-"windows/arm64" = "sha256:9992d347d206a78d07ce7b55c4c5831dfcc9530049f11ae6082161947132de33"
+"darwin/amd64" = "sha256:8df424beccad7b2250714d5045ddcea28f4064dffa5ccef19cf1ce1ea994df58"
+"darwin/arm64" = "sha256:85479bc1623c6b136940927dc5238be3fa24b96d478c8a89e6bf0c90c3f31ec1"
+"linux/amd64" = "sha256:9a335976b712eb8200933e8213c4938f5e688517cb3300546a620665a31bfd85"
+"linux/arm64" = "sha256:d313f6e006ca9779247af3a786e22cb9016115facd3328a59462bf87cfa6f188"
+"windows/amd64" = "sha256:3b5335506a3f916cd9a7badf3f6ecf23960411e3b1a48db6b50b4467f207fca5"
+"windows/arm64" = "sha256:66dc15d10593656879e6d721ee9c8cbc82638c53d782adb44eda29d6525ab922"
 
 [[tool]]
 name = "lychee"
