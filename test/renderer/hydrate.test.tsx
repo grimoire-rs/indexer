@@ -772,31 +772,42 @@ describe("fuzzy search", () => {
     expect(toggle()?.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("offers relevance with or without a query, and keeps it when one clears", async () => {
-    const host = hydrateWithQuery(serverMarkup(), "acme");
-    const options = () =>
-      [...host.querySelectorAll<HTMLOptionElement>("select.sort-field option")].map(
-        (o) => o.value,
+  it("ranks a search best match first whatever the sort, which then only breaks ties", async () => {
+    // Z→A by name: alone it would put bravo ahead of alpha.
+    localStorage.setItem("grim.catalog.dir", "desc");
+    try {
+      const host = hydrateWithQuery(serverMarkup(), "alpha");
+      await vi.waitFor(() => expect(host.querySelector("button.weak-toggle")).not.toBeNull());
+      host.querySelector<HTMLButtonElement>("button.weak-toggle")!.click();
+
+      await vi.waitFor(() => expect(cards(host).map((c) => c.name)).toEqual(["alpha", "bravo"]));
+      expect(host.querySelector(".result-count")?.textContent).toBe(
+        "2 of 3 packages, best match first",
       );
 
-    expect(options()).toContain("relevance");
+      // Cleared, the chosen sort is the whole order again.
+      const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+      search.value = "";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await vi.waitFor(() =>
+        expect(cards(host).map((c) => c.name)).toEqual(["charlie", "bravo", "alpha"]),
+      );
+      expect(host.querySelector(".result-count")?.textContent).toBe("3 packages");
+    } finally {
+      localStorage.clear();
+    }
+  });
 
-    const select = host.querySelector<HTMLSelectElement>("select.sort-field")!;
-    select.value = "relevance";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    await vi.waitFor(() => expect(select.value).toBe("relevance"));
-
-    // Clearing the field leaves the mode standing: with nothing to rank it
-    // falls back to alphabetical (`CHAINS.relevance`), so the next search
-    // comes back ranked without the reader touching the control again.
-    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
-    search.value = "";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-
-    await vi.waitFor(() => expect(location.search).toBe(""));
-    expect(select.value).toBe("relevance");
-    expect(options()).toContain("relevance");
-    expect(cards(host).map((c) => c.name)).toEqual(["alpha", "bravo", "charlie"]);
+  it("offers no relevance sort, and reads a stored one as name", async () => {
+    localStorage.setItem("grim.catalog.sort", "relevance");
+    try {
+      const host = hydrateWithQuery(serverMarkup(), "");
+      const select = host.querySelector<HTMLSelectElement>("select.sort-field")!;
+      await vi.waitFor(() => expect(select.value).toBe("name"));
+      expect([...select.options].map((o) => o.value)).not.toContain("relevance");
+    } finally {
+      localStorage.clear();
+    }
   });
 });
 
@@ -897,10 +908,10 @@ describe("the sort combo's focus mark", () => {
     select.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     expect(select.dataset.pointer).toBeUndefined();
 
-    // `relevance`, not `rating`: this fixture publishes no ratings, so that
+    // `updated`, not `rating`: this fixture publishes no ratings, so that
     // option is not rendered and assigning it would silently yield "".
-    pick(select, "relevance");
-    expect(select.value).toBe("relevance");
+    pick(select, "updated");
+    expect(select.value).toBe("updated");
     // Blurring here would take the control away mid-selection: on a closed
     // select every arrow key fires its own `change`.
     expect(document.activeElement).toBe(select);

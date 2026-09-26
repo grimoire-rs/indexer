@@ -36,14 +36,13 @@ function kindOrder(kind: string): number {
 }
 
 /**
- * `relevance` orders by how well each package answered the query on screen,
- * where the other three order by something every package carries. It is
- * offered and stored like any of them even so: with no query it has nothing
- * to rank, and `CHAINS.relevance` answers that with alphabetical — the order
- * the catalog opens on anyway — so a reader can leave the catalog set to it
- * and have every later search come back ranked without touching the control.
+ * How the catalog is browsed. Relevance is deliberately not one of these: it
+ * is not a choice but a consequence of searching. While a query is scored,
+ * results come best match first and the chosen sort only breaks ties among
+ * equal scores — so a reader's stored "updated" can never bury the package
+ * they typed the name of.
  */
-export type Sort = "name" | "updated" | "rating" | "downloads" | "relevance";
+export type Sort = "name" | "updated" | "rating" | "downloads";
 export type Dir = "asc" | "desc";
 /** Roomy cards, or the same packages as a scannable list. */
 export type View = "cards" | "table";
@@ -95,7 +94,6 @@ export const NATURAL: Record<Sort, Dir> = {
   updated: "desc",
   rating: "desc",
   downloads: "desc",
-  relevance: "desc",
 };
 
 type Key = (a: CardPackage, b: CardPackage) => number;
@@ -159,16 +157,6 @@ const CHAINS: Record<Sort, Key[]> = {
   updated: [byUpdated, byName],
   rating: [byRating, byUpdated, byName],
   downloads: [byDownloads, byUpdated, byName],
-  // Relevance cannot be a key here: a score belongs to a query, not to a
-  // package, so it is not on the record `compare` is handed. `shown` sorts
-  // that mode itself.
-  //
-  // This entry is what the mode falls back to whenever there are no scores —
-  // no query typed, or the search index still downloading — which is also why
-  // relevance can be offered and stored like any other mode. Alphabetical is
-  // the honest answer to "rank these against nothing", and it is what the
-  // catalog already shows on arrival.
-  relevance: [byName],
 };
 
 // Deprecated packages get no special ordering here — they are filtered out
@@ -714,7 +702,7 @@ export default function Catalog({
     const d = readPref("dir");
     const v = readPref("view");
     const field: Sort =
-      s === "updated" || s === "rating" || s === "relevance" ? s : "name";
+      s === "updated" || s === "rating" || s === "downloads" ? s : "name";
     const published = new Set(packages.flatMap((p) => p.keywords ?? []));
     setQuery(params.get("q") ?? "");
     setKinds(list(params.get("kind")).filter((k) => KNOWN_KINDS.includes(k)));
@@ -1127,20 +1115,17 @@ export default function Catalog({
       weak = list.length - kept.length;
       if (!showWeak) list = kept;
     }
-    // Relevance is sorted here rather than in `compare`, because the score is
-    // a property of the query and not of the package — see `CHAINS`. Name
-    // breaks the tie, so equally-scored packages keep a total order and the
-    // list cannot reshuffle between renders.
-    if (sort === "relevance" && scores) {
-      list.sort((a, b) => {
-        const d =
-          descending(scores.get(a.ref) ?? null, scores.get(b.ref) ?? null) ||
-          byName(a, b);
-        return dir === NATURAL.relevance ? d : -d;
-      });
-    } else {
-      list.sort((a, b) => compare(a, b, sort, dir));
-    }
+    // A scored query ranks best match first, always; the chosen sort and
+    // direction order only packages that scored the same. The score lives
+    // here rather than in `compare` because it belongs to the query, not to
+    // the package. Without scores — no query, or the index still loading —
+    // the chosen sort is the whole order.
+    list.sort(
+      (a, b) =>
+        (scores
+          ? descending(scores.get(a.ref) ?? null, scores.get(b.ref) ?? null)
+          : 0) || compare(a, b, sort, dir),
+    );
     return [list, weak] as const;
   }, [matching, showDeprecated, showWeak, sort, dir, scores]);
 
@@ -1549,6 +1534,8 @@ export default function Catalog({
             {shown.length === counted.length
               ? `${counted.length} packages`
               : `${shown.length} of ${counted.length} packages`}
+            {/* Says why the order ignores the sort control while searching. */}
+            {scores && shown.length > 1 && ", best match first"}
           </p>
           {/* The cutoff says what it hid, and lifts for this query only. Not
               inside the status region: the count there already changes when
@@ -1663,7 +1650,6 @@ export default function Catalog({
               <option value="updated">updated</option>
               {hasRatings && <option value="rating">rating</option>}
               {hasDownloads && <option value="downloads">downloads</option>}
-              <option value="relevance">relevance</option>
             </select>
           </div>
           {/* Beside sort, because it answers the same kind of question — how

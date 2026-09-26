@@ -200,11 +200,16 @@ export function PackageCard({
           </p>
         </div>
         {/* Under the head, above the description: what the package
-            is tagged with. One row, never two — the row gives up its
-            overflow rather than wrapping, and fades at its right end
-            to say there is more. */}
-        {p.keywords && p.keywords.length > 0 && (
-          <div class="keywords" data-slot="package-keywords">
+            is tagged with. One row, never two — chips that do not fit
+            are dropped whole rather than cut off at the edge.
+
+            Rendered even with no keywords, as one inert "no keywords"
+            chip: the row keeps its height, so every card in a grid row
+            starts its description at the same line. */}
+        <div class="keywords" data-slot="package-keywords">
+            {!p.keywords?.length && (
+              <span class="chip keyword none">no keywords</span>
+            )}
             {/* Capped at five so a package with thirty keywords does
                 not render thirty chips off the side of a clipped row.
                 Which of the five actually fit is the row's business. */}
@@ -212,7 +217,7 @@ export function PackageCard({
                 are not the same answer: `setQuery("cli")` also matched
                 every description with the word in it, so the chip
                 returned packages that are not tagged `cli` at all. */}
-            {p.keywords.slice(0, 5).map((kw) => (
+            {(p.keywords ?? []).slice(0, 5).map((kw) => (
               <button
                 key={kw}
                 type="button"
@@ -228,8 +233,7 @@ export function PackageCard({
                 {kw}
               </button>
             ))}
-          </div>
-        )}
+        </div>
         {p.description && <p class="description">{p.description}</p>}
         <div class="card-foot">
           <div class="copy-group">

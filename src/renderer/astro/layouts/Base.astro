@@ -2059,32 +2059,28 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           line-clamp: 2;
           overflow: hidden;
         }
-        /* One row, always. A card in an auto-fill grid has to keep its
-           height predictable, and a package with long keywords was wrapping
-           to a second line and pushing the foot down out of step with its
-           neighbours.
+        /* One row, always, and always that row's height. A card in an
+           auto-fill grid has to keep its height predictable: a package with
+           long keywords wrapping to a second line pushed its foot out of
+           step with its neighbours, and a package with none drew no row at
+           all and started its description a row higher than theirs.
 
-           Clipped rather than counted: a "+N" chip sits at the end of the
-           row, so it is the first thing the clip eats, and it would be
-           claiming a number while the row silently hid more. The fade says
-           "there is more" without naming a figure, and the full list is on
-           the page the card links to. Same treatment the command field uses
-           for its overflow. */
-        /* One row, whatever it holds: `nowrap` plus `hidden` means a set of
-           keywords too wide for the card is cut off rather than wrapped onto
-           a second row that would unbalance the grid.
-
-           The fade is on the row, which is full-width — so it always sits at
-           the card's right edge, and on a row whose chips fit it falls
-           entirely on empty space and shows nothing. Overflow is exactly the
-           case where a chip reaches under it, which is why no measurement
-           and no JavaScript is needed to decide. */
+           So the row wraps, but is exactly one chip tall and clips: a chip
+           that does not fit falls to the hidden second line whole. Never a
+           half-cut chip, and never a fade — both read as "scroll for more"
+           on a row that does not scroll. The full list is on the page the
+           card links to. The height is one `.chip.keyword`, computed from
+           the same tokens that size it. */
         .keywords {
           display: flex;
-          flex-wrap: nowrap;
+          flex-wrap: wrap;
           gap: var(--grim-space-2);
+          height: calc(
+            var(--grim-text-2xs) * 1.4 + 2 * var(--grim-space-1) +
+              2 * var(--grim-border-width)
+          );
+          flex: 0 0 auto;
           overflow: hidden;
-          mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent);
         }
         /* Each chip keeps its own width; the row gives up, not the words. */
         .chip.keyword {
@@ -2099,6 +2095,14 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            applied — it says so rather than staying muted like the rest. */
         .chip.keyword.active {
           color: var(--grim-color-fg);
+        }
+        /* The placeholder for a package with no keywords. Not a control:
+           clicks fall through to the card link, and the pointer and hover
+           edge of a real chip would promise a facet that does not exist. */
+        .chip.keyword.none {
+          font-style: italic;
+          border-style: dashed;
+          pointer-events: none;
         }
         .card-foot {
           display: flex;
