@@ -1014,6 +1014,34 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           content: "·";
           margin-right: var(--grim-space-4);
         }
+        /* The relevance cutoff's "N weaker matches hidden": a third caption
+           in the same run, that happens to be pressable. Styled as the
+           caption it reads as, not as a chip — it is not a filter. */
+        .weak-toggle {
+          align-self: end;
+          padding: 0;
+          border: 0;
+          background: none;
+          font: inherit;
+          font-size: var(--grim-text-sm);
+          color: var(--grim-color-muted);
+          text-decoration: underline dotted;
+          text-underline-offset: 0.2em;
+          cursor: pointer;
+        }
+        .weak-toggle::before {
+          content: "·";
+          display: inline-block;
+          margin-right: var(--grim-space-4);
+        }
+        .weak-toggle:hover,
+        .weak-toggle:focus-visible {
+          color: var(--grim-color-accent);
+        }
+        .weak-toggle:focus-visible {
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: 2px;
+        }
         /* Pressed state borrows the deprecation colour rather than the
            accent, so "deprecated entries are in view" is signalled by the
            same colour the badges on those entries carry. */

@@ -20,10 +20,10 @@ import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
 import { indexAgo, lastUpdated, type CardPackage } from "../lib/catalog.js";
 import { withBase } from "../lib/base.js";
-// TYPE-ONLY, and it has to stay that way: `../lib/search.js` is the only
-// module that pulls `fuzzysort` in, and it is loaded with `await import()`
-// below so neither reaches a reader who never types. A value import here
-// would fold both back into the island's own chunk.
+// TYPE-ONLY, and it has to stay that way: `../lib/search.js` (the matcher,
+// and the `/all.json` fetch behind it) is loaded with `await import()` below
+// so neither reaches a reader who never types. A value import here would
+// fold it back into the island's own chunk.
 import type { Scores, SearchIndex } from "../lib/search.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
@@ -61,6 +61,18 @@ const KEYWORD_CHIP_LIMIT = 8;
  * How many packages the catalog builds at a time. See `limit` in `Catalog`.
  */
 const WINDOW = 48;
+
+/**
+ * Drop matches scoring under this percent of the best match on screen.
+ *
+ * grim's `options.search_min_relevance` default, and the same rule: the
+ * weights in `lib/search.ts` put a whole-word summary hit at most 2/3 of the
+ * weakest clean name hit and a description hit at most 1/3, so at 50 a
+ * query like `grim` returns the packages named for it rather than every
+ * package whose blurb mentions it. Relative, not absolute, because the
+ * scores grow with the term's length. The reader can lift it per query.
+ */
+const MIN_RELEVANCE = 50;
 
 /**
  * `popovertarget` needs an id, and the catalog is a singleton on its page —
@@ -152,7 +164,7 @@ const CHAINS: Record<Sort, Key[]> = {
   // that mode itself.
   //
   // This entry is what the mode falls back to whenever there are no scores —
-  // no query typed, or the fuzzy index still downloading — which is also why
+  // no query typed, or the search index still downloading — which is also why
   // relevance can be offered and stored like any other mode. Alphabetical is
   // the honest answer to "rank these against nothing", and it is what the
   // catalog already shows on arrival.
@@ -363,10 +375,14 @@ export default function Catalog({
   // Local to the overflow menu and deliberately not shareable: it narrows
   // the list of keywords, not the catalog.
   const [keywordFilter, setKeywordFilter] = useState("");
-  // The fuzzy matcher, once it has been fetched. `null` is the normal state
+  // The matcher, once it has been fetched. `null` is the normal state
   // for most of a visit — see the loader below — and every consumer treats
   // it as "fall back to the substring filter", never as an error.
   const [index, setIndex] = useState<SearchIndex | null>(null);
+  // The query the reader asked to see weaker matches for. Keyed on the query
+  // rather than a boolean so the next query starts cut again, with no effect
+  // to reset it.
+  const [weakFor, setWeakFor] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   /** Whether the sort combo's last interaction came from a pointer. */
@@ -1013,10 +1029,10 @@ export default function Catalog({
   const q = query.trim().toLowerCase();
 
   /**
-   * Fetch the fuzzy matcher, once, the first time anyone searches.
+   * Fetch the matcher, once, the first time anyone searches.
    *
-   * Not on mount: a reader who never types pays nothing — no `fuzzysort`
-   * chunk, no `/all.json`. Not per keystroke either; `tried` latches on the
+   * Not on mount: a reader who never types pays nothing — no search chunk,
+   * no `/all.json`. Not per keystroke either; `tried` latches on the
    * first attempt, so a failed load degrades to the substring filter for the
    * rest of the visit rather than re-fetching on every letter.
    *
@@ -1037,7 +1053,7 @@ export default function Catalog({
         const { loadSearchIndex } = await import("../lib/search.js");
         setIndex(await loadSearchIndex(withBase("/all.json")));
       } catch (err) {
-        console.error("catalog: fuzzy search unavailable, using substring match", err);
+        console.error("catalog: search index unavailable, using substring match", err);
       }
     })();
   }, [q]);
@@ -1070,10 +1086,10 @@ export default function Catalog({
         if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
         if (!keywords.every((kw) => p.keywords?.includes(kw))) return false;
         if (!q) return true;
-        // The fuzzy index, once it is here: multi-term, order-independent,
-        // typo-tolerant, and over every field `/all.json` carries — the
-        // licence, the vendor, the repository, the authors, none of which
-        // are on the record this island was handed.
+        // The search index, once it is here: grim's relevance model —
+        // multi-term, order-independent, abbreviation-tolerant on names, and
+        // over fields `/all.json` carries that this island was never handed
+        // (title, tags, vendor, authors, licence).
         if (scores) return scores.has(p.ref);
         // Until then, and if the fetch never lands: the substring pass over
         // the fields the card itself ships. Narrower on both axes, and the
@@ -1090,27 +1106,43 @@ export default function Catalog({
       }),
     [packages, kinds, keywords, q, scores],
   );
-  const shown = useMemo(() => {
+  const showWeak = weakFor === q;
+  const [shown, weaker] = useMemo(() => {
     // `.filter()` already returns a fresh array, so sorting in place here
     // mutates nothing the memo above holds — except in the `showDeprecated`
     // branch, where `matching` IS that array. Copy before sorting.
-    const list = showDeprecated
+    let list = showDeprecated
       ? [...matching]
       : matching.filter((p) => !p.deprecated);
+    // The relevance cutoff: after every filter, so "the best match" is the
+    // best one the reader can actually see, and before the sort, so it
+    // decides which packages a query returns whatever order they come in.
+    // An all-zero set (a kind-only query) keeps everything.
+    let weak = 0;
+    if (scores) {
+      const best = list.reduce((m, p) => Math.max(m, scores.get(p.ref) ?? 0), 0);
+      const kept = list.filter(
+        (p) => (scores.get(p.ref) ?? 0) * 100 >= best * MIN_RELEVANCE,
+      );
+      weak = list.length - kept.length;
+      if (!showWeak) list = kept;
+    }
     // Relevance is sorted here rather than in `compare`, because the score is
     // a property of the query and not of the package — see `CHAINS`. Name
     // breaks the tie, so equally-scored packages keep a total order and the
     // list cannot reshuffle between renders.
     if (sort === "relevance" && scores) {
-      return list.sort((a, b) => {
+      list.sort((a, b) => {
         const d =
           descending(scores.get(a.ref) ?? null, scores.get(b.ref) ?? null) ||
           byName(a, b);
         return dir === NATURAL.relevance ? d : -d;
       });
+    } else {
+      list.sort((a, b) => compare(a, b, sort, dir));
     }
-    return list.sort((a, b) => compare(a, b, sort, dir));
-  }, [matching, showDeprecated, sort, dir, scores]);
+    return [list, weak] as const;
+  }, [matching, showDeprecated, showWeak, sort, dir, scores]);
 
 
   /**
@@ -1518,6 +1550,21 @@ export default function Catalog({
               ? `${counted.length} packages`
               : `${shown.length} of ${counted.length} packages`}
           </p>
+          {/* The cutoff says what it hid, and lifts for this query only. Not
+              inside the status region: the count there already changes when
+              this is pressed, and announcing both reads it out twice. */}
+          {weaker > 0 && (
+            <button
+              type="button"
+              class="weak-toggle"
+              aria-pressed={showWeak}
+              onClick={() => setWeakFor(showWeak ? null : q)}
+            >
+              {showWeak
+                ? `hide ${weaker} weaker ${weaker === 1 ? "match" : "matches"}`
+                : `${weaker} weaker ${weaker === 1 ? "match" : "matches"} hidden`}
+            </button>
+          )}
           {/* When this site was rendered — the answer to "am I looking at a
               stale index?", which the per-package stamps cannot give.
 

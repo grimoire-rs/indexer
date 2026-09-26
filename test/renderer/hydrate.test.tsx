@@ -719,6 +719,8 @@ describe("fuzzy search", () => {
     ...p,
     license: i === 0 ? "Apache-2.0" : "MIT",
     vendor: i === 0 ? "initech" : "acme-labs",
+    // A passing mention of another package's name: a match, but a weak one.
+    description: i === 1 ? "pairs well with alpha" : "",
   }));
 
   beforeEach(() => {
@@ -746,6 +748,28 @@ describe("fuzzy search", () => {
     await vi.waitFor(() =>
       expect(cards(host).map((c) => c.name)).toEqual(["alpha"]),
     );
+  });
+
+  it("hides matches far weaker than the best, says so, and lifts it for this query", async () => {
+    // `alpha` IS alpha's name; bravo only mentions it in a description.
+    const host = hydrateWithQuery(serverMarkup(), "alpha");
+    const toggle = () => host.querySelector<HTMLButtonElement>("button.weak-toggle");
+
+    await vi.waitFor(() => expect(toggle()?.textContent).toBe("1 weaker match hidden"));
+    expect(cards(host).map((c) => c.name)).toEqual(["alpha"]);
+    expect(host.querySelector(".result-count")?.textContent).toBe("1 of 3 packages");
+
+    toggle()!.click();
+    await vi.waitFor(() => expect(cards(host).map((c) => c.name)).toEqual(["alpha", "bravo"]));
+    expect(toggle()?.getAttribute("aria-pressed")).toBe("true");
+    expect(toggle()?.textContent).toBe("hide 1 weaker match");
+
+    // A new query starts cut again.
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    search.value = "alph";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await vi.waitFor(() => expect(cards(host).map((c) => c.name)).toEqual(["alpha"]));
+    expect(toggle()?.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("offers relevance with or without a query, and keeps it when one clears", async () => {
