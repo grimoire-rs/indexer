@@ -11,6 +11,7 @@ import {
 import {
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
+  ChevronDown,
   LayoutGrid,
   List,
   X,
@@ -79,6 +80,8 @@ const MIN_RELEVANCE = 50;
  * than something generated per mount.
  */
 const KEYWORD_MENU_ID = "grim-keyword-overflow";
+/** Same reason, for the sort field's menu. */
+const SORT_MENU_ID = "grim-sort-menu";
 
 /**
  * The direction each field is *worth* reading first in — A→Z for a name,
@@ -257,6 +260,63 @@ function columnCount(cards: HTMLElement[]): number {
 }
 
 /**
+ * Seat a popover panel under its trigger.
+ *
+ * A popover lives in the top layer and is positioned against the viewport
+ * rather than against any ancestor — which is the point (`.filter-row` is a
+ * scroll container and used to crop the keyword menu). That leaves the seat
+ * to us.
+ *
+ * It always opens downward: the toolbar sits at the top of the page, and a
+ * flip would only ever fire on a viewport short enough that the panel has
+ * nowhere to go either way. What does not fit becomes `max-height` and
+ * scrolls inside the list.
+ *
+ * Called twice per open, from `beforetoggle` and again from `toggle`. The
+ * first runs while the panel is still `display: none`, so its measured width
+ * is 0 and the horizontal clamp is a no-op — but the vertical seat is right,
+ * which is what stops it appearing in the wrong place for a frame. The
+ * second has a real width and finishes the clamp.
+ */
+function seatPopover(panel: HTMLElement | null, trigger: HTMLElement | null) {
+  if (!panel || !trigger) return;
+  const seat = trigger.getBoundingClientRect();
+  const gap = 8;
+  const width = panel.getBoundingClientRect().width;
+  panel.style.left = `${Math.max(gap, Math.min(seat.left, window.innerWidth - width - gap))}px`;
+  panel.style.top = `${seat.bottom + gap}px`;
+  panel.style.maxHeight = `${Math.max(120, window.innerHeight - seat.bottom - gap * 3)}px`;
+}
+
+/**
+ * Arrow keys, Home and End walk a menu's items, wrapping — the keyboard half
+ * of the `menu` role; Enter and Space are the items' own, as buttons. Tab is left alone: it leaves the menu, and the popover
+ * light-dismisses behind it.
+ */
+function moveMenuFocus(event: KeyboardEvent) {
+  // Escape is the popover's own: it closes the menu. Kept off the document,
+  // whose Escape handler would otherwise also clear the reader's filters.
+  if (event.key === "Escape") {
+    event.stopPropagation();
+    return;
+  }
+  const items = [
+    ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("[role=menuitemradio]"),
+  ];
+  const at = items.indexOf(document.activeElement as HTMLElement);
+  const last = items.length - 1;
+  const next =
+    event.key === "ArrowDown" ? (at >= last ? 0 : at + 1)
+    : event.key === "ArrowUp" ? (at <= 0 ? last : at - 1)
+    : event.key === "Home" ? 0
+    : event.key === "End" ? last
+    : null;
+  if (next === null) return;
+  event.preventDefault();
+  items[next]?.focus();
+}
+
+/**
  * The same packages as a list, for reading down a column rather than across
  * a grid.
  *
@@ -373,8 +433,6 @@ export default function Catalog({
   const [weakFor, setWeakFor] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
-  /** Whether the sort combo's last interaction came from a pointer. */
-  const pickedByPointer = useRef(false);
   const gridRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
 
@@ -435,42 +493,36 @@ export default function Catalog({
   // visibility is the popover's business, not this flag's.
   const [kwMenuOpen, setKwMenuOpen] = useState(false);
 
-  /**
-   * Seat the overflow menu under its trigger.
-   *
-   * The panel is a popover, so it lives in the top layer and is positioned
-   * against the viewport rather than against any ancestor — which is the whole
-   * point (`.filter-row` is a scroll container and used to crop it). That
-   * leaves the seat to us.
-   *
-   * It always opens downward: the toolbar sits at the top of the page, and a
-   * flip would only ever fire on a viewport short enough that the panel has
-   * nowhere to go either way. What does not fit becomes `max-height` and
-   * scrolls inside the list.
-   *
-   * Called twice per open, from `beforetoggle` and again from `toggle`. The
-   * first runs while the panel is still `display: none`, so its measured width
-   * is 0 and the horizontal clamp is a no-op — but the vertical seat is right,
-   * which is what stops it appearing in the wrong place for a frame. The
-   * second has a real width and finishes the clamp.
-   */
-  const placeKwMenu = () => {
-    const panel = kwMenuRef.current;
-    const trigger = kwTriggerRef.current;
-    if (!panel || !trigger) return;
-    const seat = trigger.getBoundingClientRect();
-    const gap = 8;
-    const width = panel.getBoundingClientRect().width;
-    panel.style.left = `${Math.max(gap, Math.min(seat.left, window.innerWidth - width - gap))}px`;
-    panel.style.top = `${seat.bottom + gap}px`;
-    panel.style.maxHeight = `${Math.max(120, window.innerHeight - seat.bottom - gap * 3)}px`;
+  const placeKwMenu = () => seatPopover(kwMenuRef.current, kwTriggerRef.current);
+
+  // The sort field's menu: the same popover, seated the same way. It replaced
+  // a native `<select>`, whose open list the OS draws — rounded and in the
+  // OS's colours on Windows and macOS, with no way to restyle it in Firefox.
+  // A popover is ours to draw, in every engine.
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+  const sortTriggerRef = useRef<HTMLButtonElement>(null);
+  const placeSortMenu = () => seatPopover(sortMenuRef.current, sortTriggerRef.current);
+
+  const pickSort = (next: Sort) => {
+    setSort(next);
+    // Picking a field takes that field's own direction. Carrying the previous
+    // one over lands the reader on "oldest first" because they had asked for
+    // Z→A a moment ago.
+    setDir(NATURAL[next]);
+    // Optional call: jsdom has no popover API. In a browser, hiding a popover
+    // that holds focus hands it back to the trigger.
+    sortMenuRef.current?.hidePopover?.();
   };
 
   // A fixed panel does not travel with the trigger, so it is re-seated rather
   // than left behind. Only while open — there is nothing to follow otherwise.
   useEffect(() => {
-    if (!kwMenuOpen) return;
-    const reseat = () => placeKwMenu();
+    if (!kwMenuOpen && !sortMenuOpen) return;
+    const reseat = () => {
+      placeKwMenu();
+      placeSortMenu();
+    };
     // Capturing: the scroll may be any ancestor's, including `.filter-row`'s.
     window.addEventListener("scroll", reseat, { capture: true, passive: true });
     window.addEventListener("resize", reseat);
@@ -478,7 +530,7 @@ export default function Catalog({
       window.removeEventListener("scroll", reseat, { capture: true });
       window.removeEventListener("resize", reseat);
     };
-  }, [kwMenuOpen]);
+  }, [kwMenuOpen, sortMenuOpen]);
 
   /**
    * How many keyword chips actually fit on the row, measured.
@@ -1251,6 +1303,13 @@ export default function Catalog({
   const hasDeprecated = packages.some((p) => p.deprecated);
   const hasRatings = packages.some((p) => p.rating);
   const hasDownloads = packages.some((p) => p.downloads);
+  // The sort fields on offer — a stat nobody publishes is not a choice.
+  const sortFields: Sort[] = [
+    "name",
+    "updated",
+    ...(hasRatings ? (["rating"] as const) : []),
+    ...(hasDownloads ? (["downloads"] as const) : []),
+  ];
 
   return (
     <section class="catalog" data-slot="catalog">
@@ -1565,8 +1624,8 @@ export default function Catalog({
             updated {indexAgo(builtAt)}
           </time>
           {/* Held at the far end, away from the chips: choosing an order is
-              not filtering. Both halves take an ordinary tab stop; a select
-              owns ArrowLeft/Right for its options, so neither can join the
+              not filtering. Both halves take an ordinary tab stop; the
+              field's menu owns its own arrow keys, so neither can join the
               chips' roving arrow ring. */}
           <div class="sort-group" role="group" aria-label="Sort by">
             {/* Left, because that is the order the pair reads in: "descending,
@@ -1595,62 +1654,71 @@ export default function Catalog({
                 <ArrowDownWideNarrow size={15} aria-hidden="true" />
               )}
             </button>
-            <select
+            {/* A button and a popover menu, not a `<select>`: see
+                `pickSort`. `value` carries the field, so the trigger reads
+                back the way the select it replaced did. */}
+            <button
+              type="button"
               class="sort-field"
               data-slot="filter-chip"
-              aria-label="Sort by"
+              ref={sortTriggerRef}
               value={sort}
-              // Chromium matches `:focus-visible` on a `<select>` after a
-              // plain MOUSE click — a select accepts keyboard input, so the
-              // engine treats every focus as keyboard focus. The repo's
-              // `:focus-visible` convention therefore cannot keep the accent
-              // ring off this one control, and CSS has nothing else to go on:
-              // no selector distinguishes focus that arrived from a pointer.
-              //
-              // So the pointer marks itself. `data-pointer` suppresses the
-              // ring for the whole pointer interaction — an open dropdown is
-              // its own affordance and needs no second one around the closed
-              // box behind it — and the pick then hands focus back, so
-              // nothing is left lit beside the thin neutral chips.
-              //
-              // The keyboard path must do NEITHER. Arrow keys on a closed
-              // select fire `change` per option, so blurring there would take
-              // the control away mid-selection, and a keyboard reader is
-              // exactly who the ring exists for. `onKeyDown` clears both, so
-              // a reader who clicks once and later tabs back is a keyboard
-              // reader again.
-              //
-              // Written to the node rather than to state: this fires while
-              // the native dropdown is open, and a re-render of the element
-              // holding it open is not worth the risk for a styling hint.
-              onPointerDown={(event) => {
-                pickedByPointer.current = true;
-                event.currentTarget.dataset.pointer = "";
+              popovertarget={SORT_MENU_ID}
+              aria-haspopup="menu"
+              aria-expanded={sortMenuOpen}
+              aria-label={`Sort by ${sort}`}
+            >
+              {/* Every field's name, stacked in one grid cell with only the
+                  current one visible, so the button is always as wide as the
+                  longest and does not resize on a pick. `aria-label` names
+                  the control, so the hidden ones are never read. */}
+              <span class="sort-label">
+                {sortFields.map((field) => (
+                  <span key={field} data-current={field === sort || undefined}>
+                    {field}
+                  </span>
+                ))}
+              </span>
+              <ChevronDown size={12} aria-hidden="true" />
+            </button>
+            <div
+              class="sort-menu-panel"
+              id={SORT_MENU_ID}
+              popover="auto"
+              role="menu"
+              aria-label="Sort by"
+              ref={sortMenuRef}
+              onKeyDown={moveMenuFocus}
+              onBeforeToggle={(e) => {
+                setSortMenuOpen(e.newState === "open");
+                placeSortMenu();
               }}
-              onKeyDown={(event) => {
-                pickedByPointer.current = false;
-                delete event.currentTarget.dataset.pointer;
-              }}
-              onBlur={(event) => {
-                delete event.currentTarget.dataset.pointer;
-              }}
-              onChange={(event) => {
-                const next = (event.currentTarget as HTMLSelectElement)
-                  .value as Sort;
-                setSort(next);
-                // Picking a field takes that field's own direction. Carrying
-                // the previous one over lands the reader on "oldest first"
-                // because they had asked for Z→A a moment ago.
-                setDir(NATURAL[next]);
-                // The pointer path only: see the handlers above.
-                if (pickedByPointer.current) event.currentTarget.blur();
+              onToggle={(e) => {
+                setSortMenuOpen(e.newState === "open");
+                placeSortMenu();
+                // Opening lands on the current choice, the way a select's
+                // list does, so the arrows start from where the reader is.
+                if (e.newState === "open") {
+                  sortMenuRef.current
+                    ?.querySelector<HTMLElement>('[aria-checked="true"]')
+                    ?.focus();
+                }
               }}
             >
-              <option value="name">name</option>
-              <option value="updated">updated</option>
-              {hasRatings && <option value="rating">rating</option>}
-              {hasDownloads && <option value="downloads">downloads</option>}
-            </select>
+              {sortFields.map((field) => (
+                <button
+                  key={field}
+                  type="button"
+                  class="sort-menu-item"
+                  role="menuitemradio"
+                  value={field}
+                  aria-checked={field === sort}
+                  onClick={() => pickSort(field)}
+                >
+                  {field}
+                </button>
+              ))}
+            </div>
           </div>
           {/* Beside sort, because it answers the same kind of question — how
               the catalog is arranged, not which of it is shown. Two buttons
@@ -1664,22 +1732,22 @@ export default function Catalog({
               class={view === "cards" ? "view-pick active" : "view-pick"}
               data-slot="filter-chip"
               aria-pressed={view === "cards"}
-              title="Cards"
               aria-label="Show packages as cards"
               onClick={() => setView("cards")}
             >
               <LayoutGrid size={15} aria-hidden="true" />
+              <span>Cards</span>
             </button>
             <button
               type="button"
               class={view === "table" ? "view-pick active" : "view-pick"}
               data-slot="filter-chip"
               aria-pressed={view === "table"}
-              title="List"
               aria-label="Show packages as a list"
               onClick={() => setView("table")}
             >
               <List size={15} aria-hidden="true" />
+              <span>List</span>
             </button>
           </div>
         </div>

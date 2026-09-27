@@ -674,7 +674,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           border-radius: var(--grim-radius-control);
           box-shadow: var(--grim-shadow-raised);
         }
-        .os-menu li button {
+        .os-menu li button,
+        .sort-menu-item {
           display: flex;
           align-items: center;
           gap: var(--grim-space-4);
@@ -690,10 +691,21 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           cursor: pointer;
         }
         .os-menu li button:hover,
-        .os-menu li button:focus-visible {
+        .os-menu li button:focus-visible,
+        .sort-menu-item:hover,
+        .sort-menu-item:focus-visible {
           background: var(--grim-color-chip-bg);
         }
-        .os-menu li button[aria-checked="true"] {
+        /* The toolbar's own ring, inset so the panel's edge does not clip it.
+           The UA's `outline: auto` is rounded whatever the radius token
+           says, and in the OS's colour. */
+        .os-menu li button:focus-visible,
+        .sort-menu-item:focus-visible {
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: -2px;
+        }
+        .os-menu li button[aria-checked="true"],
+        .sort-menu-item[aria-checked="true"] {
           color: var(--grim-color-accent);
         }
         /* Borderless segments need a different hover than the pills do — the
@@ -1097,6 +1109,34 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .sort-field:focus-visible {
           z-index: 1;
         }
+        /* The field half is a button now (see `pickSort` in `Catalog.tsx`),
+           so it draws its own chevron where a select had the UA's. */
+        .sort-field {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--grim-space-3);
+        }
+        .sort-field > svg {
+          color: var(--grim-color-muted);
+        }
+        /* Every label in one cell: the cell takes the widest, and only the
+           current one is painted. `visibility`, not `display`, or the hidden
+           ones would stop contributing their width. */
+        .sort-label {
+          display: grid;
+          text-align: left;
+        }
+        .sort-label > span {
+          grid-area: 1 / 1;
+          visibility: hidden;
+        }
+        .sort-label > span[data-current] {
+          visibility: visible;
+        }
+        .sort-field[aria-expanded="true"] {
+          border-color: var(--grim-color-accent);
+          z-index: 1;
+        }
         /* One box for every chip in the filter row — the kinds, the keywords,
            the deprecated toggle and the overflow menu's trigger alike. The
            line-height is stated rather than inherited because a `<summary>`
@@ -1167,7 +1207,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            deliberately absent: the UA's `display: none` for a closed popover
            has to keep winning, so the flex box is declared on `:popover-open`
            alone — an unconditional `display` here would show the menu shut. */
-        .kw-menu-panel {
+        .kw-menu-panel,
+        .sort-menu-panel {
           position: fixed;
           inset: auto;
           margin: 0;
@@ -1190,6 +1231,17 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           display: flex;
           flex-direction: column;
           gap: var(--grim-space-3);
+        }
+        /* The field's menu: the keyword menu's panel (the shared rule above
+           gives it its box), sized to its words rather than to a search box. */
+        .sort-menu-panel {
+          width: auto;
+          min-width: 9rem;
+          padding: var(--grim-space-2);
+        }
+        .sort-menu-panel:popover-open {
+          display: flex;
+          flex-direction: column;
         }
         .kw-menu-search {
           width: 100%;
@@ -1262,11 +1314,15 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
              the select inside it is the tall one. */
           align-self: stretch;
         }
+        /* Icon and word: the icons alone went unnoticed — readers did not
+           know there was a list view at all. */
         .view-pick {
           position: relative;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          gap: var(--grim-space-2);
+          font-size: var(--grim-text-sm);
           padding: var(--grim-space-2) var(--grim-space-4);
           border: var(--grim-border-width) solid var(--grim-color-border);
           background: var(--grim-color-card);
@@ -1313,18 +1369,6 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .view-pick:focus-visible {
           outline: 2px solid var(--grim-color-accent);
           outline-offset: 0;
-          border-color: var(--grim-color-accent);
-        }
-        /* The sort combo, while a POINTER is driving it. Chromium hands a
-           `<select>` `:focus-visible` on an ordinary click, so this control
-           alone would wear the keyboard ring for a mouse interaction — around
-           a closed box sitting behind its own open dropdown, which already
-           says everything the ring would. `data-pointer` is set by the
-           element's own `pointerdown` and cleared by a keypress or a blur, so
-           the ring is only ever suppressed for the interaction that did not
-           need it; every keyboard focus keeps it. */
-        .sort-field[data-pointer]:focus-visible {
-          outline: none;
           border-color: var(--grim-color-accent);
         }
 
@@ -1379,7 +1423,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         }
         /* Card highlight yields while an inner control is hovered, so its
            own hover state reads as the click target instead. */
-        .card:hover:not(:has(.keywords :hover, .copy-group :hover, .rating-group a:hover)) {
+        .card:hover:not(:has(.keywords :hover, .copy-group :hover)) {
           border-color: var(--grim-color-accent);
         }
         /* Keyboard focus reads as a thicker edge, not a second decoration:
@@ -1416,50 +1460,48 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            its width on a narrow card. They live in `.card-tags` below. */
         .card-head {
           display: grid;
-          /* Two trailing `auto` tracks, not one: the download figure and the
-             rating pair are independent — an index can publish either, both,
-             or neither — and a track that holds nothing collapses to zero
-             width, so the present one still lands on the card's right edge. */
-          grid-template-columns: auto minmax(0, 1fr) auto auto;
+          /* The trailing `auto` track holds the action buttons. */
+          grid-template-columns: auto minmax(0, 1fr) auto;
           align-items: center;
           column-gap: var(--grim-space-4);
         }
         .card-head .card-logo {
           grid-row: 1 / span 2;
         }
-        /* The address line runs the full width under the name: the kind is
-           a word on it now, not a badge in the head, so nothing sits to its
-           right to make room for. */
+        /* The address line sits under the name, in the name's column: the
+           buttons beside them span both rows. */
         .card-head .namespace {
-          grid-column: 2 / -1;
+          grid-column: 2;
           grid-row: 2;
+        }
+        /* Across both rows, centred on the pair — level with the logo tile
+           on the other side, which spans the same two rows. */
+        .card-head .copy-group {
+          grid-column: 3;
+          grid-row: 1 / span 2;
+          flex-wrap: nowrap;
         }
         .card-head h2 {
           grid-column: 2;
           grid-row: 1;
         }
-        /* Level with the name, in the card's top-right corner. The only
-           thing that shares this row — the kind badge that used to sit here
-           went down to the address line, which is what stopped the name
-           being squeezed between two of them. */
-        .card-head .rating-group {
-          grid-column: 4;
-          grid-row: 1;
-          justify-self: end;
-        }
-        /* A plain figure, deliberately unlike the rating pill beside it: that
-           one is a control and wears a border to say so, and giving this the
-           same chrome would invite a click that does nothing. */
-        .card-head .download-count {
-          grid-column: 3;
-          grid-row: 1;
-          justify-self: end;
+        /* Downloads and votes, bottom right, opposite the version. Plain
+           figures, deliberately without a control's border: nothing here is
+           clickable, and chrome would invite a click that does nothing.
+           `auto` keeps them right on a card with no version line. */
+        .card-stats {
+          margin-left: auto;
           display: flex;
-          align-items: center;
-          gap: var(--grim-space-2);
+          gap: var(--grim-space-4);
           font-size: var(--grim-text-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--grim-color-muted);
+          white-space: nowrap;
+        }
+        .card-stats > span {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--grim-space-2);
         }
         /* Texture, not an icon: oversized and hung off the card's own
            bottom-right corner, so `overflow: hidden` clips it to the rounded
@@ -2021,17 +2063,16 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           z-index: 2;
         }
         /* Version and recency as one aside. Italic and a step below the rest
-           on purpose — it is a note about the card, not one of its facts, and
-           it sits opposite two buttons that should keep the eye. Bottom-
-           aligned rather than centred on them, since a centred aside reads as
-           a third control in the row. */
+           on purpose — it is a note about the card, not one of its facts. */
         .card-meta {
           margin: 0;
-          align-self: flex-end;
           font-size: var(--grim-text-2xs);
           font-style: italic;
           color: var(--grim-color-muted);
           white-space: nowrap;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .card-version {
           font-family: ui-monospace, "SFMono-Regular", monospace;
@@ -2113,7 +2154,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           justify-content: space-between;
           gap: var(--grim-space-4);
         }
-        /* The slack goes above the buttons, so they line up across a row
+        /* The slack goes above the foot, so it lines up across a row
            however tall the cards are. The foot is the last group on every
            card — the keywords moved up under the head — so there is one
            element to hang it on rather than one per layout. */
@@ -2259,6 +2300,23 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           padding: 0;
           gap: 0;
           text-decoration: none;
+        }
+        /* Ghosts: the same three buttons sit on every card, and boxed they
+           were the busiest thing on a grid of cards. Muted and borderless at
+           rest, so the card still says what it offers; the box comes back on
+           hover and focus, when the button is the thing being pointed at.
+           `transparent` rather than no border, so the button keeps its size
+           and nothing shifts when the edge appears. */
+        .copy-group .copy:not(.copied) {
+          border-color: transparent;
+          background: transparent;
+          color: var(--grim-color-muted);
+        }
+        .copy-group .copy:not(.copied):hover,
+        .copy-group .copy:not(.copied):focus-visible {
+          border-color: var(--grim-color-accent);
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-fg);
         }
         .empty {
           color: var(--grim-color-muted);

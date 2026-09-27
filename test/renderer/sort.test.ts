@@ -285,10 +285,9 @@ describe("deprecated visibility", () => {
 
   /** Pick a sort field in the combo box, the way a reader does. */
   async function pickSort(host: HTMLElement, value: Sort) {
-    const select = host.querySelector<HTMLSelectElement>("select.sort-field");
-    if (!select) throw new Error("no sort field");
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const item = host.querySelector<HTMLElement>(`.sort-menu-item[value="${value}"]`);
+    if (!item) throw new Error(`no sort item for ${value}`);
+    item.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
@@ -308,7 +307,7 @@ describe("deprecated visibility", () => {
       // option, a handler wired to the wrong field) leaves the mode on its
       // default "name" and the loop can't tell — this failed against two
       // mutations that the bare card-content assertions below did not catch.
-      expect(host.querySelector<HTMLSelectElement>("select.sort-field")?.value, sort).toBe(sort);
+      expect(host.querySelector<HTMLButtonElement>("button.sort-field")?.value, sort).toBe(sort);
 
       expect(cardNames(host), `${sort}: default`).toEqual(DEFAULT_ORDER[sort]);
 

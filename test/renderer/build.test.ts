@@ -304,20 +304,21 @@ describe("frozen URLs", () => {
 // the ratings job left in the index root — the page never fetches anything.
 describe("ratings", () => {
   it("joins the sidecar onto the cards by ref", () => {
-    // Prefix, not the whole attribute: the count carries the thread link's
-    // own hint after it when the sidecar names one.
-    expect(indexHtml).toContain('title="47 upvotes'); // starter-pack
-    expect(indexHtml).toContain('title="12 upvotes'); // code-review
-    expect(indexHtml).toContain('title="1 upvote'); // rust-style, singular
+    expect(indexHtml).toContain('title="47 upvotes"'); // starter-pack
+    expect(indexHtml).toContain('title="12 upvotes"'); // code-review
+    expect(indexHtml).toContain('title="1 upvote"'); // rust-style, singular
   });
 
   // No forge offers a URL that casts a vote, so the count opens the thread
-  // and the extension's own `/vote` route is what actually casts one.
-  it("offers both ways to vote — the thread, and the extension", () => {
-    expect(indexHtml).toContain('href="https://github.com/acme/index/discussions/42"');
-    expect(indexHtml).toContain(
+  // and the extension's own `/vote` route is what actually casts one. Both
+  // live on the detail page; a card is for scanning, not voting.
+  it("offers both ways to vote — the thread, and the extension", async () => {
+    const detail = await readOut("p/github.com/acme/code-review/index.html");
+    expect(detail).toContain('href="https://github.com/acme/index/discussions/42"');
+    expect(detail).toContain(
       'href="vscode://acme.acme-vscode/vote?repo=ghcr.io%2Facme%2Fcode-review"',
     );
+    expect(indexHtml).not.toContain("vscode://acme.acme-vscode/vote");
   });
 
   // Every level of absence in one page: a ref the sidecar omits
@@ -325,7 +326,7 @@ describe("ratings", () => {
   // and a rating for a ref that is not in the catalog at all (`acme/gone`).
   // None of them is an error, and none of them renders a zero.
   it("leaves everything else unrated, and invents no card for an unknown ref", () => {
-    expect(indexHtml.match(/class="rating-group"/g)).toHaveLength(3);
+    expect(indexHtml.match(/class="vote-count"/g)).toHaveLength(3);
     expect(indexHtml).not.toContain("acme/gone");
     expect(indexHtml).not.toContain("0 upvotes");
   });
@@ -357,10 +358,9 @@ describe("ratings", () => {
   });
 
   it("offers rating and downloads as sort fields, and no relevance", () => {
-    const select = indexHtml.match(/<select class="sort-field"[\s\S]*?<\/select>/)![0]!;
-    // `[^>]*`: the selected option carries `selected` ahead of its `value`.
+    const menu = indexHtml.match(/<div class="sort-menu-panel"[\s\S]*?<\/div>/)![0]!;
     // Relevance is not a choice: a search ranks by it automatically.
-    expect([...select.matchAll(/<option[^>]*value="([a-z]+)"/g)].map((m) => m[1])).toEqual([
+    expect([...menu.matchAll(/<button[^>]*value="([a-z]+)"/g)].map((m) => m[1])).toEqual([
       "name",
       "updated",
       "rating",
@@ -992,9 +992,12 @@ describe("config reaches the rendered HTML", () => {
   // `overflow`, so the panel is a popover, positioned against the viewport.
   it("opens the keyword overflow menu outside the toolbar's scroll container", () => {
     expect(bundledCss).toMatch(/\.filter-row\{[^}]*overflow-x:auto/);
-    expect(bundledCss).toMatch(/\.kw-menu-panel\{[^}]*position:fixed/);
+    // One rule seats both popover menus: the keyword overflow and the sort
+    // field's.
+    expect(bundledCss).toMatch(/\.kw-menu-panel,\.sort-menu-panel\{[^}]*position:fixed/);
     // Undoing the UA's centring of a popover, or `left`/`top` mean nothing.
-    expect(bundledCss).toMatch(/\.kw-menu-panel\{[^}]*inset:auto/);
+    expect(bundledCss).toMatch(/\.kw-menu-panel,\.sort-menu-panel\{[^}]*inset:auto/);
+    expect(bundledCss).toMatch(/\.sort-menu-panel:popover-open\{[^}]*display:flex/);
     // `display` on the base rule would beat the UA's `display:none` and show
     // the menu while it is shut, so the flex box lives on the open state only.
     expect(bundledCss).toMatch(/\.kw-menu-panel:popover-open\{[^}]*display:flex/);

@@ -242,7 +242,7 @@ describe("the view round-trips", () => {
   });
 
   const sortField = (host: HTMLElement) =>
-    host.querySelector<HTMLSelectElement>("select.sort-field")?.value;
+    host.querySelector<HTMLButtonElement>("button.sort-field")?.value;
 
   it("takes kind from the URL and sort from storage, dropping what it does not know", async () => {
     // `updated`, not `rating`: the rating option is offered only when some
@@ -274,9 +274,7 @@ describe("the view round-trips", () => {
     host.querySelector<HTMLElement>("button.sort-dir")!.click();
     await vi.waitFor(() => expect(localStorage.getItem("grim.catalog.dir")).toBe("asc"));
 
-    const select = host.querySelector<HTMLSelectElement>("select.sort-field")!;
-    select.value = "name";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    host.querySelector<HTMLElement>('.sort-menu-item[value="name"]')!.click();
     await vi.waitFor(() => {
       expect(localStorage.getItem("grim.catalog.sort"), "name is the default").toBeNull();
       expect(localStorage.getItem("grim.catalog.dir"), "and asc is name's own").toBeNull();
@@ -462,6 +460,15 @@ describe("the keyword facet", () => {
     // Swallowing it here would trap focus in the field — worse than the walk
     // through the toolbar the hatch exists to save.
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  // The kind is written on the address line; the corner mark is spent on
+  // deprecation alone. A coloured kind glyph on every card was the loudest
+  // thing on the grid and said nothing the card did not already say.
+  it("wears a corner mark only when deprecated", async () => {
+    const host = mountAt("/");
+    await settle();
+    expect(host.querySelector("li.card .card-watermark")).toBeNull();
   });
 
   it("round-trips the cards/table choice through storage, not the URL", async () => {
@@ -802,9 +809,10 @@ describe("fuzzy search", () => {
     localStorage.setItem("grim.catalog.sort", "relevance");
     try {
       const host = hydrateWithQuery(serverMarkup(), "");
-      const select = host.querySelector<HTMLSelectElement>("select.sort-field")!;
-      await vi.waitFor(() => expect(select.value).toBe("name"));
-      expect([...select.options].map((o) => o.value)).not.toContain("relevance");
+      const field = host.querySelector<HTMLButtonElement>("button.sort-field")!;
+      await vi.waitFor(() => expect(field.value).toBe("name"));
+      const items = [...host.querySelectorAll<HTMLButtonElement>(".sort-menu-item")];
+      expect(items.map((b) => b.value)).not.toContain("relevance");
     } finally {
       localStorage.clear();
     }
@@ -852,17 +860,13 @@ describe("the search field's clear button", () => {
 });
 
 /**
- * The sort combo's focus ring, whose rule lives half in CSS and half here.
- *
- * Chromium hands a `<select>` `:focus-visible` on an ordinary mouse click, so
- * no selector can tell pointer focus from keyboard focus and the element has
- * to say which it was. `data-pointer` is that signal; `Base.astro` drops the
- * ring while it is present. jsdom implements neither `:focus-visible` nor the
- * outline, so what is checked here is the half that can regress in this file:
- * which interaction sets the mark, which clears it, and that only a pointer
- * pick hands focus back.
+ * The sort field's menu: a button and a popover of `menuitemradio`s, standing
+ * in for the native `<select>` whose OS-drawn list could not be styled. jsdom
+ * has no popover API, so the panel is always in the DOM here; what is checked
+ * is the half that lives in this file — what a pick does, which item says it
+ * is checked, the arrow keys, and that Escape stays the menu's own.
  */
-describe("the sort combo's focus mark", () => {
+describe("the sort menu", () => {
   beforeEach(() => {
     history.replaceState({}, "", "/");
   });
@@ -874,57 +878,67 @@ describe("the sort combo's focus mark", () => {
     localStorage.clear();
   });
 
-  function mount(): HTMLSelectElement {
+  function mount(url = "/"): HTMLElement {
+    history.replaceState({}, "", url);
     const host = document.createElement("div");
     document.body.append(host);
     mounted.push(host);
     render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={BUILT_AT} />, host);
-    return host.querySelector<HTMLSelectElement>("select.sort-field")!;
+    return host;
   }
 
-  const pick = (select: HTMLSelectElement, value: string) => {
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  };
+  const field = (host: HTMLElement) => host.querySelector<HTMLButtonElement>("button.sort-field")!;
+  const items = (host: HTMLElement) => [
+    ...host.querySelectorAll<HTMLButtonElement>(".sort-menu-item"),
+  ];
 
-  it("marks a pointer interaction and hands focus back when the pick lands", () => {
-    const select = mount();
-    select.focus();
+  it("picks a field, names it on the trigger, and checks only that item", async () => {
+    const host = mount();
+    expect(field(host).value).toBe("name");
+    expect(field(host).getAttribute("popovertarget")).toBe(
+      host.querySelector(".sort-menu-panel")?.id,
+    );
 
-    select.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    expect(select.dataset.pointer, "the mark is on while the dropdown is open").toBe("");
-
-    pick(select, "updated");
-    expect(select.value).toBe("updated");
-    // Nothing left lit beside the neutral chips once the choice is made.
-    expect(document.activeElement).not.toBe(select);
+    items(host).find((b) => b.value === "updated")!.click();
+    await vi.waitFor(() => expect(field(host).value).toBe("updated"));
+    expect(field(host).querySelector("[data-current]")?.textContent).toBe("updated");
+    // Every name stays in the button, so it is always the longest one wide.
+    expect(field(host).querySelectorAll(".sort-label > span")).toHaveLength(items(host).length);
+    expect(
+      items(host)
+        .filter((b) => b.getAttribute("aria-checked") === "true")
+        .map((b) => b.value),
+    ).toEqual(["updated"]);
   });
 
-  it("keeps focus for a keyboard pick, because arrows change the value", () => {
-    const select = mount();
-    select.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    select.focus();
-    // A keypress makes this a keyboard interaction again, mark and all.
-    select.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect(select.dataset.pointer).toBeUndefined();
+  it("walks the items with the arrow keys, wrapping at both ends", () => {
+    const host = mount();
+    const [first, second] = items(host);
+    const last = items(host).at(-1)!;
+    const panel = host.querySelector<HTMLElement>(".sort-menu-panel")!;
+    const key = (k: string) =>
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
 
-    // `updated`, not `rating`: this fixture publishes no ratings, so that
-    // option is not rendered and assigning it would silently yield "".
-    pick(select, "updated");
-    expect(select.value).toBe("updated");
-    // Blurring here would take the control away mid-selection: on a closed
-    // select every arrow key fires its own `change`.
-    expect(document.activeElement).toBe(select);
+    first!.focus();
+    key("ArrowDown");
+    expect(document.activeElement).toBe(second);
+    key("ArrowUp");
+    key("ArrowUp");
+    expect(document.activeElement, "up from the first wraps to the last").toBe(last);
+    key("ArrowDown");
+    expect(document.activeElement, "down from the last wraps to the first").toBe(first);
+    expect(panel.contains(document.activeElement)).toBe(true);
   });
 
-  it("clears the mark on blur, so the next focus is a keyboard focus", () => {
-    const select = mount();
-    select.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    select.focus();
-    expect(select.dataset.pointer).toBe("");
-
-    select.blur();
-    expect(select.dataset.pointer).toBeUndefined();
+  it("keeps Escape inside the menu, so it does not also clear the filters", async () => {
+    const host = mount("/?q=alpha");
+    await vi.waitFor(() => expect(location.search).toContain("q=alpha"));
+    items(host)[0]!.focus();
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(location.search, "the query survives closing the menu").toContain("q=alpha");
   });
 });
 
