@@ -1426,8 +1426,10 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           transition: border-color var(--grim-duration-base) ease;
         }
         /* Card highlight yields while an inner control is hovered, so its
-           own hover state reads as the click target instead. */
-        .card:hover:not(:has(.keywords :hover, .copy-group :hover)) {
+           own hover state reads as the click target instead. The action
+           group yields as a whole, gaps included: matching only its buttons
+           let the card edge flash on in the gap between two of them. */
+        .card:hover:not(:has(.keywords :hover, .copy-group:hover)) {
           border-color: var(--grim-color-accent);
         }
         /* Keyboard focus reads as a thicker edge, not a second decoration:
@@ -2174,7 +2176,12 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           display: inline-flex;
           align-items: center;
           gap: var(--grim-space-3);
-          transition: border-color var(--grim-duration-base) ease;
+          /* Background and colour too: the card ghosts fade their whole box
+             in and out, not just its edge. */
+          transition:
+            border-color var(--grim-duration-base) ease,
+            background-color var(--grim-duration-base) ease,
+            color var(--grim-duration-base) ease;
           border: var(--grim-border-width) solid var(--grim-color-border);
           background: var(--grim-color-chip-bg);
           color: var(--grim-color-fg);
