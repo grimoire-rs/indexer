@@ -206,18 +206,14 @@ describe("the view round-trips", () => {
     expect(names(host)).toContain("delta");
     await vi.waitFor(() => expect(localStorage.getItem("grim.catalog.deprecated")).toBe("1"));
     expect(location.search, "a preference is not a query").toBe("");
-    // Kind and deprecation both survive on the address line, and neither
-    // costs the name a row: the kind leads as a word, deprecation keeps its
-    // word in the foot's aside. A retired rule is still a rule, and the catalog
+    // Kind and deprecation share the line under the name, and neither costs
+    // the name a row. A retired rule is still a rule, and the catalog
     // filters on kind. The retirement *reason* is a sentence and belongs to
     // the detail page, not to a card in an even-rowed grid.
     const card = [...host.querySelectorAll("li.card")].find((c) =>
       c.querySelector("h2 a")?.textContent?.includes("delta"),
     )!;
-    expect(card.querySelector(".namespace")?.textContent).toContain("rule · acme");
-    // The watermark carries it, and is labelled precisely because it is the
-    // only deprecation signal the card has left.
-    expect(card.querySelector(".card-watermark")?.getAttribute("aria-label")).toBe("deprecated");
+    expect(card.querySelector(".namespace")?.textContent).toBe("rule · deprecated");
     expect(card.textContent).not.toContain("unmaintained; use alpha");
   });
 
@@ -460,15 +456,6 @@ describe("the keyword facet", () => {
     // Swallowing it here would trap focus in the field — worse than the walk
     // through the toolbar the hatch exists to save.
     expect(event.defaultPrevented).toBe(false);
-  });
-
-  // The kind is written on the address line; the corner mark is spent on
-  // deprecation alone. A coloured kind glyph on every card was the loudest
-  // thing on the grid and said nothing the card did not already say.
-  it("wears a corner mark only when deprecated", async () => {
-    const host = mountAt("/");
-    await settle();
-    expect(host.querySelector("li.card .card-watermark")).toBeNull();
   });
 
   it("round-trips the cards/table choice through storage, not the URL", async () => {

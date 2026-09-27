@@ -109,13 +109,7 @@ export const KIND_MARKS: Record<string, Glyph> = {
 /** What a retired artifact wears instead of its kind. */
 export const DEPRECATED_MARK = CODICONS.warning!;
 
-/**
- * One codicon, filled with `currentColor`, framed on its own box.
- *
- * Filled rather than stroked, which is what makes it usable at watermark
- * scale: a stroked glyph's overlapping paths composite twice wherever they
- * cross, so a translucent one comes out blotchy along its own joins.
- */
+/** One codicon, filled with `currentColor`, framed on its own box. */
 export function KindMark({
   glyph,
   size = 16,

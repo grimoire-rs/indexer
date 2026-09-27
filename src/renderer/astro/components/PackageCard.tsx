@@ -14,7 +14,6 @@ import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { CardLogo } from "./CardLogo.js";
 import { CopyButton } from "./CopyButton.js";
-import { DEPRECATED_MARK, KindMark } from "./KindMark.js";
 import { withBase } from "../lib/base.js";
 import {
   compactCount,
@@ -57,33 +56,18 @@ export function PackageCard({
         tabIndex={0}
         onKeyDown={onKeyDown}
       >
-        {/* Deprecation, as texture: the warning mark enlarged into the card's
-            bottom-right corner. It is the card's only deprecation signal, so
-            it is labelled rather than hidden. Every other card used to wear
-            its kind here too, in the kind's colour — that was the loudest
-            thing on a grid of cards, and it repeated a word the address line
-            already says, so it went. */}
-        {p.deprecated && (
-          <KindMark
-            glyph={DEPRECATED_MARK}
-            class="card-watermark"
-            size={112}
-            role="img"
-            aria-label="deprecated"
-            style={{ color: "var(--grim-color-deprecated)" }}
-          />
-        )}
         <div class="card-head">
           <CardLogo pkg={p} />
           <h2 data-slot="package-name">
             <a
               href={withBase(`/p/${p.namespace}/${p.name}/`)}
+              title={`${p.namespace}/${p.name}`}
               tabIndex={-1}
             >
               {p.name}
             </a>
           </h2>
-          {/* Top right, spanning the name and the address: the head is as
+          {/* Top right, spanning the name and the kind line: the head is as
               tall as a button already, because the logo spans both rows, so
               the buttons cost the card no height there. Ghosts (see
               `.copy-group .copy` in the layout): the same three on every
@@ -113,25 +97,22 @@ export function PackageCard({
               </a>
             )}
           </div>
-          {/* Kind, then where it lives — two things, dot-separated. The
-              kind leads because it is what a reader filters on, and this
-              is the only place the card states it. Deprecation is
-              deliberately NOT here: a third item filled the line, and the
-              watermark carries it. */}
+          {/* The kind, and on a retired package the word "deprecated"
+              beside it in the deprecation colour — the card's one
+              deprecation signal. The address used to follow the kind and
+              was clipped on most cards; like the list row, the card now
+              carries it in the name's tooltip, and the detail page shows
+              it in full. */}
           <p class="namespace">
             <span class="kind" data-slot="package-kind">
               {p.kind}
             </span>
-            <span aria-hidden="true"> · </span>
-            {/* Its own element so the row can give the address the slack and
-                nothing else: the kind is one short word and keeps its width,
-                and what does not fit is dropped off the FRONT — a registry
-                host is the least distinguishing part of an address and the
-                repository is the most. `title` keeps the whole of it
-                reachable, since the ellipsis hides the head. */}
-            <span class="address" title={p.namespace}>
-              {p.namespace}
-            </span>
+            {p.deprecated && (
+              <>
+                <span aria-hidden="true"> · </span>
+                <span class="deprecated">deprecated</span>
+              </>
+            )}
           </p>
         </div>
         {/* Under the head, above the description: what the package

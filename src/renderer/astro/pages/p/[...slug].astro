@@ -23,7 +23,6 @@ import VersionMenu from "../../components/VersionMenu.astro";
 import CommandBar from "../../components/CommandBar.astro";
 import CodeBlock from "../../components/CodeBlock.astro";
 import { BrandMark } from "../../components/BrandMark.tsx";
-import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "../../components/KindMark.tsx";
 import {
   mdiBitbucket,
   mdiGit,
@@ -187,13 +186,6 @@ const updatedTitle = pkg.revision ? `${updated} · revision ${pkg.revision}` : u
 const votes = pkg.rating ? `${pkg.rating.up} upvote${pkg.rating.up === 1 ? "" : "s"}` : "";
 const thread = externalUrl(pkg.rating?.url);
 const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
-
-// The kind as texture, the way a card wears it. A retired package spends it
-// on the warning instead — the kind is written in the badge either way.
-const headMark = pkg.deprecated ? DEPRECATED_MARK : KIND_MARKS[pkg.kind];
-const headMarkColor = pkg.deprecated
-  ? "var(--grim-color-deprecated)"
-  : `var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`;
 ---
 
 <Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo}>
@@ -274,24 +266,6 @@ const headMarkColor = pkg.deprecated
         </CommandBar>
 
         <main class="detail-main">
-          {/* The kind as texture behind the panel, the way a card wears it:
-              oversized and hung off the panel's bottom-right corner, so
-              `overflow: hidden` crops it to the rounded edge. Decorative — the
-              kind is a badge beside the name — so it is aria-hidden unless it
-              is the warning a retired package wears instead. */}
-          {
-            headMark && (
-              <KindMark
-                glyph={headMark}
-                class="panel-watermark"
-                size={220}
-                role={pkg.deprecated ? "img" : undefined}
-                aria-label={pkg.deprecated ? "deprecated" : undefined}
-                aria-hidden={pkg.deprecated ? undefined : "true"}
-                style={`color: ${headMarkColor}`}
-              />
-            )
-          }
           {/* Radio tabs, not a scripted tablist: the ribbon works on a page
               whose JS never ran, and a radio group already has the keyboard
               behaviour tabs want (arrows move, only one selected). The inputs
@@ -818,28 +792,8 @@ const headMarkColor = pkg.deprecated
     border: var(--grim-border-width) solid var(--grim-color-border);
     border-radius: var(--grim-radius-surface);
     padding: var(--grim-space-7) var(--grim-space-7);
-    /* Crops the oversized kind mark to the rounded edge and gives it a
-       stacking context to sit behind in — without `isolation` a
-       `z-index: -1` child escapes to the root and vanishes under the
-       panel's own background. */
     position: relative;
     overflow: hidden;
-    isolation: isolate;
-  }
-  /* Hung off the panel's bottom-right corner, cropped by the panel's own
-     rounded edge. Opacity on the element rather than in the colour: the
-     glyph's paths overlap, and a translucent fill composites every crossing
-     twice and comes out blotchy along its own joins. */
-  .detail-main :global(.panel-watermark) {
-    position: absolute;
-    z-index: -1;
-    opacity: 0.14;
-    bottom: 0;
-    right: 0;
-    /* Same 26% of its own box as the card's mark — see `.card-watermark`
-       in `Base.astro` for why this is a translate and not an inset. */
-    transform: translate(26%, 26%);
-    pointer-events: none;
   }
   /* The vote rides the ribbon's right end — the panel's own row of
      controls, and the one line on this page that was already a toolbar. */

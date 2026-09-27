@@ -1386,7 +1386,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         }
         /* Off-screen cards skip layout and paint until they are scrolled to.
            A card is the expensive item on this page — a masked keyword strip,
-           a clipped watermark in its own stacking context, a logo — and the
+           a logo — and the
            grid and the table are separate component trees, so switching view
            repaints every one of them at once.
 
@@ -1413,12 +1413,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           border: var(--grim-border-width) solid var(--grim-color-border);
           border-radius: var(--grim-radius-surface);
           padding: var(--grim-space-6) var(--grim-space-6);
-          /* Crops the kind watermark to the card's rounded edge, and gives
-             it a stacking context to sit behind in. Without `isolation` a
-             `z-index: -1` child escapes to the root and disappears under the
-             card's own background instead of showing through it. */
           overflow: hidden;
-          isolation: isolate;
           /* Whole card navigates to the detail page via the stretched title
              link below; real controls inside re-stack above the overlay. */
           position: relative;
@@ -1458,10 +1453,10 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .card .copy-group {
           position: relative;
         }
-        /* Two rows — the name, then the address — with the logo spanning
+        /* Two rows — the name, then the kind line — with the logo spanning
            both down the left. A grid rather than the flex row it was: the
            name has to be able to shrink to nothing so it can ellipsis, and
-           the address has to line up under it rather than under the logo.
+           the kind line has to line up under it rather than under the logo.
            Nothing shares those rows: every badge that tried cost the name
            its width on a narrow card. They live in `.card-tags` below. */
         .card-head {
@@ -1474,7 +1469,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .card-head .card-logo {
           grid-row: 1 / span 2;
         }
-        /* The address line sits under the name, in the name's column: the
+        /* The kind line sits under the name, in the name's column: the
            buttons beside them span both rows. */
         .card-head .namespace {
           grid-column: 2;
@@ -1509,34 +1504,11 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           align-items: center;
           gap: var(--grim-space-2);
         }
-        /* Texture, not an icon: oversized and hung off the card's own
-           bottom-right corner, so `overflow: hidden` clips it to the rounded
-           edge and only part of the glyph is on the card at all.
-           The overhang is a share of the glyph, not a length: `translate`
-           resolves its percentages against the element's own box, so the
-           card and the detail panel hang their marks out by the same
-           fraction even though the two are drawn at different sizes. An
-           inset percentage would not — those resolve against the container,
-           which is a different width on each page. */
-        .card-watermark {
-          position: absolute;
-          z-index: -1;
-          /* On the element, never on the stroke colour. The glyph is
-             overlapping stroked paths; a translucent colour composites each
-             crossing twice and leaves the joins visibly darker than the
-             lines they join. Opacity here rasterizes the whole glyph at full
-             strength and blends that once, so the tint is flat. */
-          opacity: 0.14;
-          bottom: 0;
-          right: 0;
-          transform: translate(26%, 26%);
-          pointer-events: none;
-        }
         .card h2 {
           min-width: 0;
           margin: 0;
           font-size: var(--grim-text-lg);
-          /* Tight, so the address sits under the name rather than a line
+          /* Tight, so the kind line sits under the name rather than a line
              away from it — the two are one label in two parts, and the
              body's reading leading put a paragraph break between them. */
           line-height: 1.2;
@@ -1557,7 +1529,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           text-decoration: none;
         }
         /* Geometry, not a scale step: the tile is sized to the two rows it
-           spans — the name line plus the address line under it — so it reads
+           spans — the name line plus the kind line line under it — so it reads
            as one block beside them rather than a badge floating against the
            first. `.logo-mark` is a percentage of this, so the placeholder
            and the broken glyph follow on their own. */
@@ -1958,7 +1930,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .chip[class*="kind-"] {
           color: var(--grim-color-fg);
         }
-        /* A step below the name and quieter: where the package lives is
+        /* A step below the name and quieter: what the package is is
            context for the name above it, not a second heading. */
         .namespace {
           margin: 0;
@@ -1966,34 +1938,13 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           font-size: var(--grim-text-xs);
           line-height: 1.3;
           font-family: ui-monospace, "SFMono-Regular", monospace;
-          /* One line, whatever the address is. A namespace breaks at its own
-             slashes and dots, so left to itself a long one wrapped to a second
-             line and made the card's head taller than its neighbours'. */
+          /* One line, so every card's head is the same height. */
           display: flex;
           min-width: 0;
           white-space: nowrap;
         }
-        /* Trimmed from the FRONT: `github.com/` is on every address in an
-           index and the repository at the tail is what tells two apart, so the
-           head is what to spend.
-
-           `direction: rtl` is the mechanism — `text-overflow` ellipsises at
-           the line's inline END, which in an RTL box is its left edge, and
-           `text-align: left` keeps a short address sitting under the name
-           rather than flung to the right. The address itself still reads
-           left-to-right: it is one run of Latin characters, so the bidi
-           algorithm lays it out LTR inside the RTL box. That holds because a
-           namespace neither starts nor ends with punctuation — one that did
-           would have that character reordered to the far end.
-
-           The two-value `text-overflow: ellipsis ""` would say this directly
-           and is Firefox-only. */
-        .namespace .address {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          direction: rtl;
-          text-align: left;
+        .namespace .deprecated {
+          color: var(--grim-color-deprecated);
         }
         /* The rating is one control with two halves — the count, which opens
            the forge thread, and the vote, which casts one — joined the way
@@ -2035,9 +1986,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .rating-count {
           border-radius: var(--grim-radius-pill) 0 0 var(--grim-radius-pill);
           /* Opaque, like its tinted other half. A bordered control with a
-             see-through interior let the kind watermark run straight through
-             the count — the one place on the card where a big glyph and a
-             small control land on the same corner. */
+             see-through interior shows whatever sits behind it. */
           background: var(--grim-color-card);
         }
         /* An index with no VS Code extension configured shows the count

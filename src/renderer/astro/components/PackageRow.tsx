@@ -58,7 +58,7 @@ export function PackageRow({ pkg: p, hasRatings, hasDownloads, onKeyDown }: Pack
 
             Which is also how deprecation is said here: a retired package
             shows the warning mark in the deprecation colour instead of
-            its kind, exactly as the card's watermark does. The badge this
+            its kind. The badge this
             replaces was a second word in a cell with room for none, and
             it widened the column for every row whether or not anything in
             view was retired.
