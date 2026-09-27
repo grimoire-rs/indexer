@@ -11,6 +11,21 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.5.7] - 2026-09-27
+
+### Added
+
+- Grim's relevance model and a relative cutoff *(search)*
+- Rank a search by relevance automatically *(search)*
+- Calmer cards and a styled sort menu *(renderer)*
+- Drop the watermarks and the card's address line *(renderer)*
+
+### Fixed
+
+- Stop auto-loading rule support directories *(claude)*
+- Stop clipping the detail page's keyword chips *(renderer)*
+- Stop the card edge flickering between its action buttons *(renderer)*
+
 ## [0.5.6] - 2026-09-10
 
 ### Added
@@ -271,6 +286,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.5.7]: https://github.com/grimoire-rs/indexer/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/grimoire-rs/indexer/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/grimoire-rs/indexer/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/grimoire-rs/indexer/compare/v0.5.3...v0.5.4
