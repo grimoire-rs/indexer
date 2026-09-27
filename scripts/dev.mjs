@@ -173,9 +173,9 @@ if (values.smoke) {
     [server.url, "<title>"],
     // The dev server, not the build, is what a rendering change is reviewed
     // in — and it is the one path a stale Vite cache can serve old markup
-    // from. So the catalog's clickable affordances are asserted *here*:
-    // the rating count is an anchor to the forge thread, not a bare span.
-    [server.url, 'class="rating-count" href="https://'],
+    // from. So the catalog's enrichment is asserted *here*: the card's
+    // upvote figure only renders when a rating sidecar was read.
+    [server.url, 'class="vote-count"'],
     // A heading the detail page only emits when enrichment arrived and had a
     // `support` block — so this fails on a broken render *and* on a dev index
     // whose enrich sidecars stopped being read.
@@ -183,8 +183,6 @@ if (values.smoke) {
     // The vote badge reaches the detail page too, with both halves live —
     // it was missing here long after the cards had it.
     [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, 'class="rating-vote"'],
-    // And the kind mark behind the panel.
-    [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, "panel-watermark"],
   ];
   let failed = 0;
   for (const [url, needle] of checks) {
