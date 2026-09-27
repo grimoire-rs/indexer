@@ -2070,8 +2070,11 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            half-cut chip, and never a fade — both read as "scroll for more"
            on a row that does not scroll. The full list is on the page the
            card links to. The height is one `.chip.keyword`, computed from
-           the same tokens that size it. */
-        .keywords {
+           the same tokens that size it.
+
+           Scoped to the card: the detail page has a `.keywords` list of its
+           own, with bigger chips that wrap, and this height clipped them. */
+        .card .keywords {
           display: flex;
           flex-wrap: wrap;
           gap: var(--grim-space-2);

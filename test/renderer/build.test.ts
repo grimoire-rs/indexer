@@ -976,6 +976,14 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).toMatch(/\.code-copy,\.code-vscode\{/);
   });
 
+  // The card's keyword row is one chip tall and clips the rest. The detail
+  // page has a `.keywords` list too, with bigger chips that wrap; an unscoped
+  // card rule clamped it to the card's height and cut its chips off.
+  it("clamps only the card's keyword row, never the detail page's", () => {
+    expect(bundledCss).toMatch(/\.card \.keywords\{[^}]*height:/);
+    expect(bundledCss).not.toMatch(/(^|[},])\.keywords\{[^}]*height:/);
+  });
+
   // The toolbar's filter row is a scroll container — it has to be, as a
   // backstop for the kinds overflowing on their own — and an absolutely
   // positioned panel inside one is cropped to it AND stretches its scroll
