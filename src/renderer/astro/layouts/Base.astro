@@ -1300,8 +1300,12 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            question — how the catalog is arranged. Built to the sort group's
            measurements, and the second button is pulled onto the first's
            border so the seam is one line rather than a doubled one. */
+        /* A grid of two `1fr` tracks, not a flex row: in a container sized to
+           its content, equal fractions resolve to the wider label, so "Cards"
+           and "List" are one width and read as a pair. */
         .view-toggle {
-          display: flex;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
           align-items: stretch;
           flex: 0 0 auto;
           /* The row centres its items, which left these two shorter than the
