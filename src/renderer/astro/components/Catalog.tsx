@@ -14,6 +14,8 @@ import {
   ChevronDown,
   LayoutGrid,
   List,
+  Rows3,
+  Rows4,
   X,
 } from "lucide-preact";
 import { PackageCard } from "./PackageCard.js";
@@ -404,6 +406,16 @@ export default function Catalog({
   // Whether the URL's query has been applied. Gates the reveal below, so the
   // catalog is never unhidden while it still shows the unfiltered list.
   const [seeded, setSeeded] = useState(false);
+  /**
+   * How much room the page gives itself. Moves the space scale alone (see
+   * `tokens.css`), so it is spelled on `<html>` rather than held in a class
+   * here — the detail pages honour the same preference, and the head script
+   * stamps it before first paint so a stored `compact` never relayouts in
+   * front of the reader.
+   */
+  const [density, setDensity] = useState<"comfortable" | "compact">(
+    "comfortable",
+  );
   // Kinds combine with OR, keywords with AND, and the two groups with each
   // other. That is not an inconsistency, it follows from the data: a package
   // has exactly one kind, so requiring both of two kinds always yields
@@ -764,6 +776,7 @@ export default function Catalog({
     // A flag: stored at all means on.
     setShowDeprecated(readPref("deprecated") !== null);
     setView(v === "table" ? "table" : "cards");
+    setDensity(readPref("density") === "compact" ? "compact" : "comfortable");
   };
 
   // Apply the URL's view, now that hydration has matched the server's markup
@@ -838,7 +851,19 @@ export default function Catalog({
     writePref("dir", dir === NATURAL[sort] ? null : dir);
     writePref("deprecated", showDeprecated ? "1" : null);
     writePref("view", view === "cards" ? null : view);
-  }, [seeded, sort, dir, showDeprecated, view]);
+    writePref("density", density === "comfortable" ? null : density);
+  }, [seeded, sort, dir, showDeprecated, view, density]);
+
+  // The attribute the tokens key on. Written here as well as in the head
+  // script because the head only runs on load: a reader who switches density
+  // has to see it without one. Ungated by `seeded` — the head already
+  // stamped the stored value, and this only ever agrees with it until the
+  // reader clicks.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (density === "compact") root.dataset.density = "compact";
+    else delete root.dataset.density;
+  }, [density]);
 
   // Base.astro hides the catalog before first paint when the URL carries a
   // query. Reveal it only once the filtered render is in the DOM — keyed on
@@ -1767,6 +1792,36 @@ export default function Catalog({
             >
               <List size={15} aria-hidden="true" />
               <span>List</span>
+            </button>
+          </div>
+          {/* Two buttons rather than one that toggles, for the reason the
+              view toggle beside it gives: a single button has to be labelled
+              with either the state or the action, and whichever it picks
+              reads as the other half the time. Icon-only — the labels would
+              be the two longest words in the toolbar, and the row already
+              carries two labelled pairs. */}
+          <div class="view-toggle density-toggle" role="group" aria-label="Density">
+            <button
+              type="button"
+              class={density === "comfortable" ? "view-pick active" : "view-pick"}
+              data-slot="filter-chip"
+              aria-pressed={density === "comfortable"}
+              aria-label="Comfortable spacing"
+              title="Comfortable spacing"
+              onClick={() => setDensity("comfortable")}
+            >
+              <Rows3 size={15} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class={density === "compact" ? "view-pick active" : "view-pick"}
+              data-slot="filter-chip"
+              aria-pressed={density === "compact"}
+              aria-label="Compact spacing"
+              title="Compact spacing"
+              onClick={() => setDensity("compact")}
+            >
+              <Rows4 size={15} aria-hidden="true" />
             </button>
           </div>
         </div>

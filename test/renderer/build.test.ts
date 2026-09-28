@@ -1011,6 +1011,28 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).not.toMatch(/(^|[},])\.keywords\{[^}]*height:/);
   });
 
+  // An earlier cut moved the whole space scale from `:root`, which shifted
+  // the header, the hero and the toolbar and barely moved the cards — the
+  // steps a card spends are 5 and 6, the ones the chrome spends are 7 to 9.
+  // So the assertion is about SCOPE: compact may only reach the results.
+  it("confines compact density to the results, never the page", () => {
+    const rules = [...bundledCss.matchAll(/\[data-density=("compact"|compact)\][^{]*\{[^}]*\}/g)].map(
+      (m) => m[0]!,
+    );
+    expect(rules.length).toBeGreaterThan(0);
+    // Every rule is scoped to a results container. A bare `[data-density]`
+    // selector, or one on `:root`/`body`/`.catalog`, is the regression.
+    for (const rule of rules) {
+      const selector = rule.slice(0, rule.indexOf("{"));
+      expect(selector, rule).toMatch(/\.grid|\.card|\.table/);
+    }
+    // And it reassigns no token — an index that retunes the space scale
+    // keeps its own values inside the cards.
+    expect(rules.join("")).not.toMatch(/--grim-[a-z0-9-]+\s*:/);
+    // It has to actually do something to a card, or the control is a lie.
+    expect(rules.join("")).toMatch(/grid-template-columns:repeat\(auto-fill,minmax\(16rem/);
+  });
+
   // A row that clips eats whatever sits at its end first, so a disclosure in
   // the same flow as the chips is the first thing to disappear -- which is
   // precisely why a trailing "+N" chip was rejected when the clip landed.

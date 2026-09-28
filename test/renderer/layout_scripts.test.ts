@@ -41,13 +41,17 @@ function layoutScripts(): [string, string] {
  * and the head script reads at parse time. Both are what a browser would
  * have answered; neither is under test.
  */
-function renderPage(body: string) {
+function renderPage(body: string, prefs: Record<string, string> = {}) {
   const [head, tail] = layoutScripts();
+  const seed = Object.entries(prefs)
+    .map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`)
+    .join("");
   const { window } = new JSDOM(
     `<!doctype html><html><head>
       <script>
         window.matchMedia = () => ({ matches: false });
         Object.defineProperty(navigator, "userAgentData", { value: { platform: "Windows" } });
+        ${seed}
       </script>
       <script>${head}</script>
     </head><body>${body}<script>${tail}</script></body></html>`,
@@ -96,6 +100,36 @@ describe("C-012 — the layout's scripts do not depend on the header", () => {
     const before = doc.documentElement.dataset.theme;
     doc.getElementById("theme-toggle")!.click();
     expect(doc.documentElement.dataset.theme).not.toBe(before);
+  });
+});
+
+describe("the layout stamps the stored density before first paint", () => {
+  // Density moves the space scale, so applying it after hydration relayouts
+  // the whole page in front of the reader — the same reason the theme is
+  // stamped here. It has to be the HEAD script, not the island: the package
+  // pages carry no island at all and honour the preference too.
+  it("stamps a stored compact density", () => {
+    const doc = renderPage(COPYABLE, { "grim.catalog.density": "compact" });
+
+    expect(doc.documentElement.dataset.density).toBe("compact");
+  });
+
+  // Absent attribute IS comfortable — the default is never written, so an
+  // unset preference and an explicit comfortable one look the same.
+  it("stamps nothing without a stored preference", () => {
+    expect(renderPage(COPYABLE).documentElement.dataset.density).toBeUndefined();
+    expect(
+      renderPage(COPYABLE, { "grim.catalog.density": "comfortable" }).documentElement
+        .dataset.density,
+    ).toBeUndefined();
+  });
+
+  // Anything else stored by hand is not a density.
+  it("ignores a value that is not a density", () => {
+    expect(
+      renderPage(COPYABLE, { "grim.catalog.density": "tiny" }).documentElement.dataset
+        .density,
+    ).toBeUndefined();
   });
 });
 
