@@ -889,9 +889,20 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            squeezing it. The container gap separates the rows and reads wider
            than the gap inside a chip group, so the groups still read as
            groups without a wrapper element. */
+        /* The sort control ahead of the field, on one line. Stretched, so
+           the pair of sort buttons takes the field's height and the two
+           read as one strip. No wrap: on a phone the field shrinks rather
+           than dropping below the control that orders what it finds. */
+        .search-row {
+          display: flex;
+          align-items: stretch;
+          gap: var(--grim-space-4);
+        }
         .search-field {
           position: relative;
           display: flex;
+          flex: 1;
+          min-width: 0;
           /* Breathing room above the field when `/` scrolls it to the top of
              the viewport, so it does not sit flush against the edge. */
           scroll-margin-top: 1.25rem;
@@ -1119,9 +1130,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           align-items: stretch;
           flex: 0 0 auto;
         }
-        /* Sized to their own row, not to the search field. They used to sit
-           beside it and had to match its height to read as one strip; on a
-           line of their own that height is just bulk. */
+        /* Height comes from `.search-row` stretching the group to the
+           field's, so only the horizontal padding is theirs to set. */
         .sort-dir,
         .sort-field {
           position: relative;

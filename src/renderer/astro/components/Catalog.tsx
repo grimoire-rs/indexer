@@ -1016,8 +1016,8 @@ export default function Catalog({
       !event.ctrlKey &&
       !event.altKey
     ) {
-      // The hatch. Everything between the field and the grid — sort, the
-      // view toggle, every chip — sits after it in the DOM and is a real Tab
+      // The hatch. Everything between the field and the grid — the view
+      // toggle, every chip — sits after it in the DOM and is a real Tab
       // stop again, so plain Tab would walk the whole toolbar before
       // reaching a single package. Forward Tab skips to the results; the
       // toolbar stays reachable by Shift+Tab back out of the grid.
@@ -1365,48 +1365,148 @@ export default function Catalog({
   return (
     <section class="catalog" data-slot="catalog">
       <div class="controls" data-slot="catalog-toolbar" ref={controlsRef}>
-        <div class="search-field" data-slot="catalog-search">
-          <input
-            ref={searchRef}
-            type="search"
-            placeholder="Search packages — name, keyword, description…"
-            value={query}
-            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-            onKeyDown={onSearchKeyDown}
-            aria-label="Search packages"
-            aria-keyshortcuts="/"
-          />
-          {/* Decorative: the shortcut is announced by aria-keyshortcuts, so
-              repeating it here would be read twice. CSS hides it as soon as
-              the field is focused or holds a query. */}
-          <kbd class="search-hint" aria-hidden="true">
-            /
-          </kbd>
-          {/* Ours, in the hint's own box and its own place — the browser's
-              built-in `type="search"` clear button lands in the same corner
-              wearing the UA's styling, which belongs to no theme this site
-              has. It is hidden in CSS and this replaces it, so the corner
-              holds exactly one control that looks like the rest of the
-              toolbar: the key hint when the field is empty, the same box
-              carrying an X when it is not.
-
-              Focus goes back to the field rather than staying on a button
-              that is about to unmount — the same thing Escape already does
-              from in here. */}
-          {query && (
+        <div class="search-row">
+          {/* Ahead of the field, away from the chips: choosing an order is
+              not filtering, and the arrangement row below had run out of
+              room. Both halves take an ordinary tab stop; the field's menu
+              owns its own arrow keys, so neither can join the chips' roving
+              arrow ring. */}
+          <div class="sort-group" role="group" aria-label="Sort by">
+            {/* Left, because that is the order the pair reads in: "descending,
+                by rating". The bars-and-arrow glyph draws the order itself —
+                tall-to-short under a down arrow — rather than labelling a flag,
+                so it stays right whichever field is selected. */}
             <button
               type="button"
-              class="search-clear"
-              aria-label="Clear search"
-              title="Clear search"
-              onClick={() => {
-                setQuery("");
-                searchRef.current?.focus();
+              class="sort-dir"
+              data-slot="filter-chip"
+              title={
+                dir === "asc"
+                  ? "Ascending — click for descending"
+                  : "Descending — click for ascending"
+              }
+              aria-label={
+                dir === "asc"
+                  ? "Sorted ascending; sort descending"
+                  : "Sorted descending; sort ascending"
+              }
+              onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
+            >
+              {dir === "asc" ? (
+                <ArrowUpNarrowWide size={15} aria-hidden="true" />
+              ) : (
+                <ArrowDownWideNarrow size={15} aria-hidden="true" />
+              )}
+            </button>
+            {/* A button and a popover menu, not a `<select>`: see
+                `pickSort`. `value` carries the field, so the trigger reads
+                back the way the select it replaced did. */}
+            <button
+              type="button"
+              class="sort-field"
+              data-slot="filter-chip"
+              ref={sortTriggerRef}
+              value={sort}
+              popovertarget={SORT_MENU_ID}
+              aria-haspopup="menu"
+              aria-expanded={sortMenuOpen}
+              aria-label={`Sort by ${sort}`}
+            >
+              {/* Every field's name, stacked in one grid cell with only the
+                  current one visible, so the button is always as wide as the
+                  longest and does not resize on a pick. `aria-label` names
+                  the control, so the hidden ones are never read. */}
+              <span class="sort-label">
+                {sortFields.map((field) => (
+                  <span key={field} data-current={field === sort || undefined}>
+                    {field}
+                  </span>
+                ))}
+              </span>
+              <ChevronDown size={12} aria-hidden="true" />
+            </button>
+            <div
+              class="sort-menu-panel"
+              id={SORT_MENU_ID}
+              popover="auto"
+              role="menu"
+              aria-label="Sort by"
+              ref={sortMenuRef}
+              onKeyDown={moveMenuFocus}
+              onBeforeToggle={(e) => {
+                setSortMenuOpen(e.newState === "open");
+                placeSortMenu();
+              }}
+              onToggle={(e) => {
+                setSortMenuOpen(e.newState === "open");
+                placeSortMenu();
+                // Opening lands on the current choice, the way a select's
+                // list does, so the arrows start from where the reader is.
+                if (e.newState === "open") {
+                  sortMenuRef.current
+                    ?.querySelector<HTMLElement>('[aria-checked="true"]')
+                    ?.focus();
+                }
               }}
             >
-              <X size={12} aria-hidden="true" />
-            </button>
-          )}
+              {sortFields.map((field) => (
+                <button
+                  key={field}
+                  type="button"
+                  class="sort-menu-item"
+                  role="menuitemradio"
+                  value={field}
+                  aria-checked={field === sort}
+                  onClick={() => pickSort(field)}
+                >
+                  {field}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div class="search-field" data-slot="catalog-search">
+            <input
+              ref={searchRef}
+              type="search"
+              placeholder="Search packages — name, keyword, description…"
+              value={query}
+              onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+              onKeyDown={onSearchKeyDown}
+              aria-label="Search packages"
+              aria-keyshortcuts="/"
+            />
+            {/* Decorative: the shortcut is announced by aria-keyshortcuts, so
+                repeating it here would be read twice. CSS hides it as soon as
+                the field is focused or holds a query. */}
+            <kbd class="search-hint" aria-hidden="true">
+              /
+            </kbd>
+            {/* Ours, in the hint's own box and its own place — the browser's
+                built-in `type="search"` clear button lands in the same corner
+                wearing the UA's styling, which belongs to no theme this site
+                has. It is hidden in CSS and this replaces it, so the corner
+                holds exactly one control that looks like the rest of the
+                toolbar: the key hint when the field is empty, the same box
+                carrying an X when it is not.
+
+                Focus goes back to the field rather than staying on a button
+                that is about to unmount — the same thing Escape already does
+                from in here. */}
+            {query && (
+              <button
+                type="button"
+                class="search-clear"
+                aria-label="Clear search"
+                title="Clear search"
+                onClick={() => {
+                  setQuery("");
+                  searchRef.current?.focus();
+                }}
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
         {/* One row, three groups, in the order they narrow: what sort of
             thing, then what it is about, then what the catalog is
@@ -1638,7 +1738,7 @@ export default function Catalog({
           )}
         </div>
         {/* The bottom line of the toolbar: what the filters above left, and
-            the three controls that arrange it. The count leads because it is
+            the two toggles that arrange it. The count leads because it is
             the answer to everything above it; the controls are pushed to the
             far end because they are not. */}
         <div class="meta-row">
@@ -1679,133 +1779,6 @@ export default function Catalog({
           <time class="index-updated" datetime={builtAt} title={builtAt}>
             updated {indexAgo(builtAt)}
           </time>
-          {/* Held at the far end, away from the chips: choosing an order is
-              not filtering. Both halves take an ordinary tab stop; the
-              field's menu owns its own arrow keys, so neither can join the
-              chips' roving arrow ring. */}
-          <div class="sort-group" role="group" aria-label="Sort by">
-            {/* Left, because that is the order the pair reads in: "descending,
-                by rating". The bars-and-arrow glyph draws the order itself —
-                tall-to-short under a down arrow — rather than labelling a flag,
-                so it stays right whichever field is selected. */}
-            <button
-              type="button"
-              class="sort-dir"
-              data-slot="filter-chip"
-              title={
-                dir === "asc"
-                  ? "Ascending — click for descending"
-                  : "Descending — click for ascending"
-              }
-              aria-label={
-                dir === "asc"
-                  ? "Sorted ascending; sort descending"
-                  : "Sorted descending; sort ascending"
-              }
-              onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
-            >
-              {dir === "asc" ? (
-                <ArrowUpNarrowWide size={15} aria-hidden="true" />
-              ) : (
-                <ArrowDownWideNarrow size={15} aria-hidden="true" />
-              )}
-            </button>
-            {/* A button and a popover menu, not a `<select>`: see
-                `pickSort`. `value` carries the field, so the trigger reads
-                back the way the select it replaced did. */}
-            <button
-              type="button"
-              class="sort-field"
-              data-slot="filter-chip"
-              ref={sortTriggerRef}
-              value={sort}
-              popovertarget={SORT_MENU_ID}
-              aria-haspopup="menu"
-              aria-expanded={sortMenuOpen}
-              aria-label={`Sort by ${sort}`}
-            >
-              {/* Every field's name, stacked in one grid cell with only the
-                  current one visible, so the button is always as wide as the
-                  longest and does not resize on a pick. `aria-label` names
-                  the control, so the hidden ones are never read. */}
-              <span class="sort-label">
-                {sortFields.map((field) => (
-                  <span key={field} data-current={field === sort || undefined}>
-                    {field}
-                  </span>
-                ))}
-              </span>
-              <ChevronDown size={12} aria-hidden="true" />
-            </button>
-            <div
-              class="sort-menu-panel"
-              id={SORT_MENU_ID}
-              popover="auto"
-              role="menu"
-              aria-label="Sort by"
-              ref={sortMenuRef}
-              onKeyDown={moveMenuFocus}
-              onBeforeToggle={(e) => {
-                setSortMenuOpen(e.newState === "open");
-                placeSortMenu();
-              }}
-              onToggle={(e) => {
-                setSortMenuOpen(e.newState === "open");
-                placeSortMenu();
-                // Opening lands on the current choice, the way a select's
-                // list does, so the arrows start from where the reader is.
-                if (e.newState === "open") {
-                  sortMenuRef.current
-                    ?.querySelector<HTMLElement>('[aria-checked="true"]')
-                    ?.focus();
-                }
-              }}
-            >
-              {sortFields.map((field) => (
-                <button
-                  key={field}
-                  type="button"
-                  class="sort-menu-item"
-                  role="menuitemradio"
-                  value={field}
-                  aria-checked={field === sort}
-                  onClick={() => pickSort(field)}
-                >
-                  {field}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Beside sort, because it answers the same kind of question — how
-              the catalog is arranged, not which of it is shown. Two buttons
-              rather than one that toggles: a single button has to be labelled
-              with either the state or the action, and whichever it picks reads
-              as the other half the time. `aria-pressed` on both says which is
-              current without either label lying. */}
-          <div class="view-toggle" role="group" aria-label="Catalog view">
-            <button
-              type="button"
-              class={view === "cards" ? "view-pick active" : "view-pick"}
-              data-slot="filter-chip"
-              aria-pressed={view === "cards"}
-              aria-label="Show packages as cards"
-              onClick={() => setView("cards")}
-            >
-              <LayoutGrid size={15} aria-hidden="true" />
-              <span>Cards</span>
-            </button>
-            <button
-              type="button"
-              class={view === "table" ? "view-pick active" : "view-pick"}
-              data-slot="filter-chip"
-              aria-pressed={view === "table"}
-              aria-label="Show packages as a list"
-              onClick={() => setView("table")}
-            >
-              <List size={15} aria-hidden="true" />
-              <span>List</span>
-            </button>
-          </div>
           {/* Two buttons rather than one that toggles, for the reason the
               view toggle beside it gives: a single button has to be labelled
               with either the state or the action, and whichever it picks
@@ -1834,6 +1807,37 @@ export default function Catalog({
               onClick={() => setDensity("compact")}
             >
               <Rows4 size={15} aria-hidden="true" />
+            </button>
+          </div>
+          {/* Last in the row, the bigger switch of the two arrangement
+              controls — how the catalog is arranged, not which of it is
+              shown. Two buttons
+              rather than one that toggles: a single button has to be labelled
+              with either the state or the action, and whichever it picks reads
+              as the other half the time. `aria-pressed` on both says which is
+              current without either label lying. */}
+          <div class="view-toggle" role="group" aria-label="Catalog view">
+            <button
+              type="button"
+              class={view === "cards" ? "view-pick active" : "view-pick"}
+              data-slot="filter-chip"
+              aria-pressed={view === "cards"}
+              aria-label="Show packages as cards"
+              onClick={() => setView("cards")}
+            >
+              <LayoutGrid size={15} aria-hidden="true" />
+              <span>Cards</span>
+            </button>
+            <button
+              type="button"
+              class={view === "table" ? "view-pick active" : "view-pick"}
+              data-slot="filter-chip"
+              aria-pressed={view === "table"}
+              aria-label="Show packages as a list"
+              onClick={() => setView("table")}
+            >
+              <List size={15} aria-hidden="true" />
+              <span>List</span>
             </button>
           </div>
         </div>

@@ -463,7 +463,7 @@ describe("the keyword facet", () => {
     await settle();
     expect(host.querySelector("ul.grid")).not.toBeNull();
 
-    host.querySelectorAll<HTMLElement>("button.view-pick")[1]!.click();
+    host.querySelector<HTMLElement>(`button[aria-label="Show packages as a list"]`)!.click();
     await vi.waitFor(() => expect(localStorage.getItem("grim.catalog.view")).toBe("table"));
     expect(location.search, "a preference is not a query").toBe("");
     expect(names(host)).toEqual(["alpha", "bravo", "charlie", "delta"]);
