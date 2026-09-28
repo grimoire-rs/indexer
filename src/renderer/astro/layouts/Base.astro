@@ -2101,9 +2101,14 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
 
            Scoped to the card: the detail page has a `.keywords` list of its
            own, with bigger chips that wrap, and this height clipped them. */
+        /* Two tracks: the chips clip inside the first, the disclosure sits
+           in the second and is never what the clip eats. That was the whole
+           objection to a trailing "+N" chip -- in one flow it is last, so it
+           is first to go. */
         .card .keywords {
-          display: flex;
-          flex-wrap: wrap;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: start;
           gap: var(--grim-space-2);
           height: calc(
             var(--grim-text-2xs) * 1.4 + 2 * var(--grim-space-1) +
@@ -2111,6 +2116,35 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           );
           flex: 0 0 auto;
           overflow: hidden;
+        }
+        /* The chips themselves, still one row tall and still clipping whole
+           chips onto a hidden second line. `100%` against the row's stated
+           height while collapsed, and `auto` once that height is `auto` --
+           which is exactly what the expanded state wants, from one rule. */
+        .card .keyword-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--grim-space-2);
+          height: 100%;
+          min-width: 0;
+          overflow: hidden;
+        }
+        /* Expanded: the card grows for as long as the reader keeps it open.
+           It leaves that grid row taller than its neighbours, which is the
+           cost of showing the list in place rather than sending the reader
+           to the package page -- and it is the reader's own click. */
+        .card .keywords[data-expanded] {
+          height: auto;
+          overflow: visible;
+        }
+        /* Muted like a keyword chip, but it filters nothing -- so it never
+           takes the active treatment, and its glyph is centred rather than
+           set as a word. */
+        .chip.keyword.more {
+          justify-content: center;
+          min-width: calc(var(--grim-text-2xs) * 2.5);
+          font-variant-numeric: tabular-nums;
+          line-height: 1.4;
         }
         /* Each chip keeps its own width; the row gives up, not the words. */
         .chip.keyword {

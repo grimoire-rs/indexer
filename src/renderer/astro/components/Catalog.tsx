@@ -918,6 +918,25 @@ export default function Catalog({
   const toggleKeyword = toggle(setKeywords);
 
   /**
+   * Which cards are showing every keyword rather than the one clipped row.
+   *
+   * Held here, not in the card: a card is remounted by any filter, sort or
+   * window change, and state inside it would collapse every open row each
+   * time. Keyed by the ref, which is what `key` already keys the list on.
+   * Not a preference — it is a per-visit disclosure, so nothing is stored.
+   */
+  const [expandedKeywords, setExpandedKeywords] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleKeywordsExpanded = (ref: string): void => {
+    setExpandedKeywords((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(ref)) next.add(ref);
+      return next;
+    });
+  };
+
+  /**
    * Arrow keys move *across* a rail the reader is already standing in. They
    * are not Tab's replacement, and this is the correction of a real defect:
    * the chips used to carry `tabIndex={-1}` whenever the grid had anything
@@ -1777,6 +1796,10 @@ export default function Catalog({
               vscodeExtension={vscodeExtension}
               activeKeywords={keywords}
               onToggleKeyword={toggleKeyword}
+              keywordsExpanded={expandedKeywords.has(`${p.namespace}/${p.name}`)}
+              onToggleKeywordsExpanded={() =>
+                toggleKeywordsExpanded(`${p.namespace}/${p.name}`)
+              }
               onKeyDown={onCardKeyDown}
             />
           ))}
