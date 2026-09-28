@@ -952,6 +952,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           flex: 1 1 auto;
           min-width: 0;
           overflow: hidden;
+          /* The chips' offset parent, which `measureRail` measures against. */
+          position: relative;
         }
         /* Past the measured fit. `visibility`, not `display`: the chip keeps
            its box, so the measurement that excluded it stays true instead of
@@ -965,6 +967,10 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           align-self: stretch;
           width: var(--grim-border-width);
           background: var(--grim-color-border);
+        }
+        /* No chip fits, so there is nothing to divide. */
+        .filter-divider.idle {
+          visibility: hidden;
         }
         /* Answers a different question from sort and kind — what the catalog
            is withholding, not how to arrange it — so it sits apart, at the

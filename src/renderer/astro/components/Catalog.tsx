@@ -556,18 +556,25 @@ export default function Catalog({
   const measureRail = useCallback(() => {
     const rail = railRef.current;
     if (!rail) return;
-    const edge = rail.getBoundingClientRect().right;
+    // Layout offsets, not `getBoundingClientRect`, for the reason the FLIP
+    // seats below use them: a rect includes the slide's `translate`. The
+    // resize observer fires mid-slide — a click that pins a chip also mounts
+    // `clear N` and shrinks the rail — and measured drawn boxes, so a chip
+    // still animating in from the left counted as fitting and stayed up
+    // half-cut behind the controls, with no later pass to correct it.
+    // The rail is the chips' offset parent (`position: relative`).
+    // ponytail: offsets are whole pixels, so a chip over the edge by less
+    // than one can pass; a hairline, not a cut word.
+    const edge = rail.clientWidth;
     let fits = 0;
-    for (const chip of rail.children) {
-      // Half a pixel of slack: a fractional layout can leave a chip's right
-      // edge a rounding error past a boundary it visually sits inside.
-      if (chip.getBoundingClientRect().right > edge + 0.5) break;
+    for (const chip of rail.children as HTMLCollectionOf<HTMLElement>) {
+      if (chip.offsetLeft + chip.offsetWidth > edge) break;
       fits += 1;
     }
-    // At least one, always. A rail too narrow for its shortest chip should
-    // show that chip clipped rather than render an empty group beside a
-    // divider that then divides nothing.
-    setRailFit(Math.max(1, fits));
+    // Zero is an answer: a rail too narrow for its first chip shows none, and
+    // the chip is in the overflow menu like every other one that did not fit.
+    // Showing it anyway put a cut-off word behind the controls.
+    setRailFit(fits);
   }, []);
 
   /**
@@ -1404,7 +1411,12 @@ export default function Catalog({
               aria-label, so this is drawn, not announced. */}
           {visibleKeywords.length > 0 && (
             <>
-              <span class="filter-divider" aria-hidden="true" />
+              {/* Hidden rather than unmounted when no chip fits, so its
+                  width stays put and cannot tip the measurement back. */}
+              <span
+                class={railFit === 0 ? "filter-divider idle" : "filter-divider"}
+                aria-hidden="true"
+              />
               <div
                 class="chips kw-rail"
                 role="group"
