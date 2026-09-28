@@ -67,51 +67,42 @@ export function PackageCard({
               {p.name}
             </a>
           </h2>
-          {/* Top right, spanning the name and the kind line: the head is as
-              tall as a button already, because the logo spans both rows, so
-              the buttons cost the card no height there. Ghosts (see
-              `.copy-group .copy` in the layout): the same three on every
-              card, so they stay quiet until pointed at. */}
-          <div class="copy-group">
-            {/* Global first, matching the hero's scope picker — the two
-                are the same choice in two places, so they lead with the
-                same one. */}
-            <CopyButton
-              command={`grim add --global ${p.ref}`}
-              variant="global"
-              name={`global add for ${p.name}`}
-            />
-            <CopyButton
-              command={`grim add ${p.ref}`}
-              name={`project add for ${p.name}`}
-            />
-            {vscodeUrl(vscodeExtension, p.ref) && (
-              <a
-                class="copy vscode"
-                href={vscodeUrl(vscodeExtension, p.ref)!}
-                title="Open in VS Code"
-                aria-label={`Open ${p.name} in VS Code`}
-                tabIndex={-1}
-              >
-                <BrandMark path={mdiMicrosoftVisualStudioCode} />
-              </a>
-            )}
-          </div>
-          {/* The kind, and on a retired package the word "deprecated"
-              beside it in the deprecation colour — the card's one
-              deprecation signal. The address used to follow the kind and
-              was clipped on most cards; like the list row, the card now
-              carries it in the name's tooltip, and the detail page shows
-              it in full. */}
+          {/* The kind, then the version and recency after it — the line
+              under the name, so the name keeps the head's whole width. A
+              retired package trades the recency for the word "deprecated"
+              in the deprecation colour, the card's one deprecation signal:
+              how recently a package nobody should pick was touched is not
+              worth the room. The address is in the name's tooltip, and the
+              detail page shows it in full. */}
           <p class="namespace">
             <span class="kind" data-slot="package-kind">
               {p.kind}
             </span>
-            {p.deprecated && (
-              <>
-                <span aria-hidden="true"> · </span>
-                <span class="deprecated">deprecated</span>
-              </>
+            {(p.version || p.deprecated || ago) && (
+              <span data-slot="package-meta">
+                {p.version && (
+                  <>
+                    <span aria-hidden="true"> · </span>
+                    <span class="card-version">v{p.version}</span>
+                  </>
+                )}
+                {p.deprecated ? (
+                  <>
+                    <span aria-hidden="true"> · </span>
+                    <span class="deprecated">deprecated</span>
+                  </>
+                ) : (
+                  ago &&
+                  at && (
+                    <>
+                      <span aria-hidden="true"> · </span>
+                      <time datetime={at} title={at}>
+                        updated {ago}
+                      </time>
+                    </>
+                  )
+                )}
+              </span>
             )}
           </p>
         </div>
@@ -152,20 +143,37 @@ export function PackageCard({
         </div>
         {p.description && <p class="description">{p.description}</p>}
         <div class="card-foot">
-          {/* Small text only, so the foot is one text line tall rather than
-              a button tall. Version and recency on the left. */}
-          {(p.version || ago) && (
-            <p class="card-meta" data-slot="package-meta">
-              {p.version && <span class="card-version">v{p.version}</span>}
-              {p.version && ago && <span aria-hidden="true"> · </span>}
-              {ago && at && (
-                <time datetime={at} title={at}>
-                  updated {ago}
-                </time>
-              )}
-            </p>
-          )}
-          {/* Opposite the version, bottom right: plain figures, not
+          {/* Bottom left, opposite the figures. They sat top right, where
+              they cost a long name its width — and an index with long names
+              clipped most of them. Ghosts (see `.copy-group .copy` in the
+              layout): the same three on every card, so they stay quiet until
+              pointed at. */}
+          <div class="copy-group">
+            {/* Global first, matching the hero's scope picker — the two
+                are the same choice in two places, so they lead with the
+                same one. */}
+            <CopyButton
+              command={`grim add --global ${p.ref}`}
+              variant="global"
+              name={`global add for ${p.name}`}
+            />
+            <CopyButton
+              command={`grim add ${p.ref}`}
+              name={`project add for ${p.name}`}
+            />
+            {vscodeUrl(vscodeExtension, p.ref) && (
+              <a
+                class="copy vscode"
+                href={vscodeUrl(vscodeExtension, p.ref)!}
+                title="Open in VS Code"
+                aria-label={`Open ${p.name} in VS Code`}
+                tabIndex={-1}
+              >
+                <BrandMark path={mdiMicrosoftVisualStudioCode} />
+              </a>
+            )}
+          </div>
+          {/* Bottom right, opposite the quick links: plain figures, not
               controls. Voting — the thread and the extension route — lives
               on the detail page; on a grid of cards the vote pill was one
               more control per card. Absent means unknown, so neither renders a

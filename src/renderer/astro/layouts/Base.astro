@@ -1467,35 +1467,26 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            its width on a narrow card. They live in `.card-tags` below. */
         .card-head {
           display: grid;
-          /* The trailing `auto` track holds the action buttons. */
-          grid-template-columns: auto minmax(0, 1fr) auto;
+          grid-template-columns: auto minmax(0, 1fr);
           align-items: center;
           column-gap: var(--grim-space-4);
         }
         .card-head .card-logo {
           grid-row: 1 / span 2;
         }
-        /* The kind line sits under the name, in the name's column: the
-           buttons beside them span both rows. */
+        /* The kind line sits under the name, in the name's column. */
         .card-head .namespace {
           grid-column: 2;
           grid-row: 2;
-        }
-        /* Across both rows, centred on the pair — level with the logo tile
-           on the other side, which spans the same two rows. */
-        .card-head .copy-group {
-          grid-column: 3;
-          grid-row: 1 / span 2;
-          flex-wrap: nowrap;
         }
         .card-head h2 {
           grid-column: 2;
           grid-row: 1;
         }
-        /* Downloads and votes, bottom right, opposite the version. Plain
+        /* Downloads and votes, bottom right, opposite the quick links. Plain
            figures, deliberately without a control's border: nothing here is
            clickable, and chrome would invite a click that does nothing.
-           `auto` keeps them right on a card with no version line. */
+           `auto` keeps them right whatever sits on the left. */
         .card-stats {
           margin-left: auto;
           display: flex;
@@ -1944,10 +1935,13 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           font-size: var(--grim-text-xs);
           line-height: 1.3;
           font-family: ui-monospace, "SFMono-Regular", monospace;
-          /* One line, so every card's head is the same height. */
-          display: flex;
-          min-width: 0;
+          /* One line, so every card's head is the same height. Block, not
+             flex: a flex item drops its leading space, which glued the
+             first " · " to the kind. The tail ellipsizes; the kind leads,
+             so it is the last thing to go. */
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .namespace .deprecated {
           color: var(--grim-color-deprecated);
@@ -2022,22 +2016,6 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
              wins, so hovering the count lit an edge its neighbour was
              covering — the accent appeared on three sides and stopped. */
           z-index: 2;
-        }
-        /* Version and recency as one aside. Italic and a step below the rest
-           on purpose — it is a note about the card, not one of its facts. */
-        .card-meta {
-          margin: 0;
-          font-size: var(--grim-text-2xs);
-          font-style: italic;
-          color: var(--grim-color-muted);
-          white-space: nowrap;
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .card-version {
-          font-family: ui-monospace, "SFMono-Regular", monospace;
-          font-style: normal;
         }
         /* Long descriptions would stretch their whole grid row; clamp to 3
            lines so cards stay uniform. Full text lives on the detail page. */
@@ -2114,6 +2092,9 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           align-items: center;
           justify-content: space-between;
           gap: var(--grim-space-4);
+        }
+        .card-foot .copy-group {
+          flex-wrap: nowrap;
         }
         /* The slack goes above the foot, so it lines up across a row
            however tall the cards are. The foot is the last group on every
