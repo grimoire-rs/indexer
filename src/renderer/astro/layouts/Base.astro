@@ -577,6 +577,12 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
            the copy glyph was and nothing reflows during the swap. */
         .cmd-icons {
           position: absolute;
+          /* `inset-block`, not a bare `right`: with both block edges auto this
+             box falls back to the static position of an absolutely positioned
+             child of a *flex* container, which engines have never agreed on.
+             Spanning the field's block axis and centring inside it states the
+             placement instead of inferring it. */
+          inset-block: 0;
           right: 0.6rem;
           display: grid;
           place-items: center;
@@ -631,6 +637,19 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .os-menu > summary {
           display: inline-flex;
           align-items: center;
+          /* Full height, stated twice on purpose. The trigger carries the
+             segment's divider and its hover background, and it has NO block
+             padding — so anything short of the bar's height shows up as a
+             stub of a divider and a glyph floating in the upper half.
+
+             `align-self` covers the case where `<details>` lays its summary
+             out as a flex item; `height` covers the case where it does not,
+             which is the one `display: flex` on `<details>` has historically
+             not been reliable for. The bar stretches `.os-menu`, so that
+             height is definite and the percentage resolves either way. */
+          align-self: stretch;
+          height: 100%;
+          box-sizing: border-box;
           gap: var(--grim-space-1);
           padding: 0 var(--grim-space-4);
           color: var(--grim-color-muted);
@@ -651,6 +670,18 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         }
         .os-glyph {
           display: inline-flex;
+          /* An SVG that is a flex item with no stated alignment is stretched
+             on the cross axis, and engines disagree whether the `width`/
+             `height` presentation attributes make its size definite enough to
+             opt out. Centre it, and refuse the shrink the bar's `min-width: 0`
+             would otherwise allow. */
+          align-items: center;
+          flex: none;
+        }
+        /* Both icons the trigger draws: the platform glyph and the chevron. */
+        .os-menu > summary svg {
+          display: block;
+          flex: none;
         }
         /* Any author `display` beats the UA sheet's `[hidden] { display: none }`
            regardless of specificity, so the rule above showed all three glyphs
