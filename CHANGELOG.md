@@ -11,6 +11,16 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.5.8] - 2026-09-28
+
+### Added
+
+- Give the card's name the full width of its head *(renderer)*
+
+### Fixed
+
+- Never show a keyword chip cut off at the rail's edge *(renderer)*
+
 ## [0.5.7] - 2026-09-27
 
 ### Added
@@ -286,6 +296,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.5.8]: https://github.com/grimoire-rs/indexer/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/grimoire-rs/indexer/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/grimoire-rs/indexer/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/grimoire-rs/indexer/compare/v0.5.4...v0.5.5
