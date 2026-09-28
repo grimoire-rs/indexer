@@ -11,6 +11,20 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.5.9] - 2026-09-28
+
+### Added
+
+- Give a card's hidden keywords a way back *(renderer)*
+- A compact density for the results *(renderer)*
+
+### Fixed
+
+- State the picker trigger's height rather than infer it *(renderer)*
+- Make the keyword disclosure earn its place on the card *(renderer)*
+- Read the repository key in the sub domain access method *(downloads)*
+- Give the arrangement row back its room *(renderer)*
+
 ## [0.5.8] - 2026-09-28
 
 ### Added
@@ -296,6 +310,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.5.9]: https://github.com/grimoire-rs/indexer/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/grimoire-rs/indexer/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/grimoire-rs/indexer/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/grimoire-rs/indexer/compare/v0.5.5...v0.5.6
