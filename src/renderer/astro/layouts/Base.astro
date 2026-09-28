@@ -60,6 +60,15 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           ? "dark"
           : "light");
 
+      // Before first paint too, and for the same reason the theme is: this
+      // one moves the space scale, so applying it after hydration would
+      // relayout the whole page in front of the reader. Absent attribute is
+      // the comfortable default, so only the non-default value is ever
+      // written — the same shape every other stored preference uses.
+      if (pref("grim.catalog.density") === "compact") {
+        document.documentElement.dataset.density = "compact";
+      }
+
       // Also before first paint: a deep link (a keyword chip on a package
       // page) or a stored preference means the catalog the server rendered —
       // every package, empty search box, name order, deprecated hidden, as
@@ -2088,6 +2097,34 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
 
            Scoped to the card: the detail page has a `.keywords` list of its
            own, with bigger chips that wrap, and this height clipped them. */
+        /* ---- Compact density -------------------------------------------
+           The results, and nothing else. An earlier cut of this moved the
+           whole space scale from `:root`, which shifted the header, the
+           hero and the toolbar too — everything on the page jumped, and
+           the cards barely changed, because the steps a card actually
+           spends are 5 and 6 and the ones the chrome spends are 7 to 9.
+
+           So it is scoped to the two result containers and written as
+           ordinary properties rather than as token reassignments: an index
+           that retunes `--grim-space-6` still gets its own value here.
+
+           The column floor moves with it. Compact on a catalog means more
+           cards on screen, not only shorter ones, and 19rem → 16rem is
+           another card per row on a laptop. */
+        [data-density="compact"] .grid {
+          grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+          gap: var(--grim-space-4);
+        }
+        [data-density="compact"] .card {
+          gap: var(--grim-space-3);
+          padding: var(--grim-space-4);
+        }
+        /* The list view is results too, so the control is not inert there —
+           but its rows are already tight, so this is one step, not four. */
+        [data-density="compact"] .table .row {
+          padding: var(--grim-space-2) var(--grim-space-3);
+        }
+
         /* Two tracks: the chips clip inside the first, the disclosure sits
            in the second and is never what the clip eats. That was the whole
            objection to a trailing "+N" chip -- in one flow it is last, so it

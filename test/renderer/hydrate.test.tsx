@@ -612,6 +612,85 @@ describe("the keyword rail's reorder slide", () => {
   });
 });
 
+describe("the density toggle", () => {
+  const PACKAGES = [
+    {
+      namespace: "acme",
+      name: "alpha",
+      kind: "skill",
+      ref: "r.test/acme/alpha",
+      keywords: ["cli"],
+    },
+  ] as unknown as CatalogPackage[];
+
+  function mount(): HTMLElement {
+    history.replaceState({}, "", "/");
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={PACKAGES} vscodeExtension={null} builtAt={BUILT_AT} />, host);
+    return host;
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  const pick = (host: HTMLElement, label: string) =>
+    host.querySelector<HTMLButtonElement>(`.density-toggle [aria-label="${label}"]`)!;
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    delete document.documentElement.dataset.density;
+    localStorage.clear();
+  });
+
+  // Absent attribute IS comfortable, so the default writes nothing — the
+  // shape every other stored preference here uses.
+  it("starts comfortable, storing nothing and stamping nothing", async () => {
+    const host = mount();
+    await settle();
+
+    expect(pick(host, "Comfortable spacing").getAttribute("aria-pressed")).toBe("true");
+    expect(pick(host, "Compact spacing").getAttribute("aria-pressed")).toBe("false");
+    expect(document.documentElement.dataset.density).toBeUndefined();
+    expect(localStorage.getItem("grim.catalog.density")).toBeNull();
+  });
+
+  // The attribute, not a class on the island: the tokens key on `<html>` and
+  // the package pages honour the same preference with no island at all.
+  it("stamps the document and stores the choice, then clears both", async () => {
+    const host = mount();
+    await settle();
+
+    pick(host, "Compact spacing").click();
+    await settle();
+
+    await vi.waitFor(() => expect(document.documentElement.dataset.density).toBe("compact"));
+    await vi.waitFor(() =>
+      expect(localStorage.getItem("grim.catalog.density")).toBe("compact"),
+    );
+    expect(pick(host, "Compact spacing").getAttribute("aria-pressed")).toBe("true");
+
+    pick(host, "Comfortable spacing").click();
+    await settle();
+
+    await vi.waitFor(() =>
+      expect(document.documentElement.dataset.density).toBeUndefined(),
+    );
+    await vi.waitFor(() => expect(localStorage.getItem("grim.catalog.density")).toBeNull());
+  });
+
+  it("seeds itself from the stored preference", async () => {
+    localStorage.setItem("grim.catalog.density", "compact");
+    const host = mount();
+    await settle();
+
+    expect(pick(host, "Compact spacing").getAttribute("aria-pressed")).toBe("true");
+    await vi.waitFor(() => expect(document.documentElement.dataset.density).toBe("compact"));
+  });
+});
+
 describe("a card's keyword overflow", () => {
   // Six keywords against an inline cap of five, so one is certainly hidden by
   // count alone — plus a package with none, which must not offer a control at
