@@ -121,9 +121,12 @@ CI, so re-render with `npm run ci` afterwards.
 | `downloads.baseUrl` | string | *(required)* | The Artifactory **REST** root, e.g. `https://artifactory.example.com/artifactory`. https only, and the only host the collector ever dials |
 | `downloads.oidcProvider` | string | *(none)* | The JFrog OIDC identity-mapping name. Set it and the generated GitHub job exchanges the workflow's id-token for a short-lived token; leave it and the job reads `GRIM_DOWNLOADS_TOKEN` from a secret. GitHub only |
 
-There is deliberately **no repository map** under `downloads`: the Artifactory
-repository key is the first path segment of each ref and the image path is the
-rest, so a map would be a second copy of what `index/` already says. And no
+There is deliberately **no repository map** under `downloads`: each ref already
+names its Artifactory repository key, in either Docker access method. A ref on
+the `baseUrl` host uses the *repository path* method (the key is the first path
+segment, the image path the rest); a ref on any other host uses the *sub domain*
+method (the key is the host's first label, the image path the whole path). A map
+would be a second copy of what `index/` already says. And no
 token key — the credential comes from the job, never from a committed file.
 
 `ratings` is documented with the sidecar it produces. See

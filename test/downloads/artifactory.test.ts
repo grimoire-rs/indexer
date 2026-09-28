@@ -201,17 +201,43 @@ describe("collectDownloads — the measured algorithm", () => {
     expect(calls.filter((c) => c.url.endsWith("/api/search/aql"))).toHaveLength(1);
   });
 
-  it("dials nothing at all when no ref is on this instance", async () => {
+  it("fails rather than publishing when no ref resolves to this instance", async () => {
     const calls = serve();
-    const fresh = await collectDownloads({
-      baseUrl: BASE,
-      token: "t",
-      refs: ["ghcr.io/acme/code-review"],
-      now: NOW,
-    });
 
-    expect(fresh).toEqual({});
+    await expect(
+      collectDownloads({ baseUrl: BASE, token: "t", refs: ["ghcr.io/acme/code-review"], now: NOW }),
+    ).rejects.toThrow(/no ref in index\/ resolves/);
+    expect(calls.filter((c) => c.url.endsWith("/api/search/aql"))).toEqual([]);
+  });
+
+  it("returns nothing for an index with no refs at all", async () => {
+    const calls = serve();
+
+    expect(await collectDownloads({ baseUrl: BASE, token: "t", refs: [], now: NOW })).toEqual({});
     expect(calls).toEqual([]);
+  });
+});
+
+describe("the sub domain access method", () => {
+  // The repository key is the pull host's first label and the whole path is
+  // the image; the REST root is a different host altogether.
+  const SUB = `${REPO}.registry.example.com/${IMAGE}`;
+
+  it("reads the repository key off the host label and the image off the whole path", async () => {
+    const calls = serve();
+    const fresh = await collectDownloads({ baseUrl: BASE, token: "t", refs: [SUB], now: NOW });
+
+    expect(fresh[SUB]!.total).toBe(169);
+    expect(calls.find((c) => c.url.endsWith("/api/search/aql"))!.body).toContain(`"repo":"${REPO}"`);
+    for (const call of calls) expect(call.url.startsWith(BASE)).toBe(true);
+  });
+
+  it("fails the run when the label names a repository the credential cannot read", async () => {
+    serve({ "/api/repositories": { body: JSON.stringify([{ key: "some-other-repo" }]) } });
+
+    await expect(
+      collectDownloads({ baseUrl: BASE, token: "t", refs: [SUB], now: NOW }),
+    ).rejects.toThrow(/no ref in index\/ resolves/);
   });
 });
 

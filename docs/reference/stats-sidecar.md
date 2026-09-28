@@ -166,9 +166,15 @@ how the feature stays off.
 
 `baseUrl` is the Artifactory **REST** root and is required, https only. It is
 the only host the collector ever dials: the Artifactory repository key and the
-image path are both derived from each ref (the first path segment and the rest),
-so there is no map to configure and nothing contributor-supplied ever becomes a
-URL. A ref on some other host is skipped.
+image path are both derived from each ref, so there is no map to configure and
+nothing contributor-supplied ever becomes a URL. A ref on the `baseUrl` host is
+read with Artifactory's *repository path* method
+(`artifactory.example.com/<repo-key>/<image>`); a ref on any other host with the
+*sub domain* method (`<repo-key>.registry.example.com/<image>`), and is skipped
+when that first label names no repository the credential can read — which is
+how a ref on `ghcr.io` stays out of the count. A run in which **no** ref
+resolves fails rather than publishing a sidecar that claims Artifactory counted
+nothing.
 
 The credential comes from the job, never from this file. With `oidcProvider`
 set, the generated GitHub job exchanges the workflow's own id-token for a

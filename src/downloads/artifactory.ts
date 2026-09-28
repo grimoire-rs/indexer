@@ -145,14 +145,15 @@ async function aql(baseUrl: string, token: string, repo: string): Promise<Row[]>
 }
 
 /**
- * Every repository key the token can actually read.
+ * Every repository key the token can actually read, keyed by its lower-cased
+ * spelling so a key taken off a DNS label (which has no case) still finds it.
  *
  * This is the disambiguator for measurement 3 above, and it runs once per run
  * rather than once per artifact: AQL cannot tell "no pulls yet" from "no read
  * permission", and this call can — a repo the token cannot read is simply
  * absent from the list.
  */
-async function readableRepos(baseUrl: string, token: string): Promise<Set<string>> {
+async function readableRepos(baseUrl: string, token: string): Promise<Map<string, string>> {
   const response = await request(`${baseUrl}/api/repositories`, {
     Authorization: `Bearer ${token}`,
   });
@@ -174,10 +175,10 @@ async function readableRepos(baseUrl: string, token: string): Promise<Set<string
   if (!Array.isArray(parsed)) {
     throw new CliError(`downloads: the repository list at ${baseUrl} is not an array`, EXIT.unavailable);
   }
-  const keys = new Set<string>();
+  const keys = new Map<string, string>();
   for (const entry of parsed) {
     const key = (entry as { key?: unknown } | null)?.key;
-    if (typeof key === "string") keys.add(key);
+    if (typeof key === "string") keys.set(key.toLowerCase(), key);
   }
   return keys;
 }
@@ -243,11 +244,23 @@ export interface CollectOptions {
 /**
  * Read download counts for every ref this Artifactory instance holds.
  *
- * A ref on a different host is skipped rather than failed: an index may list
- * artifacts from several registries, and only one of them is the instance
- * being counted. A ref whose repository key the token cannot read **fails the
- * run** — that is measurement 3, and the alternative is publishing a zero that
- * looks like a fact.
+ * A ref names its repository key in one of Artifactory's two Docker access
+ * methods, and which one is read off the host:
+ *
+ *  - **repository path** — the ref is on the `baseUrl` host, the key is the
+ *    first path segment and the image path is the rest;
+ *  - **sub domain** — the ref is on any other host, the key is that host's
+ *    first label and the image path is the whole repository. The ref host is
+ *    the pull endpoint and the REST root lives elsewhere, which is why
+ *    `baseUrl` is named rather than derived in the first place.
+ *
+ * A path-method key the token cannot read **fails the run** — that is
+ * measurement 3, and the alternative is publishing a zero that looks like a
+ * fact. A sub-domain key the token cannot read is skipped instead: an index
+ * may list artifacts from several registries, and `ghcr.io` naming no
+ * repository here is the ordinary case, not a permission gap. So is a run in
+ * which no ref resolves at all a failure: counting zero artifacts is not a
+ * measurement, and publishing it would stamp the sidecar as Artifactory's.
  *
  * An artifact the instance returns no rows for is absent from the result, not
  * zero: absent means unknown, and `mergeStats` drops the key rather than
@@ -256,35 +269,39 @@ export interface CollectOptions {
 export async function collectDownloads(opts: CollectOptions): Promise<Record<string, DownloadStat>> {
   const host = new URL(opts.baseUrl).host.toLowerCase();
 
-  // repo key -> (image path -> ref). Both derived from the ref alone: the
-  // first segment of the OCI repository is the Artifactory repository key and
-  // the rest is the image path, which is all `parseRef` has to give and all
-  // this needs. `kind` is deliberately not read — it is a sibling field on the
-  // metadata, not something a ref encodes, and real indexes disagree about
-  // whether a plural path segment is even present.
-  const wanted = new Map<string, Map<string, string>>();
+  // Both coordinates derived from the ref alone, which is all `parseRef` has
+  // to give and all this needs. `kind` is deliberately not read — it is a
+  // sibling field on the metadata, not something a ref encodes, and real
+  // indexes disagree about whether a plural path segment is even present.
+  const candidates: { repo: string; image: string; ref: string; byPath: boolean }[] = [];
   for (const ref of opts.refs) {
     const parsed = parseRef(ref);
     if (!parsed.ok) continue;
-    if (parsed.value.host.toLowerCase() !== host) continue;
-    const slash = parsed.value.repository.indexOf("/");
-    if (slash <= 0) continue;
-    const repo = parsed.value.repository.slice(0, slash);
-    const image = parsed.value.repository.slice(slash + 1);
-    let byImage = wanted.get(repo);
-    if (!byImage) {
-      byImage = new Map();
-      wanted.set(repo, byImage);
+    const refHost = parsed.value.host.toLowerCase();
+    if (refHost === host) {
+      const slash = parsed.value.repository.indexOf("/");
+      if (slash <= 0) continue;
+      candidates.push({
+        repo: parsed.value.repository.slice(0, slash),
+        image: parsed.value.repository.slice(slash + 1),
+        ref,
+        byPath: true,
+      });
+    } else {
+      candidates.push({ repo: refHost.split(/[.:]/)[0]!, image: parsed.value.repository, ref, byPath: false });
     }
-    byImage.set(image, ref);
   }
-  if (wanted.size === 0) return {};
+  if (candidates.length === 0) return {};
 
   const readable = await readableRepos(opts.baseUrl, opts.token);
-  for (const repo of wanted.keys()) {
-    if (!readable.has(repo)) {
+  // repo key -> (image path -> ref).
+  const wanted = new Map<string, Map<string, string>>();
+  for (const { repo: named, image, ref, byPath } of candidates) {
+    const repo = readable.get(named.toLowerCase());
+    if (repo === undefined) {
+      if (!byPath) continue;
       throw new CliError(
-        `downloads: the credential cannot read ${repo} on ${opts.baseUrl} — ` +
+        `downloads: the credential cannot read ${named} on ${opts.baseUrl} — ` +
           // No `from "…"` in this string: pack-smoke scans the built JS for
           // import specifiers, and that spelling reads as one.
           `grant it read on that repository. AQL would answer HTTP 200 with no rows, ` +
@@ -292,6 +309,23 @@ export async function collectDownloads(opts: CollectOptions): Promise<Record<str
         EXIT.unavailable,
       );
     }
+    let byImage = wanted.get(repo);
+    if (!byImage) {
+      byImage = new Map();
+      wanted.set(repo, byImage);
+    }
+    byImage.set(image, ref);
+  }
+  if (wanted.size === 0) {
+    // ponytail: only the all-skipped case is caught. One unreadable sub-domain
+    // repository among readable ones still drops out silently, because it
+    // cannot be told apart from a foreign registry without a repository map.
+    throw new CliError(
+      `downloads: no ref in index/ resolves to a repository the credential can read on ${opts.baseUrl} — ` +
+        `a ref must be on ${host} (repository path) or on <repository key>.<registry host> (sub domain). ` +
+        `Refusing to publish a sidecar that claims Artifactory counted nothing`,
+      EXIT.unavailable,
+    );
   }
 
   const asOf = (opts.now ?? new Date()).toISOString().replace(/\.\d+Z$/, "Z");

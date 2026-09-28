@@ -6,7 +6,8 @@
 // shared file, each able to fail on its own block in its own words.
 //
 // One key, and deliberately one. The Artifactory repository key and the image
-// path both come from the ref itself (see `src/downloads/artifactory.ts`), so
+// path both come from the ref itself, in either Docker access method (see
+// `src/downloads/artifactory.ts`), so
 // there is no lookup map to configure and nothing to keep in step with
 // `index/**`. The block exists to name the REST base and to be the on/off
 // switch — an absent block is how download counts stay off.

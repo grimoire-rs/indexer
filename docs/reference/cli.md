@@ -144,9 +144,10 @@ is on no package. An absent count means **nobody measured**, never that nobody
 pulled: the command publishes no key rather than a zero.
 
 It fails the run (69) rather than publishing an absence when the credential
-cannot read a listed repository. Artifactory's AQL answers `HTTP 200` with no
-rows and no error in that case, which is indistinguishable from "nothing has
-been pulled yet", so the repository list is checked first.
+cannot read a listed repository, or when no ref resolves to a readable
+repository at all. Artifactory's AQL answers `HTTP 200` with no rows and no
+error in that case, which is indistinguishable from "nothing has been pulled
+yet", so the repository list is checked first.
 
 Runs ahead of `ratings` in the generated `stats` job and leaves `.stats.json`
 for it to seed from. See [the sidecar reference](stats-sidecar.md) for the
