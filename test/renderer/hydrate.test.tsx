@@ -742,7 +742,7 @@ describe("a card's keyword overflow", () => {
     );
 
   const moreOf = (card: HTMLElement) =>
-    card.querySelector<HTMLButtonElement>("button.chip.keyword.more");
+    card.querySelector<HTMLButtonElement>("button.keyword-more");
 
   afterEach(() => {
     unmountAll();
@@ -796,15 +796,18 @@ describe("a card's keyword overflow", () => {
     ).toBe(false);
   });
 
-  it("offers no control on a card with no keywords, and one on a card with any", async () => {
+  // A control that is always up is an affordance for nothing. It appears
+  // only once the cap has something to hide, so a card whose keywords all
+  // fit carries no chevron at all.
+  it("offers a control only where the cap hides something", async () => {
     const host = mount();
     await settle();
 
     expect(moreOf(cardOf(host, "none"))).toBeNull();
     expect(chipsOf(cardOf(host, "none"))).toEqual(["no keywords"]);
-    expect(moreOf(cardOf(host, "one"))!.getAttribute("aria-label")).toBe(
-      "Show all 1 keyword",
-    );
+    expect(moreOf(cardOf(host, "one"))).toBeNull();
+    expect(chipsOf(cardOf(host, "one"))).toEqual(["solo"]);
+    expect(moreOf(cardOf(host, "many"))).not.toBeNull();
   });
 
   // An applied facet is the one chip that must stay on the row: it is

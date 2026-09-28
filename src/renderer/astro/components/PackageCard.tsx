@@ -9,7 +9,7 @@
 // hydrated island cannot read the build-time payload — so its props ARE a
 // contract, and they are the reason component overrides are documented as
 // unstable for now.
-import { ArrowBigUp, ArrowDownToLine } from "lucide-preact";
+import { ArrowBigUp, ArrowDownToLine, ChevronDown } from "lucide-preact";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { CardLogo } from "./CardLogo.js";
@@ -45,8 +45,9 @@ export interface PackageCardProps {
 }
 
 /**
- * Chips drawn while the row is collapsed. A cap, not a limit: the rest are one
- * click away, so this only bounds what 400 cards put in the document at once.
+ * Chips drawn while the row is collapsed, and the point past which the
+ * disclosure appears. A cap, not a limit: the rest are one click away, so this
+ * only bounds what 400 cards put in the document at once.
  */
 const INLINE_KEYWORDS = 5;
 
@@ -155,14 +156,18 @@ export function PackageCard({
 
             Two tracks, not one flow. A row that clips eats whatever sits
             at its end first, which is why a trailing "+N" chip was
-            rejected when the clip was introduced — so the control gets a
-            track of its own and the chips clip inside theirs. It is
-            offered on every card that has keywords rather than only where
-            something is provably hidden: how many chips fit is a width
-            question, and answering it per card means measuring 400 of
-            them on every resize. Its label names the total instead of a
-            remainder, so it promises the list it opens and never a count
-            it did not measure. */}
+            rejected when the clip was introduced — so the disclosure
+            gets a track of its own and the chips clip inside theirs.
+
+            It appears only once the cap has something to hide. A card
+            whose keywords all fit gets no control at all, because one
+            that is always up reads as an affordance for nothing. The
+            residue is a card under the cap whose chips are too WIDE for
+            the row: those still clip silently, since how many fit is a
+            width question and answering it per card means measuring
+            several hundred of them on every resize. Its label names the
+            total rather than a remainder for the same reason — it
+            promises the list it opens, never a count nothing measured. */}
         <div
           class="keywords"
           data-slot="package-keywords"
@@ -193,7 +198,7 @@ export function PackageCard({
               </button>
             ))}
           </div>
-          {keywords.length > 0 && (
+          {keywords.length > INLINE_KEYWORDS && (
             /* An ordinary Tab stop, deliberately unlike the chips beside
                it. Reaching a control by pointer and arrow key only is the
                WCAG 2.1.1 (A) failure the rail's chips were corrected for;
@@ -202,13 +207,13 @@ export function PackageCard({
                alone here rather than fixed in passing.) */
             <button
               type="button"
-              class="chip keyword more"
+              class="keyword-more"
               aria-expanded={keywordsExpanded}
               aria-label={keywordsLabel}
               title={keywordsLabel}
               onClick={onToggleKeywordsExpanded}
             >
-              {keywordsExpanded ? "\u2212" : "\u2026"}
+              <ChevronDown size={14} aria-hidden="true" />
             </button>
           )}
         </div>

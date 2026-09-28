@@ -1049,6 +1049,34 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).toMatch(/\.card \.keywords\[data-expanded\]\{[^}]*height:auto/);
   });
 
+  // The row sits on a layer above the card's own full-card link, so every
+  // pixel of it -- the gaps, the empty tail of a short row, the chips
+  // wrapper itself -- swallowed the click and, through
+  // `:has(.keywords :hover)`, killed the card's hover with it. Only the
+  // controls are a target; the rest is scenery.
+  it("lets the card have back every part of the keyword row that is not a control", () => {
+    expect(bundledCss).toMatch(/\.card \.keywords[^{]*\{[^}]*pointer-events:none/);
+    expect(bundledCss).toMatch(/\.card \.keyword-chips[^{]*\{[^}]*pointer-events:none/);
+    expect(bundledCss).toMatch(/\.card \.keywords button\{[^}]*pointer-events:auto/);
+    // Scoped to `button` on purpose: the "no keywords" placeholder is a
+    // `<span>`, and handing it pointer events would make an inert label
+    // look like a facet.
+    expect(bundledCss).not.toMatch(/\.card \.keywords \.chip\{[^}]*pointer-events:auto/);
+  });
+
+  // Swapping one glyph for another flickered and read as a third chip. A
+  // chevron that turns over is the same object in a new position, which is
+  // what makes the state legible rather than merely different.
+  it("turns the disclosure over rather than swapping its glyph", () => {
+    expect(bundledCss).toMatch(/\.card \.keywords\[data-expanded\] \.keyword-more svg\{[^}]*rotate\(180deg\)/);
+    expect(bundledCss).toMatch(/\.keyword-more svg\{[^}]*transition:transform/);
+    // And it is not dressed as a chip -- that was what made it read as one
+    // more keyword.
+    // The minifier rewrites `background: none` to `background: 0 0`.
+    expect(bundledCss).toMatch(/\.keyword-more\{[^}]*background:(none|0 0)/);
+    expect(bundledCss).toMatch(/\.keyword-more\{[^}]*border:none/);
+  });
+
   // The toolbar's filter row is a scroll container — it has to be, as a
   // backstop for the kinds overflowing on their own — and an absolutely
   // positioned panel inside one is cropped to it AND stretches its scroll
