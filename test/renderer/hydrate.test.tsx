@@ -612,6 +612,159 @@ describe("the keyword rail's reorder slide", () => {
   });
 });
 
+describe("a card's keyword overflow", () => {
+  // Six keywords against an inline cap of five, so one is certainly hidden by
+  // count alone — plus a package with none, which must not offer a control at
+  // all, and one with a single keyword, which must (how many chips FIT is a
+  // width question this never claims to have answered).
+  const TAGGED = [
+    {
+      namespace: "acme",
+      name: "many",
+      kind: "skill",
+      ref: "r.test/acme/many",
+      keywords: ["one", "two", "three", "four", "five", "six"],
+    },
+    {
+      namespace: "acme",
+      name: "one",
+      kind: "rule",
+      ref: "r.test/acme/one",
+      keywords: ["solo"],
+    },
+    {
+      namespace: "acme",
+      name: "none",
+      kind: "agent",
+      ref: "r.test/acme/none",
+      keywords: [],
+    },
+  ] as unknown as CatalogPackage[];
+
+  function mount(): HTMLElement {
+    history.replaceState({}, "", "/");
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={TAGGED} vscodeExtension={null} builtAt={BUILT_AT} />, host);
+    return host;
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  const cardOf = (host: HTMLElement, name: string) =>
+    [...host.querySelectorAll<HTMLElement>("li.card")].find(
+      (c) => c.querySelector("h2 a")?.textContent?.trim() === name,
+    )!;
+
+  const chipsOf = (card: HTMLElement) =>
+    [...card.querySelectorAll(".keyword-chips .chip.keyword")].map((c) =>
+      c.textContent?.trim(),
+    );
+
+  const moreOf = (card: HTMLElement) =>
+    card.querySelector<HTMLButtonElement>("button.chip.keyword.more");
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
+  });
+
+  it("caps the collapsed row and names the whole list, not a remainder", async () => {
+    const host = mount();
+    await settle();
+
+    const card = cardOf(host, "many");
+    expect(chipsOf(card)).toEqual(["one", "two", "three", "four", "five"]);
+    // "all 6", never "+1 more": the remainder would be a count of what the
+    // row clipped, which nothing here measured.
+    expect(moreOf(card)!.getAttribute("aria-label")).toBe("Show all 6 keywords");
+    expect(moreOf(card)!.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("reveals every keyword in place, and collapses back", async () => {
+    const host = mount();
+    await settle();
+
+    const card = cardOf(host, "many");
+    moreOf(card)!.click();
+    await settle();
+
+    const open = cardOf(host, "many");
+    expect(chipsOf(open)).toEqual(["one", "two", "three", "four", "five", "six"]);
+    expect(open.querySelector(".keywords")!.hasAttribute("data-expanded")).toBe(true);
+    expect(moreOf(open)!.getAttribute("aria-expanded")).toBe("true");
+
+    moreOf(open)!.click();
+    await settle();
+
+    const shut = cardOf(host, "many");
+    expect(chipsOf(shut)).toHaveLength(5);
+    expect(shut.querySelector(".keywords")!.hasAttribute("data-expanded")).toBe(false);
+  });
+
+  it("expands one card without expanding its neighbour", async () => {
+    const host = mount();
+    await settle();
+
+    moreOf(cardOf(host, "many"))!.click();
+    await settle();
+
+    expect(
+      cardOf(host, "one").querySelector(".keywords")!.hasAttribute("data-expanded"),
+    ).toBe(false);
+  });
+
+  it("offers no control on a card with no keywords, and one on a card with any", async () => {
+    const host = mount();
+    await settle();
+
+    expect(moreOf(cardOf(host, "none"))).toBeNull();
+    expect(chipsOf(cardOf(host, "none"))).toEqual(["no keywords"]);
+    expect(moreOf(cardOf(host, "one"))!.getAttribute("aria-label")).toBe(
+      "Show all 1 keyword",
+    );
+  });
+
+  // An applied facet is the one chip that must stay on the row: it is
+  // pressed, it is why half the catalog is missing, and behind a `…` it
+  // reads as an accent the card acquired for no reason. Same rule the
+  // filter rail applies to its own actives.
+  it("pins an applied keyword ahead of the cap, never behind the disclosure", async () => {
+    history.replaceState({}, "", "/?kw=six");
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={TAGGED} vscodeExtension={null} builtAt={BUILT_AT} />, host);
+    await settle();
+
+    // `six` is last in the publisher's order and would be the one the cap
+    // drops; pressed, it has to lead instead.
+    const card = cardOf(host, "many");
+    expect(chipsOf(card)[0]).toBe("six");
+    expect(chipsOf(card)).toHaveLength(5);
+    expect(
+      card.querySelector('.keyword-chips [aria-pressed="true"]')?.textContent?.trim(),
+    ).toBe("six");
+    // The publisher's order survives among the rest.
+    expect(chipsOf(card).slice(1)).toEqual(["one", "two", "three", "four"]);
+  });
+
+  // Reaching a control by pointer and arrow key only is the WCAG 2.1.1 (A)
+  // failure the rail's chips were corrected for. A new control must not
+  // reintroduce it, so this is asserted rather than left to review.
+  it("puts the control in the ordinary tab sequence", async () => {
+    const host = mount();
+    await settle();
+
+    const more = moreOf(cardOf(host, "many"))!;
+    expect(more.tabIndex).toBe(0);
+    expect(more.hasAttribute("tabindex")).toBe(false);
+  });
+});
+
 describe("the keyword overflow menu", () => {
   // More distinct keywords than the rail's cap, so there is always something
   // for the menu to hold whatever the (unmeasurable, in jsdom) rail fit is.

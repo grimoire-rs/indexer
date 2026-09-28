@@ -1011,6 +1011,22 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).not.toMatch(/(^|[},])\.keywords\{[^}]*height:/);
   });
 
+  // A row that clips eats whatever sits at its end first, so a disclosure in
+  // the same flow as the chips is the first thing to disappear -- which is
+  // precisely why a trailing "+N" chip was rejected when the clip landed.
+  // Two tracks is what makes the control survivable; asserted against the
+  // built bundle because a flow regression here is silent and only shows on
+  // a card narrow enough to clip.
+  it("gives the keyword disclosure a track the clip cannot reach", () => {
+    const row = bundledCss.match(/\.card \.keywords\{[^}]*\}/)![0]!;
+    expect(row).toContain("grid");
+    expect(row).toMatch(/grid-template-columns:minmax\(0,\s*1fr\) auto/);
+    // The chips keep their own clipping box, one row tall, inside track one.
+    expect(bundledCss).toMatch(/\.card \.keyword-chips\{[^}]*overflow:hidden/);
+    // Expanding is the row's height giving way, nothing else.
+    expect(bundledCss).toMatch(/\.card \.keywords\[data-expanded\]\{[^}]*height:auto/);
+  });
+
   // The toolbar's filter row is a scroll container — it has to be, as a
   // backstop for the kinds overflowing on their own — and an absolutely
   // positioned panel inside one is cropped to it AND stretches its scroll
