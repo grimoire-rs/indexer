@@ -2161,14 +2161,60 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           height: auto;
           overflow: visible;
         }
-        /* Muted like a keyword chip, but it filters nothing -- so it never
-           takes the active treatment, and its glyph is centred rather than
-           set as a word. */
-        .chip.keyword.more {
+        /* Deliberately NOT a chip. It filters nothing, and wearing the chip
+           pill made it read as one more keyword -- so it is a bare glyph that
+           turns, which is the one shape a reader already knows means "there
+           is more under here". */
+        .keyword-more {
+          display: inline-flex;
+          align-items: center;
           justify-content: center;
-          min-width: calc(var(--grim-text-2xs) * 2.5);
-          font-variant-numeric: tabular-nums;
-          line-height: 1.4;
+          width: calc(var(--grim-text-2xs) * 1.4 + 2 * var(--grim-space-1));
+          height: calc(var(--grim-text-2xs) * 1.4 + 2 * var(--grim-space-1));
+          padding: 0;
+          border: none;
+          border-radius: var(--grim-radius-pill);
+          background: none;
+          color: var(--grim-color-muted);
+          cursor: pointer;
+        }
+        .keyword-more:hover,
+        .keyword-more:focus-visible {
+          background: var(--grim-color-chip-bg);
+          color: var(--grim-color-fg);
+        }
+        .keyword-more:focus-visible {
+          outline: 2px solid var(--grim-color-accent);
+          outline-offset: 0;
+        }
+        /* The state IS the rotation. Swapping one glyph for another flickered
+           and said nothing; a chevron that turns over is the same object in a
+           different position, so there is something to follow. */
+        .keyword-more svg {
+          display: block;
+          flex: none;
+          transition: transform var(--grim-duration-base) ease;
+        }
+        .card .keywords[data-expanded] .keyword-more svg {
+          transform: rotate(180deg);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .keyword-more svg {
+            transition: none;
+          }
+        }
+        /* The row is a layer over the card's own full-card link, so every
+           pixel of it -- gaps, the empty tail of a short row, the wrapper
+           itself -- used to swallow the click AND suppress the card's hover
+           through `:has(.keywords :hover)`. Only the controls are a target;
+           the rest of the row is scenery and lets the card have it back. The
+           `no keywords` placeholder is a `<span>` and stays inert on its own. */
+        .card .keywords,
+        .card .keyword-chips {
+          pointer-events: none;
+        }
+        .card .keywords button {
+          pointer-events: auto;
         }
         /* Each chip keeps its own width; the row gives up, not the words. */
         .chip.keyword {
