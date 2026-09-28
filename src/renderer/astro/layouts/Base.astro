@@ -1633,13 +1633,16 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
              Every track is sized to give the description whatever is left.
              The marks are `min-content` — a 20px tile and a 16px glyph, and
              nothing about them should reserve more than they draw. The name
-             is `fit-content(14rem)`: as wide as the longest name in the list
-             and no wider, capped, past which it clips. It was
+             is `fit-content(11rem)`: as wide as the longest name in the list
+             and no wider, capped, past which it clips. The cap was 14rem,
+             and a corporate index's long names all ran to it, so every row
+             paid the width of the longest; 11rem is about twenty-two
+             characters, and the row's tooltip has the full name. It was
              `minmax(8rem, 14rem)`, and that 8rem floor was a hole — a list of
              short names paid a fixed 8rem for them, so the description read
              as pushed away from a column of empty space. */
           grid-template-columns:
-            min-content min-content fit-content(14rem) 1fr auto;
+            min-content min-content fit-content(11rem) 1fr auto;
           background: var(--grim-color-card);
           border: var(--grim-border-width) solid var(--grim-color-border);
           /* `xl`, the content-surface step — the same one the card wears.
@@ -1660,11 +1663,11 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         .table.counted,
         .table.rated {
           grid-template-columns:
-            min-content min-content fit-content(14rem) 1fr auto auto;
+            min-content min-content fit-content(11rem) 1fr auto auto;
         }
         .table.rated.counted {
           grid-template-columns:
-            min-content min-content fit-content(14rem) 1fr auto auto auto;
+            min-content min-content fit-content(11rem) 1fr auto auto auto;
         }
         .table .row {
           grid-column: 1 / -1;
