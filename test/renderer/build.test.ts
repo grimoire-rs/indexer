@@ -713,6 +713,33 @@ describe("config reaches the rendered HTML", () => {
     expect(bundledCss).toMatch(/\.os-glyph\[hidden\]\s*\{\s*display:\s*none/);
   });
 
+  // The bar states no height of its own: it comes from the command field's
+  // type metrics and is pushed back out by `align-items: stretch`. Three
+  // links in that chain were left to engine defaults, and each one degrades
+  // the same way -- a trigger shorter than the bar, so the divider is a stub
+  // and the glyph floats in the upper half of a box it should fill. Asserted
+  // against the BUILT bundle, because that is what a browser reads.
+  it("states the picker trigger's height rather than inferring it", () => {
+    // `<details>` laying its summary out as a flex item is not something to
+    // rely on; `height` holds where `align-self` never applies.
+    const summary = bundledCss.match(/\.os-menu>summary\{[^}]*\}/)![0]!;
+    expect(summary).toContain("align-self:stretch");
+    expect(summary).toContain("height:100%");
+    expect(summary).toContain("box-sizing:border-box");
+
+    // An SVG flex item with no stated alignment is stretched on the cross
+    // axis, and the `width`/`height` presentation attributes do not reliably
+    // opt it out.
+    expect(bundledCss).toMatch(/\.os-glyph\{[^}]*align-items:center/);
+    expect(bundledCss).toMatch(/\.os-glyph\{[^}]*flex:none/);
+    expect(bundledCss).toMatch(/\.os-menu>summary svg\{[^}]*flex:none/);
+
+    // With both block edges auto, this box falls back to the static position
+    // of an abspos child of a flex container -- the one placement in the bar
+    // with no agreed answer.
+    expect(bundledCss).toMatch(/\.cmd-icons\{[^}]*inset-block:0/);
+  });
+
   // A copy anywhere on the page raises a toast naming what it copied — the
   // per-button check cannot say which of three adjacent buttons fired.
   it("names what each copy target puts on the clipboard", () => {
