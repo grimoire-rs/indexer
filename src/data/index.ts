@@ -143,7 +143,8 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
     let record: Record<string, unknown> = withNamespace;
     if (fs.existsSync(dataPath)) {
       const sidecar = JSON.parse(fs.readFileSync(dataPath, "utf8")) as Record<string, unknown>;
-      const { descDigest: _descDigest, ...enrich } = sidecar; // internal change-probe bookkeeping — never ship
+      // internal change-probe / slice bookkeeping — never ship
+      const { descDigest: _descDigest, describedAt: _describedAt, ...enrich } = sidecar;
       record = { ...enrich, ...withNamespace }; // index metadata wins on overlap
       sidecars.push({
         namespace: ns,

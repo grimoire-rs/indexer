@@ -3,5 +3,6 @@
   "summary": "Enriched summary",
   "version": "1.2.3",
   "descDigest": "sha256:deadbeef",
+  "describedAt": "2026-09-01T09:00:00Z",
   "logo": "/logos/github.com/acme/foo.svg"
 }
