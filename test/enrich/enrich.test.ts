@@ -492,6 +492,30 @@ describe("enrichIndex", () => {
       expect(sidecar("github.com/acme", "p13").descDigest).toBe("sha256:bbb");
     });
 
+    it("probes the companion every run, even when the stored sidecar has no descDigest", async () => {
+      addAll();
+      const bare = REFS[13]!; // never in the slice while the stamps tie
+      // First run: the package has no companion, so its sidecar stores no descDigest.
+      const first = overriding(bare, (args) =>
+        args[0] === "describe" ? { ...DESCRIBE, has_description: false } : undefined,
+      );
+      await enrichIndex({ root: dir, run: first.run });
+      expect(sidecar("github.com/acme", "p13")).not.toHaveProperty("descDigest");
+
+      // A companion published since: the probe must see it now, not at its slice turn.
+      const { run, calls } = fakeGrim();
+      await enrichIndex({ root: dir, run });
+
+      expect(calls.filter((c) => c[1] === bare).map(kind)).toEqual([
+        "artifact-probe",
+        "companion-probe",
+        "describe",
+        "companion-probe",
+        "companion-fetch",
+      ]);
+      expect(sidecar("github.com/acme", "p13").descDigest).toBe("sha256:aaa");
+    });
+
     it("never runs more packages at once than --concurrency", async () => {
       addAll();
       for (const limit of [1, 3]) {
