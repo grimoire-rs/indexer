@@ -16,8 +16,9 @@ export interface EnrichFlags {
 /** A bad `--concurrency` is a usage error (64), like `dev`'s bad `--port`. */
 function resolveConcurrency(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
+  // Digits only: `Number()` alone would accept `1e1`, `0x10` and padded input.
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 1) {
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(n) || n < 1) {
     throw new CliError(`--concurrency ${JSON.stringify(value)}: must be a whole number, 1 or more`, EXIT.usage);
   }
   return n;
