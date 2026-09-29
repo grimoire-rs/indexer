@@ -294,15 +294,14 @@ async function unchanged(run: GrimRunner, ref: string, existing: Sidecar): Promi
   if (artifact.digest !== existing.contentDigest) return false;
 
   // Probed even with no stored `descDigest`: a companion published since the
-  // last run shows up now, not at the package's slice turn.
-  try {
-    const companion = (await run(["fetch", ref, "--description", "--digest-only"])) as {
-      digest?: string;
-    };
-    return typeof existing.descDigest === "string" && companion.digest === existing.descDigest;
-  } catch {
-    return false;
-  }
+  // last run shows up now, not at the package's slice turn. A package with no
+  // companion makes grim exit not-found (79), which the runner throws — that
+  // is "no digest now", equal to a sidecar that stored none.
+  const now = await run(["fetch", ref, "--description", "--digest-only"]).then(
+    (c) => (c as { digest?: string }).digest,
+    () => undefined,
+  );
+  return now === existing.descDigest;
 }
 
 async function enrichOne(
