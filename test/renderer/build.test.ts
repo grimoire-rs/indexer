@@ -1531,3 +1531,106 @@ describe("the index-updated stamp", () => {
     expect(stats.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   });
 });
+
+// C-030 / S-027. The landing page exists only when `marketplace` is set. Three
+// builds cover it: the shared default one (key absent), a project-Pages one
+// with a GitHub URL (shorthand, default clients, base path), and one fed a
+// hostile name and URL straight into `buildSite` — past `loadConfig`'s
+// validation, so what is under test is that the page still escapes.
+describe("the /marketplace/ landing page", () => {
+  const clientRows = (html: string) =>
+    [...html.matchAll(/<section class="mk-row" data-client="([a-z]+)"/g)].map((m) => m[1]);
+  /** The page's visible text, entities decoded — what a reader would read. */
+  const visibleText = (html: string) =>
+    html
+      .replace(/<script[\s\S]*?<\/script>/g, "")
+      .replace(/<style[\s\S]*?<\/style>/g, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+  const sitemapLocs = async (built: Built) =>
+    [...(await built.read("sitemap.xml")).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+
+  let github: Built;
+  let githubHtml: string;
+  let hostile: Built;
+  let hostileHtml: string;
+
+  beforeAll(async () => {
+    github = await render(SUB_SITE, {
+      marketplace: { url: "https://github.com/acme/marketplace", name: "acme-plugins" },
+    });
+    githubHtml = await github.read("marketplace/index.html");
+    hostile = await render("https://index.example.test", {
+      marketplace: {
+        url: "https://gitlab.example.com/<script>alert(1)</script>/mk?a=1&b=2",
+        name: "<script>alert(2)</script>",
+        clients: ["claude", "cursor"],
+      },
+    });
+    hostileHtml = await hostile.read("marketplace/index.html");
+  }, 300_000);
+
+  afterAll(async () => {
+    await fs.rm(github.root, { recursive: true, force: true });
+    await fs.rm(hostile.root, { recursive: true, force: true });
+  });
+
+  it("emits no route and no sitemap entry when the key is unset", async () => {
+    await expect(readOut("marketplace/index.html")).rejects.toThrow();
+    const locs = (await site.read("sitemap.xml")).match(/marketplace/g);
+    expect(locs).toBeNull();
+    expect(indexHtml).not.toContain("/marketplace/");
+  });
+
+  it("emits /marketplace/ with one row per default client, and no cursor row", () => {
+    expect(clientRows(githubHtml)).toEqual(["claude", "copilot", "codex", "qoder"]);
+  });
+
+  it("shows a github.com repo as owner/repo in every add command", () => {
+    const text = visibleText(githubHtml);
+    expect(text).toContain("/plugin marketplace add acme/marketplace");
+    expect(text).toContain("copilot plugin marketplace add acme/marketplace");
+    expect(text).toContain("codex plugin marketplace add acme/marketplace");
+    expect(text).toContain("qoder plugins marketplace add acme/marketplace");
+    expect(text).not.toContain("https://github.com/acme/marketplace");
+  });
+
+  it("names the <plugin>@<name> install form and date-stamps each row", () => {
+    const text = visibleText(githubHtml);
+    expect(text).toContain("/plugin install <plugin>@acme-plugins");
+    expect(text).toContain("codex plugin add <plugin>@acme-plugins");
+    expect([...text.matchAll(/verified 2026-09-29/g)]).toHaveLength(4);
+  });
+
+  it("lists the page in the sitemap, base path included, absolute", async () => {
+    const locs = await sitemapLocs(github);
+    expect(locs).toContain(`${SUB_SITE}/marketplace/`);
+    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 2);
+  });
+
+  it("prefixes every site-root URL on the page with the base path", () => {
+    for (const url of rootRelativeUrls(githubHtml)) {
+      expect(url.startsWith(`${SUB_BASE}/`), url).toBe(true);
+    }
+  });
+
+  it("renders a GitLab URL as the full URL, and a cursor row only when listed", () => {
+    expect(clientRows(hostileHtml)).toEqual(["claude", "cursor"]);
+    const text = visibleText(hostileHtml);
+    expect(text).toContain(
+      "/plugin marketplace add https://gitlab.example.com/<script>alert(1)</script>/mk?a=1&b=2",
+    );
+    expect(text).toContain("Import from Repo");
+  });
+
+  it("escapes a hostile name and URL instead of emitting markup", () => {
+    // Neither `<script>alert` may survive as a tag, in any spelling the
+    // highlighter or the template could have written it.
+    expect(hostileHtml).not.toMatch(/<script>alert/i);
+    expect(hostileHtml).not.toContain("<script>alert(2)");
+    expect(visibleText(hostileHtml)).toContain("<plugin>@<script>alert(2)</script>");
+  });
+});
