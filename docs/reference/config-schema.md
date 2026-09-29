@@ -109,8 +109,8 @@ The page gives each listed client its add command and the `<plugin>@<name>`
 install form, stamped with the date those commands were last checked. Cursor has
 no shell command: its row describes the team-admin dashboard import instead.
 
-A `github.com` URL with exactly two path segments is shown as `owner/repo`;
-any other URL is shown in full, minus a trailing slash. The URL is refused
+A `github.com` URL with exactly two path segments, the second not ending in
+`.git`, is shown as `owner/repo`; any other URL is shown in full, minus a trailing slash. The URL is refused
 outright, not escaped, if it carries a character a shell would act on, because
 the page prints it into a line readers paste into a terminal.
 

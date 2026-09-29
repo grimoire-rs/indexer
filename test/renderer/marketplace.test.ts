@@ -19,8 +19,8 @@ describe("marketplaceSource", () => {
     // Not two segments, so `owner/repo` would name something else.
     ["a github.com url with one segment", "https://github.com/acme", "https://github.com/acme"],
     ["a github.com url with three segments", "https://github.com/acme/mk/tree/main", "https://github.com/acme/mk/tree/main"],
-    // C-030 is literal: two non-empty segments, so the suffix is part of the second.
-    ["a github.com repo ending .git", "https://github.com/acme/mk.git", "acme/mk.git"],
+    // `owner/repo.git` is not the GitHub shorthand: a client would look up a repo named `mk.git`.
+    ["a github.com repo ending .git", "https://github.com/acme/mk.git", "https://github.com/acme/mk.git"],
     // Exactly `github.com`: a lookalike host must not be flattened into a
     // shorthand that the client would resolve against the real one.
     ["a lookalike host", "https://github.com.evil.test/acme/mk", "https://github.com.evil.test/acme/mk"],
@@ -76,6 +76,15 @@ describe("marketplaceRows", () => {
       add: "qoder plugins marketplace add acme/mk",
       install: "qoder plugins install <plugin>@acme-plugins",
     });
+  });
+
+  it("keeps a .git remote whole in the Claude add command", () => {
+    const [claude] = marketplaceRows({
+      url: "https://github.com/acme/mk.git",
+      name: "mk",
+      clients: ["claude"],
+    });
+    expect(claude?.add).toBe("/plugin marketplace add https://github.com/acme/mk.git");
   });
 
   it("uses the full URL in the add command when the host is not github.com", () => {
