@@ -18,7 +18,7 @@ export const MARKETPLACE_VERIFIED = "2026-09-29";
  * How the marketplace repo is named to a client and to a reader.
  *
  * `owner/repo` when — and only when — the host is exactly `github.com`, no
- * port, no query, and the path is exactly two non-empty segments: that is the
+ * port, no query, and the path is exactly two non-empty segments, the last not ending `.git`: that is the
  * one shape every client resolves as GitHub shorthand. Anything else (GitLab,
  * a `.git` remote, a deeper path, a lookalike host) stays the full URL, since a
  * shorthand there would name a different repository. A single trailing slash is
@@ -34,7 +34,10 @@ export function marketplaceSource(url: string): string {
   }
   if (parsed.host === "github.com" && parsed.search === "" && parsed.hash === "") {
     const segments = parsed.pathname.replace(/\/$/, "").slice(1).split("/");
-    if (segments.length === 2 && segments.every((s) => s !== "")) return segments.join("/");
+    // A `.git` suffix is a remote, not shorthand: a client would look up a repo named `r.git`.
+    if (segments.length === 2 && segments.every((s) => s !== "") && !segments[1]!.endsWith(".git")) {
+      return segments.join("/");
+    }
   }
   return url.replace(/\/$/, "");
 }
