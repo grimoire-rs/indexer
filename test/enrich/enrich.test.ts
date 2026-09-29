@@ -534,6 +534,33 @@ describe("enrichIndex", () => {
       expect(sidecar("github.com/acme", "p13").descDigest).toBe("sha256:aaa");
     });
 
+    it("carries a companion-less package forward: two probes, no describe", async () => {
+      addAll();
+      const bare = REFS[13]!; // never in the slice while the stamps tie
+      // What grim does for a repository with no companion: describe says so,
+      // and the companion probe is a not-found (79), which the runner throws.
+      const bareGrim = (): { run: GrimRunner; calls: string[][] } => {
+        const base = overriding(bare, (args) =>
+          args[0] === "describe" ? { ...DESCRIBE, has_description: false } : undefined,
+        );
+        const run: GrimRunner = (args) =>
+          args[1] === bare && kind(args) === "companion-probe"
+            ? (base.calls.push(args), Promise.reject(new Error("not found")))
+            : base.run(args);
+        return { run, calls: base.calls };
+      };
+      await enrichIndex({ root: dir, run: bareGrim().run });
+      expect(sidecar("github.com/acme", "p13")).not.toHaveProperty("descDigest");
+
+      const { run, calls } = bareGrim();
+      await enrichIndex({ root: dir, run });
+
+      expect(calls.filter((c) => c[1] === bare).map(kind)).toEqual([
+        "artifact-probe",
+        "companion-probe",
+      ]);
+    });
+
     it("never runs more packages at once than --concurrency", async () => {
       addAll();
       for (const limit of [1, 3]) {
