@@ -41,6 +41,8 @@ describe("compileIndex", () => {
     });
     // internal change-probe bookkeeping never ships
     expect(all[0]).not.toHaveProperty("descDigest");
+    // …and so does the slice bookkeeping, or every re-describe would churn all.json
+    expect(all[0]).not.toHaveProperty("describedAt");
 
     // index/ is copied verbatim
     expect(
@@ -59,6 +61,7 @@ describe("compileIndex", () => {
     };
     expect(checkpoint.schema_version).toBe(1);
     expect(checkpoint.packages["github.com/acme/foo"].data).toHaveProperty("descDigest");
+    expect(checkpoint.packages["github.com/acme/foo"].data).toHaveProperty("describedAt");
   });
 
   // An index with nothing enriched yet publishes no checkpoint at all: an

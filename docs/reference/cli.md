@@ -93,6 +93,16 @@ tag lists, and the curated annotations grim reports (`revision`, `authors`,
 |---|---|
 | `--grim <path>` | Which grim binary reads the registry (default `grim`) |
 | `--seed` | Restore `enrich/` from `<site>/enrich.json` first, so a pipeline that commits nothing still only downloads what moved |
+| `--concurrency <n>` | Packages refreshed at once (default `8`, whole number of 1 or more; anything else exits 64) |
+
+**Probe first.** A package whose artifact digest and description-companion
+digest both match what the sidecar stored is carried forward untouched: two
+cheap `grim fetch --digest-only` calls, no `describe`, no download. Each run
+also re-describes a rotating slice — the seventh of the index (rounded up)
+described longest ago, tracked by `describedAt` in the sidecar — so a change
+no digest shows, such as a support link edited without republishing, lands
+within about a week. A moved digest takes the full path immediately. One
+package failing keeps its old sidecar and never stops the others.
 
 ## `grim-indexer validate`
 
