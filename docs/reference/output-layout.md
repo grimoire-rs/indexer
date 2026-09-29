@@ -25,7 +25,8 @@ Two things are safe to build on:
 
 Everything else may still move. `/enrich.json` in particular is this package's
 own checkpoint, read back by the next run's `enrich --seed`, and **not** a read
-contract.
+contract. It carries each package's `descDigest` and `describedAt`, the
+bookkeeping `enrich` probes against; `all.json` never does.
 
 ## `public/` is three layers
 

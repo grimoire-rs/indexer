@@ -10,12 +10,18 @@
  * live in the registry. This is the one part of the toolchain that goes and
  * gets them, so the site build stays a pure function of the checkout.
  *
- * Work is skipped by digest: `describe` is cheap and runs every time, while
- * the description companion (README/CHANGELOG/logo) is probed with
- * `--digest-only` and only downloaded when that digest moved.
+ * Probe first, describe rarely. A package whose artifact digest (`fetch
+ * --digest-only`) still equals the stored `contentDigest`, and whose
+ * description-companion digest has not moved either, is carried forward
+ * verbatim — no `describe`, no download. Only a rotating slice (the ⌈N/7⌉
+ * packages described longest ago) is re-described regardless, so an edit the
+ * digests cannot see — a support link changed without republishing, a tag
+ * added — still lands within about a week. Everything else takes the full
+ * path: `describe`, then the companion probe and download.
  *
- * A per-package failure keeps the existing sidecar — stale beats empty — and
- * only a majority failure is reported as an outage.
+ * Packages run through a bounded pool. A per-package failure keeps the
+ * existing sidecar — stale beats empty — and only a majority failure is
+ * reported as an outage.
  */
 import { execFile } from "node:child_process";
 import fs from "node:fs";
@@ -45,7 +51,14 @@ export interface EnrichOptions {
   root: string;
   /** Defaults to spawning `grim` from `PATH`. */
   run?: GrimRunner;
+  /** Packages refreshed at once; each runs its `grim` calls in sequence. */
+  concurrency?: number;
 }
+
+export const DEFAULT_CONCURRENCY = 8;
+
+/** The slice re-described every run: a seventh of the index, so ~a week per full cycle. */
+const SLICE_DIVISOR = 7;
 
 export interface EnrichResult {
   total: number;
@@ -142,6 +155,14 @@ function mapMeta(desc: Record<string, unknown>): Record<string, unknown> {
   data.deprecated = desc.deprecated ?? null; // string | null, always present
   if (desc.replaced_by) data.replacedBy = desc.replaced_by;
   return data;
+}
+
+/**
+ * RFC 3339 UTC to the second. Milliseconds in a committed file are noise
+ * nobody reads and a wider diff when the stamp does move.
+ */
+function nowRfc3339(): string {
+  return new Date().toISOString().replace(/\.\d+Z$/, "Z");
 }
 
 function decode(member: CompanionFile): Buffer {
@@ -246,18 +267,60 @@ function writeCompanions(
   return { hasReadme, hasChangelog, logo };
 }
 
+type Sidecar = Record<string, unknown>;
+
+/** The stored sidecar, or `{}` for a package never enriched (or one that cannot be read). */
+function readSidecar(dataFile: string): Sidecar {
+  try {
+    return JSON.parse(fs.readFileSync(dataFile, "utf8")) as Sidecar;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * True when nothing the digests can see has moved, so the stored sidecar is
+ * still the answer. Never throws for a *companion* probe failure — that falls
+ * through to the full path, whose `describe` is what notices a withdrawn
+ * companion. An artifact probe failure does throw: the full path would only
+ * fail the same way, one call later.
+ */
+async function unchanged(run: GrimRunner, ref: string, existing: Sidecar): Promise<boolean> {
+  // No stored digest, nothing to compare against — includes a package never
+  // enriched and one whose seed was dropped by `reconcile()`.
+  if (typeof existing.contentDigest !== "string") return false;
+
+  const artifact = (await run(["fetch", ref, "--digest-only"])) as { digest?: string };
+  if (artifact.digest !== existing.contentDigest) return false;
+
+  // ponytail: a package stored without `descDigest` is never companion-probed
+  // here, so a companion published later waits for its slice turn (≤ ~7 runs).
+  if (typeof existing.descDigest !== "string") return true;
+  try {
+    const companion = (await run(["fetch", ref, "--description", "--digest-only"])) as {
+      digest?: string;
+    };
+    return companion.digest === existing.descDigest;
+  } catch {
+    return false;
+  }
+}
+
 async function enrichOne(
   run: GrimRunner,
   enrichDir: string,
   ref: string,
   namespace: string,
   name: string,
+  existing: Sidecar,
+  inSlice: boolean,
 ): Promise<void> {
   const out = path.join(enrichDir, namespace, name);
   const dataFile = path.join(out, "data.json");
-  const existing: Record<string, unknown> = fs.existsSync(dataFile)
-    ? (JSON.parse(fs.readFileSync(dataFile, "utf8")) as Record<string, unknown>)
-    : {};
+
+  // Carried forward verbatim: the file is not even rewritten, so `describedAt`
+  // keeps dating the last real describe.
+  if (!inSlice && (await unchanged(run, ref, existing))) return;
 
   const desc = (await run(["describe", ref])) as Record<string, unknown>;
   const data = mapMeta(desc);
@@ -320,34 +383,67 @@ async function enrichOne(
       ? data.created
       : !moved && typeof existing.updated === "string"
         ? existing.updated
-        // RFC 3339 UTC to the second. Milliseconds in a committed file are
-        // noise nobody reads and a wider diff when the stamp does move.
-        : new Date().toISOString().replace(/\.\d+Z$/, "Z");
+        : nowRfc3339();
+  // Last key, so a sidecar written before the field existed diffs by one line.
+  // It is bookkeeping for the slice below — `compileIndex` strips it from
+  // `all.json`.
+  data.describedAt = nowRfc3339();
 
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 1) + "\n");
 }
 
+/**
+ * The packages to re-describe this run regardless of their digests: ⌈N/7⌉ of
+ * them, oldest `describedAt` first, a package with none ahead of every dated
+ * one, ties broken by `<namespace>/<name>`. RFC 3339 UTC strings sort
+ * lexicographically, and `""` sorts before any of them.
+ */
+function pickSlice(entries: Array<{ id: string; existing: Sidecar }>): Set<string> {
+  const stamp = (e: { existing: Sidecar }): string =>
+    typeof e.existing.describedAt === "string" ? e.existing.describedAt : "";
+  const size = Math.ceil(entries.length / SLICE_DIVISOR);
+  return new Set(
+    [...entries]
+      .sort((a, b) => stamp(a).localeCompare(stamp(b)) || a.id.localeCompare(b.id))
+      .slice(0, size)
+      .map((e) => e.id),
+  );
+}
+
 export async function enrichIndex(opts: EnrichOptions): Promise<EnrichResult> {
   const { root } = opts;
   const run = opts.run ?? spawnGrim();
+  const concurrency = Math.max(1, Math.floor(opts.concurrency ?? DEFAULT_CONCURRENCY));
   const indexDir = path.join(root, "index");
   const enrichDir = path.join(root, "enrich");
 
-  const failures: string[] = [];
   const files = findMetadataFiles(indexDir);
-
-  // ponytail: sequential, like the Python it replaces. Each package is a
-  // couple of round trips and the digest probe skips almost all of them;
-  // batch with a worker pool if an index ever grows into the hundreds.
-  for (const file of files) {
+  const packages = files.map((file) => {
     const meta = JSON.parse(fs.readFileSync(file, "utf8")) as { ref: string; name: string };
-    try {
-      await enrichOne(run, enrichDir, meta.ref, namespaceOf(indexDir, file), meta.name);
-    } catch (err) {
-      failures.push(`${meta.ref}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
+    const namespace = namespaceOf(indexDir, file);
+    const existing = readSidecar(path.join(enrichDir, namespace, meta.name, "data.json"));
+    return { ref: meta.ref, name: meta.name, namespace, id: `${namespace}/${meta.name}`, existing };
+  });
+  const slice = pickSlice(packages);
 
+  // Indexed slots, so the failure list keeps index order however the pool
+  // happens to finish.
+  const failed: Array<string | undefined> = new Array(packages.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < packages.length) {
+      const i = next++;
+      const pkg = packages[i]!;
+      try {
+        await enrichOne(run, enrichDir, pkg.ref, pkg.namespace, pkg.name, pkg.existing, slice.has(pkg.id));
+      } catch (err) {
+        failed[i] = `${pkg.ref}: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, packages.length) }, worker));
+
+  const failures = failed.filter((f): f is string => f !== undefined);
   return { total: files.length, enriched: files.length - failures.length, failures };
 }
