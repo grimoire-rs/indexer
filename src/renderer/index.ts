@@ -900,7 +900,8 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
 }
 
 /**
- * `sitemap.xml` and `robots.txt`, listing every package page.
+ * `sitemap.xml` and `robots.txt`, listing every package page (and the
+ * `/marketplace/` page when one is configured).
  *
  * The catalog builds a viewport's worth of cards and grows as the reader
  * scrolls (see `Catalog.tsx`), so the landing page's markup names 48 packages
@@ -929,6 +930,9 @@ async function writeSitemap(
   const origin = base && site.endsWith(base) ? site.slice(0, -base.length) : site;
   const urls = [
     `${site}/`,
+    // C-030: the landing page exists exactly when the key is set, so the
+    // sitemap follows the same condition rather than probing the output.
+    ...(inputs.config.marketplace ? [`${site}/marketplace/`] : []),
     ...inputs.packages.map(
       (p) => `${origin}${base}/p/${p.namespace}/${p.name}/`,
     ),
