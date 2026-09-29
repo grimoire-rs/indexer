@@ -392,6 +392,9 @@ async function enrichOne(
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 1) + "\n");
 }
 
+/** Byte order, never locale: the rotation must not depend on the host's ICU data. */
+const byBytes = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
  * The packages to re-describe this run regardless of their digests: ⌈N/7⌉ of
  * them, oldest `describedAt` first, a package with none ahead of every dated
@@ -404,7 +407,7 @@ function pickSlice(entries: Array<{ id: string; existing: Sidecar }>): Set<strin
   const size = Math.ceil(entries.length / SLICE_DIVISOR);
   return new Set(
     [...entries]
-      .sort((a, b) => stamp(a).localeCompare(stamp(b)) || a.id.localeCompare(b.id))
+      .sort((a, b) => byBytes(stamp(a), stamp(b)) || byBytes(a.id, b.id))
       .slice(0, size)
       .map((e) => e.id),
   );

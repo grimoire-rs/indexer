@@ -492,6 +492,24 @@ describe("enrichIndex", () => {
       expect(sidecar("github.com/acme", "p13").descDigest).toBe("sha256:bbb");
     });
 
+    it("breaks a describedAt tie by byte order, not by locale", async () => {
+      // Locale order puts "aaa" first; byte order puts "Bar" first. The pick must
+      // not depend on the host's ICU data, or two indexers would rotate differently.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-08-01T00:00:00Z"));
+      addPackage("github.com/acme", "aaa", "ghcr.io/acme/skills/aaa");
+      addPackage("github.com/acme", "Bar", "ghcr.io/acme/skills/Bar");
+      await enrichIndex({ root: dir, run: fakeGrim().run });
+
+      const { run, calls } = fakeGrim();
+      await enrichIndex({ root: dir, run });
+
+      // Two packages -> a slice of one, and the stamps tie.
+      expect(calls.filter((c) => c[0] === "describe").map((c) => c[1])).toEqual([
+        "ghcr.io/acme/skills/Bar",
+      ]);
+    });
+
     it("probes the companion every run, even when the stored sidecar has no descDigest", async () => {
       addAll();
       const bare = REFS[13]!; // never in the slice while the stamps tie
