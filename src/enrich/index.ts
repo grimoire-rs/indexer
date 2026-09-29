@@ -293,14 +293,13 @@ async function unchanged(run: GrimRunner, ref: string, existing: Sidecar): Promi
   const artifact = (await run(["fetch", ref, "--digest-only"])) as { digest?: string };
   if (artifact.digest !== existing.contentDigest) return false;
 
-  // ponytail: a package stored without `descDigest` is never companion-probed
-  // here, so a companion published later waits for its slice turn (≤ ~7 runs).
-  if (typeof existing.descDigest !== "string") return true;
+  // Probed even with no stored `descDigest`: a companion published since the
+  // last run shows up now, not at the package's slice turn.
   try {
     const companion = (await run(["fetch", ref, "--description", "--digest-only"])) as {
       digest?: string;
     };
-    return companion.digest === existing.descDigest;
+    return typeof existing.descDigest === "string" && companion.digest === existing.descDigest;
   } catch {
     return false;
   }
