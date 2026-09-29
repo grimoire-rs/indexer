@@ -96,6 +96,24 @@ One `install` row usually covers several platforms (`"Linux / macOS"`), and
 the picker expands it into one button per platform it names. A row naming none
 keeps a single generic button, so an unrecognized platform is never dropped.
 
+## Marketplace page
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `marketplace` | `{url, name, clients?}` \| null | `null` | Emits `/marketplace/` and lists it in `sitemap.xml`. `null` emits neither |
+| `marketplace.url` | string | *(required)* | https git URL of the generated marketplace repo. No userinfo, and only letters, digits and `. _ ~ : / % + = @ , -` |
+| `marketplace.name` | string | *(required)* | The marketplace's name, the `@<name>` half of `<plugin>@<name>`. Lowercase letters, digits and hyphens, at most 64, starting and ending alphanumeric |
+| `marketplace.clients` | string[] | `claude`, `copilot`, `codex`, `qoder` | Rows to show, in order, from `claude`, `copilot`, `codex`, `qoder`, `cursor`. Cursor is opt-in |
+
+The page gives each listed client its add command and the `<plugin>@<name>`
+install form, stamped with the date those commands were last checked. Cursor has
+no shell command: its row describes the team-admin dashboard import instead.
+
+A `github.com` URL with exactly two path segments is shown as `owner/repo`;
+any other URL is shown in full, minus a trailing slash. The URL is refused
+outright, not escaped, if it carries a character a shell would act on, because
+the page prints it into a line readers paste into a terminal.
+
 ## Appearance
 
 | Key | Type | Default | Effect |

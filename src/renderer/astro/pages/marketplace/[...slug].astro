@@ -1,0 +1,101 @@
+---
+// Frozen public URL: /marketplace/, present only when `marketplace` is set in
+// `index.config.json`. A rest route rather than `marketplace.astro` because a
+// plain page cannot opt out of being emitted — an empty `getStaticPaths` can.
+//
+// Everything on this page that came from config (the URL, the name) is printed
+// as text and never through `set:html`; `loadConfig` has already narrowed both
+// to a closed charset, and Astro's escaping is the second line if a caller
+// hands `buildSite` an unvalidated config.
+import Base from "../../layouts/Base.astro";
+import CodeBlock from "../../components/CodeBlock.astro";
+import { data } from "../../lib/data";
+import { marketplaceRows } from "../../lib/marketplace";
+
+export function getStaticPaths() {
+  // `slug: undefined` is the rest parameter matching the bare `/marketplace/`.
+  return data.config.marketplace ? [{ params: { slug: undefined } }] : [];
+}
+
+const { config } = data;
+const marketplace = config.marketplace;
+const rows = marketplace ? marketplaceRows(marketplace) : [];
+---
+
+<Base
+  title={`${config.brand} · plugin marketplace`}
+  description={`Add the ${config.brand} plugin marketplace to your AI coding client.`}
+>
+  <div class="mk">
+    <div class="mk-head">
+      <h1>Plugin marketplace</h1>
+      <p>
+        Every package in this index, as a plugin marketplace named <code>{marketplace?.name}</code>. Add
+        it once per client, then install a plugin by name.
+      </p>
+    </div>
+    {
+      rows.map((row) => (
+        <section class="mk-row" data-client={row.client}>
+          <h2>{row.label}</h2>
+          {row.add && row.install ? (
+            <Fragment>
+              <p class="mk-step">Add the marketplace</p>
+              <CodeBlock code={row.add} name="add command" />
+              <p class="mk-step">Install a plugin</p>
+              <CodeBlock code={row.install} name="install command" />
+            </Fragment>
+          ) : (
+            <Fragment>
+              <p class="mk-step">{row.steps}</p>
+              <p class="mk-step">Repository to import</p>
+              <CodeBlock code={row.source} lang="text" name="repository" />
+            </Fragment>
+          )}
+          <p class="mk-verified">{row.verified}</p>
+        </section>
+      ))
+    }
+  </div>
+</Base>
+
+<style>
+@layer grimoire {
+  /* Layered so a user CSS file (unlayered) outranks these rules — Astro's
+     scoped `.foo[data-astro-cid-…]` would otherwise beat a consumer's `.foo`. */
+  .mk {
+    display: flex;
+    flex-direction: column;
+    gap: var(--grim-space-7);
+  }
+  .mk-head h1 {
+    margin: 0 0 var(--grim-space-4);
+  }
+  .mk-head p {
+    margin: 0;
+    color: var(--grim-color-muted);
+  }
+  .mk-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--grim-space-4);
+    background: var(--grim-color-card);
+    border: var(--grim-border-width) solid var(--grim-color-border);
+    border-radius: var(--grim-radius-surface);
+    padding: var(--grim-space-6) var(--grim-space-7);
+  }
+  .mk-row h2 {
+    margin: 0;
+    font-size: var(--grim-text-lg);
+  }
+  .mk-step {
+    margin: 0;
+    font-size: var(--grim-text-sm);
+  }
+  .mk-verified {
+    margin: 0;
+    color: var(--grim-color-muted);
+    font-size: var(--grim-text-xs);
+  }
+}
+</style>
