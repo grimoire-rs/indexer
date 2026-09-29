@@ -148,6 +148,27 @@ describe("packCheckpoint", () => {
     });
   });
 
+  it("round trips a sidecar carrying describedAt byte for byte (C-028)", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo:1.2.3");
+    await enrichIndex({ root: dir, run: fakeGrim().run });
+
+    // `describedAt` is the probe-first enrich's staleness stamp, written into
+    // `data.json`. Stamp it the way that writer does — last key, RFC 3339 UTC.
+    const dataFile = path.join(sidecarDir("github.com/acme", "foo"), "data.json");
+    const stamped = { ...sidecar("github.com/acme", "foo"), describedAt: "2026-09-01T09:00:00Z" };
+    fs.writeFileSync(dataFile, JSON.stringify(stamped, null, 1) + "\n");
+
+    const names = ["data.json", "readme.md", "changelog.md", "logo.svg", "contents.md"];
+    const before = names.map((n) => fs.readFileSync(path.join(sidecarDir("github.com/acme", "foo"), n)));
+
+    expect(await seed(packAndWipe())).toBe(1);
+
+    names.forEach((n, i) => {
+      expect(fs.readFileSync(path.join(sidecarDir("github.com/acme", "foo"), n))).toEqual(before[i]);
+    });
+    expect(sidecar("github.com/acme", "foo").describedAt).toBe("2026-09-01T09:00:00Z");
+  });
+
   it("writes nothing when no package has a sidecar", () => {
     addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
     packCheckpoint(outDir, entries());
