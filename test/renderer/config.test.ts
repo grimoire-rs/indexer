@@ -378,3 +378,84 @@ describe("resolveConfig", () => {
     }
   });
 });
+
+// C-030 / S-027. `marketplace` carries an owner-authored URL and name into
+// rendered HTML and a copy-pasteable shell line, so the load is where the
+// shape is settled: https only, no userinfo, C-009's name grammar, and a
+// client subset — nothing the page renders is left to escaping alone.
+describe("marketplace", () => {
+  const load = async (marketplace: unknown) =>
+    loadConfig(await rootWith(JSON.stringify({ marketplace })));
+  const good = { url: "https://github.com/acme/marketplace", name: "acme-plugins" };
+
+  it("defaults to null — no landing page unless configured", () => {
+    expect(DEFAULT_CONFIG.marketplace).toBeNull();
+    expect(resolveConfig({}).marketplace).toBeNull();
+    expect(resolveConfig({ marketplace: null }).marketplace).toBeNull();
+  });
+
+  it("loads a well-formed block and defaults clients to the first four", async () => {
+    const cfg = await load(good);
+    expect(cfg.marketplace).toEqual(good);
+    expect(resolveConfig(cfg).marketplace).toEqual({
+      ...good,
+      clients: ["claude", "copilot", "codex", "qoder"],
+    });
+  });
+
+  it("keeps a declared client list, first mention winning on duplicates", async () => {
+    const cfg = await load({ ...good, clients: ["cursor", "claude", "cursor"] });
+    expect(resolveConfig(cfg).marketplace?.clients).toEqual(["cursor", "claude"]);
+  });
+
+  it("does not warn that `marketplace` is an unknown key", async () => {
+    const streams = captureStreams();
+    await load(good);
+    expect(streams.err()).not.toContain("marketplace");
+  });
+
+  it.each([
+    ["an http: url", { ...good, url: "http://github.com/acme/marketplace" }],
+    ["userinfo in the url", { ...good, url: "https://good.test@evil.test/o/r" }],
+    ["userinfo with a password", { ...good, url: "https://u:p@github.com/o/r" }],
+    ["a non-http scheme", { ...good, url: "javascript:alert(1)" }],
+    ["a scheme-relative url", { ...good, url: "//github.com/o/r" }],
+    ["whitespace in the url", { ...good, url: "https://github.com/o/r --exec" }],
+    // Shell metacharacters: the url lands in a line a reader pastes into a
+    // terminal, so the charset is closed rather than escaped.
+    ["a shell metacharacter in the url", { ...good, url: "https://github.com/o/r;reboot" }],
+    ["a script tag in the url", { ...good, url: "https://github.com/<script>alert(1)</script>" }],
+    ["a missing url", { name: "acme-plugins" }],
+    ["a non-string url", { ...good, url: 7 }],
+    ["a missing name", { url: good.url }],
+    ["an uppercase name", { ...good, name: "Acme" }],
+    ["a name with a leading hyphen", { ...good, name: "-acme" }],
+    ["a name with a trailing hyphen", { ...good, name: "acme-" }],
+    ["a name with a space", { ...good, name: "acme plugins" }],
+    ["a script tag as the name", { ...good, name: "<script>alert(1)</script>" }],
+    ["a name over 64 characters", { ...good, name: "a".repeat(65) }],
+    ["an empty name", { ...good, name: "" }],
+    ["an unknown client", { ...good, clients: ["claude", "vim"] }],
+    ["a non-array clients", { ...good, clients: "claude" }],
+    ["an empty clients list", { ...good, clients: [] }],
+    ["a non-object block", "https://github.com/acme/marketplace"],
+    ["an array block", [good]],
+    ["an unknown key inside the block", { ...good, colour: "red" }],
+  ])("refuses %s", async (_label, marketplace) => {
+    await expect(load(marketplace)).rejects.toBeInstanceOf(SiteConfigError);
+  });
+
+  it("accepts a name of exactly 64 characters and a single-character name", async () => {
+    await expect(load({ ...good, name: "a".repeat(64) })).resolves.toBeDefined();
+    await expect(load({ ...good, name: "a" })).resolves.toBeDefined();
+  });
+
+  it("accepts a GitLab url, a trailing slash and a .git suffix", async () => {
+    for (const url of [
+      "https://gitlab.example.com/group/sub/marketplace.git",
+      "https://github.com/acme/marketplace/",
+    ]) {
+      await expect(load({ ...good, url })).resolves.toBeDefined();
+    }
+  });
+});

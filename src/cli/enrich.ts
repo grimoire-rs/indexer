@@ -10,6 +10,18 @@ import { CliError, EXIT, type ExitCode } from "./exit.js";
 export interface EnrichFlags {
   grim?: string;
   seed?: boolean;
+  concurrency?: string;
+}
+
+/** A bad `--concurrency` is a usage error (64), like `dev`'s bad `--port`. */
+function resolveConcurrency(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  // Digits only: `Number()` alone would accept `1e1`, `0x10` and padded input.
+  const n = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(n) || n < 1) {
+    throw new CliError(`--concurrency ${JSON.stringify(value)}: must be a whole number, 1 or more`, EXIT.usage);
+  }
+  return n;
 }
 
 /**
@@ -52,6 +64,7 @@ async function seedSidecars(rootDir: string): Promise<void> {
 
 export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
+  const concurrency = resolveConcurrency(flags.concurrency);
   const { enrichIndex, spawnGrim } = await import("../enrich/index.js");
 
   if (flags.seed) await seedSidecars(rootDir);
@@ -59,7 +72,7 @@ export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode
   const bin = flags.grim ?? "grim";
   let result;
   try {
-    result = await enrichIndex({ root: rootDir, run: spawnGrim(bin) });
+    result = await enrichIndex({ root: rootDir, run: spawnGrim(bin), concurrency });
   } catch (err) {
     // A missing binary fails on the very first package, so it surfaces as a
     // per-package failure rather than here — but keep the mapping honest for
