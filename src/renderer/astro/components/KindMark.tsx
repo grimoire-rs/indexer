@@ -5,13 +5,13 @@
  * Artifact-kind marks, drawn from Microsoft's codicons.
  *
  * These are the *same glyphs* the Grimoire VS Code extension puts on its own
- * cards — its `KIND_ICONS` maps skill/rule/agent/mcp/bundle to
- * sparkle/law/agent/mcp/package. The two surfaces show one catalogue, so an
+ * cards — its `KIND_ICONS` maps skill/rule/agent/mcp/bundle/hook to
+ * sparkle/law/agent/mcp/package/symbol-event. The two surfaces show one catalogue, so an
  * artifact wearing a different mark in each was the thing to fix; a Lucide
  * look-alike per kind is close, not the same.
  *
  * The extension consumes codicons as a webfont. This site ships no icon font
- * and never will — a 120 KB TTF for five glyphs — so the path data is inlined
+ * and never will — a 120 KB TTF for a handful of glyphs — so the path data is inlined
  * here, exactly as `BrandMark` inlines `@mdi/js` paths. `@vscode/codicons` is
  * a devDependency purely for provenance: it pins the version these came from,
  * so re-extracting them later is reproducible rather than archaeology.
@@ -85,6 +85,12 @@ const CODICONS: Record<string, Glyph> = {
       { d: "M14.039 3.28598L9.077 1.37798C8.384 1.11098 7.616 1.11098 6.923 1.37798L1.962 3.28598C1.383 3.50898 1 4.06498 1 4.68598V11.312C1 11.933 1.382 12.489 1.962 12.712L6.923 14.62C7.616 14.887 8.384 14.887 9.077 14.62L14.039 12.712C14.618 12.489 15 11.933 15 11.312V4.68598C15 4.06498 14.618 3.50898 14.039 3.28598ZM7.5 13.757C7.426 13.738 7.354 13.715 7.282 13.687L2.32 11.779C2.127 11.705 2 11.519 2 11.312V4.97098L7.5 7.32798V13.757ZM2.564 4.12598L7.282 2.31098C7.744 2.13298 8.256 2.13298 8.718 2.31098L13.436 4.12598L8 6.45598L2.564 4.12598ZM14 11.313C14 11.52 13.873 11.705 13.68 11.78L8.718 13.688C8.646 13.716 8.574 13.739 8.5 13.758V7.32998L14 4.97298V11.313Z", evenOdd: true },
     ],
   },
+  "symbol-event": {
+    box: [0.33, 0.56, 15.47],
+    paths: [
+      { d: "M4.91447 1.71442C5.04078 1.29055 5.43053 1 5.87282 1H10.2786C10.9768 1 11.4601 1.69737 11.2149 2.35112L10.2216 5H12.2511C12.8791 5 13.229 5.72572 12.8379 6.21709L6.23096 14.5173C5.37726 15.5898 3.66907 14.7047 4.05299 13.3888L5.33338 9H3.74951C3.24769 9 2.88743 8.51673 3.03074 8.03581L4.91447 1.71442ZM10.2786 2H5.87282L4.08487 8H6.00009C6.15748 8 6.30568 8.0741 6.4001 8.20001C6.49453 8.32593 6.52416 8.48895 6.48008 8.64003L5.01297 13.6688C4.98941 13.7496 5.00096 13.8045 5.0195 13.8434C5.04067 13.888 5.08121 13.9314 5.13794 13.9608C5.19467 13.9902 5.25354 13.9983 5.30213 13.9899C5.34467 13.9826 5.39618 13.9603 5.44856 13.8945L11.7326 6H9.50009C9.3361 6 9.18254 5.91958 9.08913 5.7848C8.99572 5.65001 8.97435 5.47799 9.03193 5.32444L10.2786 2Z" },
+    ],
+  },
   warning: {
     box: [0.5, 0.58, 14.84],
     paths: [
@@ -104,6 +110,7 @@ export const KIND_MARKS: Record<string, Glyph> = {
   agent: CODICONS.agent!,
   mcp: CODICONS.mcp!,
   bundle: CODICONS.package!,
+  hook: CODICONS["symbol-event"]!,
 };
 
 /** What a retired artifact wears instead of its kind. */

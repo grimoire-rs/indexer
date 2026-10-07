@@ -184,9 +184,9 @@ export const DEFAULT_CONFIG: Required<SiteConfig> = {
   brand: "grim package index",
   brandMark: "grim",
   description:
-    "Browse and search AI-config packages (skills, rules, agents, MCP servers, and bundles), installable with the grim package manager.",
+    "Browse and search AI-config packages (skills, rules, agents, MCP servers, bundles, and hooks), installable with the grim package manager.",
   tagline:
-    "Skills, rules, agents, MCP servers, and bundles for AI coding agents, hosted on OCI registries.",
+    "Skills, rules, agents, MCP servers, bundles, and hooks for AI coding agents, hosted on OCI registries.",
   // Synthesized from `docsUrl`/`repoUrl` by `resolveConfig`, so an index
   // that never configures a nav keeps the header it already had.
   nav: null,

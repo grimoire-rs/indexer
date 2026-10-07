@@ -2,7 +2,7 @@
 
 CLI + Astro integration for running your own [Grimoire](https://github.com/grimoire-rs/grimoire)
 package index — a static site that lists the skills, rules, agents, mcp
-servers, and bundles available in one or more OCI registries.
+servers, bundles, and hooks available in one or more OCI registries.
 
 **Documentation: <https://grimoire-rs.github.io/indexer/>** — source in
 [`docs/`](./docs/index.md).

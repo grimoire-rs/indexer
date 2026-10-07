@@ -1,8 +1,8 @@
 # Grimoire Indexer
 
 `@grimoire-rs/indexer` runs your own [Grimoire](https://github.com/grimoire-rs/grimoire)
-package index: a static site listing the skills, rules, agents, MCP servers and
-bundles available in one or more OCI registries, with search, per-package
+package index: a static site listing the skills, rules, agents, MCP servers,
+bundles and hooks available in one or more OCI registries, with search, per-package
 pages, install commands and an optional ratings sidecar.
 
 An index stores nothing but **pointers** — a ref and who owns it. Everything a

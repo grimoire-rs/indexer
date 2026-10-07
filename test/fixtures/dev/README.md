@@ -25,6 +25,7 @@ count, and nothing is written back here.
 | `old-helper` | rule | Deprecated with a **reason** and a `replacedBy`; hidden from the default browse |
 | `sunset-agent` | agent | Deprecated with a reason and **no** replacement |
 | `bare` | mcp | Pointer only — no `enrich/` sidecar at all, as an index that never ran `enrich` |
+| `tool-guard` | hook | The experimental kind: its own mark and colour, and no contents tab — `enrich` writes none for a hook |
 | `context7` | mcp | `contents.json` descriptor with no `members` → raw JSON render |
 | `bean-counter` | skill | Stats entry carrying only a `downloads` blob → unrated, and an unknown key that must survive the build |
 | `enterprise-compliance-policy-pack` | rule | Long name, twelve keywords → overflow. Also the **long-description** case: a summary long enough to wrap several lines, beside a **3:1 wide** logo. Together they are what pins the detail header's logo alignment — centring the tile against the text pushed it down the header as the description grew |

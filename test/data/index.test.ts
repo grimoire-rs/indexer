@@ -107,6 +107,14 @@ describe("compileIndex", () => {
     ).rejects.toThrow(/name .* != directory/);
   });
 
+  it("compiles a hook pointer", async () => {
+    await compileIndex({ root: path.join(FIXTURES, "hook-kind"), outDir });
+
+    const all = JSON.parse(fs.readFileSync(path.join(outDir, "all.json"), "utf8"));
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ name: "foo", kind: "hook" });
+  });
+
   it("rejects an unknown kind", async () => {
     await expect(
       compileIndex({ root: path.join(FIXTURES, "bad-kind"), outDir }),

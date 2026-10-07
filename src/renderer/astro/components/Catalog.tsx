@@ -31,7 +31,7 @@ import type { Scores, SearchIndex } from "../lib/search.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
-const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle"];
+const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook"];
 
 function kindOrder(kind: string): number {
   const i = KNOWN_KINDS.indexOf(kind);
@@ -1521,7 +1521,7 @@ export default function Catalog({
             role="group"
             aria-label="Filter by kind"
           >
-            {/* "all" is the empty selection rendered as a chip, not a sixth
+            {/* "all" is the empty selection rendered as a chip, not a seventh
                 kind — so it is active exactly when nothing else is, and
                 clicking it clears rather than selects. */}
             <button

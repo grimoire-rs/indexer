@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "tool-guard",
+  "kind": "hook",
+  "ref": "ghcr.io/acme/tool-guard",
+  "description": "Blocks a shell command before the agent runs it.",
+  "repository": "https://github.com/acme/tool-guard",
+  "keywords": [
+    "cli"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

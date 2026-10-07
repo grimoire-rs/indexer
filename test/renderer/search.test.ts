@@ -157,6 +157,16 @@ describe("loadSearchIndex", () => {
     expect(index.search("skills").get("github.com/acme/catalog-indexer")).toBe(0);
   });
 
+  it("treats hooks as a kind word too", async () => {
+    serve([
+      { ref: "r/guard", name: "guard", kind: "hook" },
+      { ref: "r/hooks-guide", name: "hooks-guide", kind: "skill" },
+    ]);
+    const index = await loadSearchIndex("/all.json");
+
+    expect([...index.search("hooks").keys()]).toEqual(["r/guard"]);
+  });
+
   it("requires every term, and does not care what order they came in", async () => {
     serve(RECORDS);
     const index = await loadSearchIndex("/all.json");

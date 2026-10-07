@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildSite, RenderInputError } from "../../src/renderer/index.js";
 import type { SiteConfig } from "../../src/config.js";
+import { KIND_MARKS } from "../../src/renderer/astro/components/KindMark.tsx";
+import { KINDS } from "../../src/validate/core/metadata.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 
@@ -159,6 +161,7 @@ const EMITTED_FILES = [
   "p/github.com/acme/starter-pack/index.html",
   "p/github.com/acme/old-helper/index.html",
   "p/registry.example/team/bare/index.html",
+  "p/github.com/acme/tool-guard/index.html",
   "index/github.com/acme/code-review/metadata.json",
   "favicon.svg",
   // The index repo's own `public/` layer, on top of the packaged one.
@@ -293,6 +296,7 @@ describe("frozen URLs", () => {
       "test-writer",
       "old-helper",
       "bare",
+      "tool-guard",
     ]);
     await expect(readOut("index/github.com/acme/code-review/metadata.json")).resolves.toContain(
       "code-review",
@@ -1269,6 +1273,18 @@ function outsideLayers(css: string): string {
 }
 
 describe("theming", () => {
+  // The experimental kind gets the treatment the other five get: its own
+  // badge colour in both schemes and its own mark, not the neutral fallback.
+  it("colours and marks the hook kind like any other", async () => {
+    const page = await readOut("p/github.com/acme/tool-guard/index.html");
+    expect(page).toContain('class="badge kind-hook"');
+    expect(bundledCss).toMatch(/\.kind-hook\{color:var\(--grim-color-kind-hook\)/);
+    expect(bundledCss).toMatch(/:root\{[^}]*--grim-color-kind-hook:/);
+    expect(bundledCss).toMatch(/\[data-theme=("dark"|dark)\]\{[^}]*--grim-color-kind-hook:/);
+    // Every kind the gate admits has a mark; a missing one renders a word.
+    for (const kind of KINDS) expect(KIND_MARKS[kind], kind).toBeDefined();
+  });
+
   it("emits no rule at all outside @layer grimoire", () => {
     // The check a source grep cannot fake, and the one that catches the
     // defect the layer exists to prevent: an unlayered component block is

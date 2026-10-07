@@ -46,6 +46,7 @@ const PACKAGES = [
     logo: "/charlie.svg",
     ref: "r.test/acme/charlie",
   },
+  { namespace: "acme", name: "echo", kind: "hook", logo: "/echo.svg", ref: "r.test/acme/echo" },
 ] as unknown as CatalogPackage[];
 
 /** What the build ships: every package, because the server has no `location`. */
@@ -248,6 +249,11 @@ describe("the view round-trips", () => {
     await settle();
     expect(chip(host, "rule")?.className).toContain("active");
     expect(sortField(host)).toBe("updated");
+
+    unmountAll();
+    const hook = mountAt("/?kind=hook");
+    await settle();
+    expect(chip(hook, "hook")?.className).toContain("active");
 
     unmountAll();
     // `kind` reaches a class name and `sort` selects a comparator, so neither
@@ -986,7 +992,7 @@ describe("fuzzy search", () => {
 
     await vi.waitFor(() => expect(toggle()?.textContent).toBe("1 weaker match hidden"));
     expect(cards(host).map((c) => c.name)).toEqual(["alpha"]);
-    expect(host.querySelector(".result-count")?.textContent).toBe("1 of 3 packages");
+    expect(host.querySelector(".result-count")?.textContent).toBe("1 of 4 packages");
 
     toggle()!.click();
     await vi.waitFor(() => expect(cards(host).map((c) => c.name)).toEqual(["alpha", "bravo"]));
@@ -1011,7 +1017,7 @@ describe("fuzzy search", () => {
 
       await vi.waitFor(() => expect(cards(host).map((c) => c.name)).toEqual(["alpha", "bravo"]));
       expect(host.querySelector(".result-count")?.textContent).toBe(
-        "2 of 3 packages, best match first",
+        "2 of 4 packages, best match first",
       );
 
       // Cleared, the chosen sort is the whole order again.
@@ -1019,9 +1025,9 @@ describe("fuzzy search", () => {
       search.value = "";
       search.dispatchEvent(new Event("input", { bubbles: true }));
       await vi.waitFor(() =>
-        expect(cards(host).map((c) => c.name)).toEqual(["charlie", "bravo", "alpha"]),
+        expect(cards(host).map((c) => c.name)).toEqual(["echo", "charlie", "bravo", "alpha"]),
       );
-      expect(host.querySelector(".result-count")?.textContent).toBe("3 packages");
+      expect(host.querySelector(".result-count")?.textContent).toBe("4 packages");
     } finally {
       localStorage.clear();
     }

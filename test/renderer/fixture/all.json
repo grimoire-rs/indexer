@@ -115,5 +115,14 @@
     "description": "No enrichment sidecar at all.",
     "namespace": "registry.example/team",
     "owner": { "id": 2 }
+  },
+  {
+    "schema": 1,
+    "name": "tool-guard",
+    "kind": "hook",
+    "ref": "ghcr.io/acme/tool-guard",
+    "description": "Blocks a shell command before the agent runs it.",
+    "namespace": "github.com/acme",
+    "owner": { "github": "acme", "id": 1 }
   }
 ]

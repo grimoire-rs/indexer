@@ -49,6 +49,8 @@ describe("validateMetadata", () => {
     for (const kind of KINDS) {
       expect(validateMetadata(doc({ kind }), "tool").ok, kind).toBe(true);
     }
+    // Named, so dropping the experimental kind fails here rather than silently.
+    expect(validateMetadata(doc({ kind: "hook" }), "tool").ok).toBe(true);
     expect(reasonOf(doc({ kind: "plugin" }))).toContain("kind");
     expect(reasonOf(doc({ kind: 1 }))).toContain("kind");
   });

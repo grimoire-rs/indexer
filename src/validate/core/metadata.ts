@@ -10,7 +10,7 @@
  * into an existing object, and no value reaches a shell or a file path.
  */
 
-export const KINDS = ["skill", "rule", "agent", "mcp", "bundle"] as const;
+export const KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook"] as const;
 export type Kind = (typeof KINDS)[number];
 
 export interface Owner {

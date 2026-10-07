@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "foo",
+  "kind": "hook",
+  "ref": "ghcr.io/acme/hooks/foo",
+  "description": "A test hook.",
+  "owner": { "github": "acme", "id": 1 }
+}

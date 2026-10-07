@@ -9,10 +9,10 @@ import path from "node:path";
 
 import { packCheckpoint, type CheckpointEntry } from "../enrich/checkpoint.js";
 
-const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle"]);
+const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle", "hook"]);
 const REQUIRED = ["schema", "name", "kind", "ref", "description", "owner"] as const;
 
-export type PackageKind = "skill" | "rule" | "agent" | "mcp" | "bundle";
+export type PackageKind = "skill" | "rule" | "agent" | "mcp" | "bundle" | "hook";
 
 export interface IndexOwner {
   id: number;

@@ -82,7 +82,7 @@ const EXACT_NAME_PER_CHAR = 8;
 /** Name bonus when the term is one whole word of it (`grim` in `grim-usage`). */
 const NAME_WORD_PER_CHAR = 4;
 
-const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle"]);
+const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle", "hook"]);
 
 /** Every package that matched, by `ref`, with its relevance score. */
 export type Scores = ReadonlyMap<string, number>;

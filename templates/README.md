@@ -1,8 +1,8 @@
 # {{title}}
 
 A [Grimoire](https://github.com/grimoire-rs/grimoire) package index - a
-static site listing the skills, rules, agents, mcp servers, and bundles
-available in `{{registryHost}}`, served at {{baseUrl}}.
+static site listing the skills, rules, agents, mcp servers, bundles, and
+hooks available in `{{registryHost}}`, served at {{baseUrl}}.
 
 It is built by [`@grimoire-rs/indexer`](https://grimoire-rs.github.io/indexer/),
 which documents everything below in more depth - the config schema, the
@@ -97,7 +97,7 @@ request.
 ```
 
 The directory name must equal `name`, and `kind` is one of `skill`,
-`rule`, `agent`, `mcp`, `bundle`. `ref` names a repository, not a tag or
+`rule`, `agent`, `mcp`, `bundle`, `hook` (experimental). `ref` names a repository, not a tag or
 digest - the gate resolves it to whatever is published. `owner.id` must be
 your real numeric GitHub account id, not the placeholder above - find yours
 at `https://api.github.com/users/your-github-login`; the gate checks it
