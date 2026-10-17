@@ -27,7 +27,7 @@ import { withBase } from "../lib/base.js";
 // and the `/all.json` fetch behind it) is loaded with `await import()` below
 // so neither reaches a reader who never types. A value import here would
 // fold it back into the island's own chunk.
-import type { Scores, SearchIndex } from "../lib/search.js";
+import type { applyCutoff, Scores, SearchIndex } from "../lib/search.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
@@ -63,18 +63,6 @@ const KEYWORD_CHIP_LIMIT = 8;
  * How many packages the catalog builds at a time. See `limit` in `Catalog`.
  */
 const WINDOW = 48;
-
-/**
- * Drop matches scoring under this percent of the best match on screen.
- *
- * grim's `options.search_min_relevance` default, and the same rule: the
- * weights in `lib/search.ts` put a whole-word summary hit at most 2/3 of the
- * weakest clean name hit and a description hit at most 1/3, so at 50 a
- * query like `grim` returns the packages named for it rather than every
- * package whose blurb mentions it. Relative, not absolute, because the
- * scores grow with the term's length. The reader can lift it per query.
- */
-const MIN_RELEVANCE = 50;
 
 /**
  * `popovertarget` needs an id, and the catalog is a singleton on its page —
@@ -439,6 +427,9 @@ export default function Catalog({
   // for most of a visit — see the loader below — and every consumer treats
   // it as "fall back to the substring filter", never as an error.
   const [index, setIndex] = useState<SearchIndex | null>(null);
+  // The matcher chunk's relevance cutoff, held beside the index because the
+  // chunk is only ever reached through `await import()`.
+  const [cutoff, setCutoff] = useState<typeof applyCutoff | null>(null);
   // The query the reader asked to see weaker matches for. Keyed on the query
   // rather than a boolean so the next query starts cut again, with no effect
   // to reset it.
@@ -1141,8 +1132,9 @@ export default function Catalog({
     // on the path is inside the try.
     void (async () => {
       try {
-        const { loadSearchIndex } = await import("../lib/search.js");
-        setIndex(await loadSearchIndex(withBase("/all.json")));
+        const search = await import("../lib/search.js");
+        setCutoff(() => search.applyCutoff);
+        setIndex(await search.loadSearchIndex(withBase("/all.json")));
       } catch (err) {
         console.error("catalog: search index unavailable, using substring match", err);
       }
@@ -1205,18 +1197,13 @@ export default function Catalog({
     let list = showDeprecated
       ? [...matching]
       : matching.filter((p) => !p.deprecated);
-    // The relevance cutoff: after every filter, so "the best match" is the
-    // best one the reader can actually see, and before the sort, so it
+    // The relevance cutoff: after every filter, and before the sort, so it
     // decides which packages a query returns whatever order they come in.
-    // An all-zero set (a kind-only query) keeps everything.
     let weak = 0;
-    if (scores) {
-      const best = list.reduce((m, p) => Math.max(m, scores.get(p.ref) ?? 0), 0);
-      const kept = list.filter(
-        (p) => (scores.get(p.ref) ?? 0) * 100 >= best * MIN_RELEVANCE,
-      );
-      weak = list.length - kept.length;
-      if (!showWeak) list = kept;
+    if (scores && cutoff) {
+      const split = cutoff(list, scores);
+      weak = split.weak;
+      if (!showWeak) list = split.kept;
     }
     // A scored query ranks best match first, always; the chosen sort and
     // direction order only packages that scored the same. The score lives
@@ -1230,7 +1217,7 @@ export default function Catalog({
           : 0) || compare(a, b, sort, dir),
     );
     return [list, weak] as const;
-  }, [matching, showDeprecated, showWeak, sort, dir, scores]);
+  }, [matching, showDeprecated, showWeak, sort, dir, scores, cutoff]);
 
 
   /**
