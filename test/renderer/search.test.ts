@@ -10,7 +10,7 @@
 // crate's own, measured, so a drift in the port fails here.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { loadSearchIndex, skimScore } from "../../src/renderer/astro/lib/search.js";
+import { applyCutoff, createSearchIndex, loadSearchIndex, skimScore } from "../../src/renderer/astro/lib/search.js";
 
 /** A catalog the size of an argument, not of an index. */
 const RECORDS = [
@@ -79,6 +79,54 @@ describe("skimScore", () => {
     expect(skimScore("café", "é")).toBe(15);
     expect(skimScore("ghcr.io/acme/xtool", "ghcr.io/acme/x")).toBe(302);
     expect(skimScore("grim", "grimx")).toBeNull();
+  });
+});
+
+describe("createSearchIndex", () => {
+  it("scores the records it is handed, with no fetch", () => {
+    const index = createSearchIndex(GRIM);
+    const hits = index.search("grim");
+    expect(hits.get("ghcr.io/grimoire-rs/grim")).toBeGreaterThan(hits.get("ghcr.io/acme/described") ?? 0);
+  });
+
+  it("drops records without a string ref, and anything that is not a record", () => {
+    const index = createSearchIndex([{ name: "grim", kind: "skill" }, null, "grim", [1], { ref: 3, name: "grim" }, GRIM[0]]);
+    expect([...index.search("grim").keys()]).toEqual(["ghcr.io/grimoire-rs/grim"]);
+  });
+
+  it("ranks exactly as loadSearchIndex does for the same records", async () => {
+    serve(GRIM);
+    const loaded = await loadSearchIndex("/all.json");
+    expect(createSearchIndex(GRIM).search("grim")).toEqual(loaded.search("grim"));
+  });
+});
+
+describe("applyCutoff", () => {
+  const rows = (...refs: string[]) => refs.map((ref) => ({ ref }));
+
+  it("keeps what scores at least half the best on the list, and counts the rest", () => {
+    const scores = new Map([["a", 100], ["b", 50], ["c", 49], ["d", 10]]);
+    const { kept, weak } = applyCutoff(rows("a", "b", "c", "d"), scores);
+    expect(kept.map((r) => r.ref)).toEqual(["a", "b"]);
+    expect(weak).toBe(2);
+  });
+
+  it("measures against the best match on the list it is given, not on the catalog", () => {
+    const scores = new Map([["a", 100], ["b", 50], ["c", 40]]);
+    // With `a` filtered out, `b` is the best and `c` (80%) now clears it.
+    expect(applyCutoff(rows("b", "c"), scores)).toEqual({ kept: rows("b", "c"), weak: 0 });
+  });
+
+  it("keeps everything when nothing scores (a kind-only query), and on an empty list", () => {
+    const scores = new Map([["a", 0], ["b", 0]]);
+    expect(applyCutoff(rows("a", "b"), scores)).toEqual({ kept: rows("a", "b"), weak: 0 });
+    expect(applyCutoff([], scores)).toEqual({ kept: [], weak: 0 });
+  });
+
+  it("agrees with the ranking pin above: the grim family clears it, blurb mentions do not", () => {
+    const hits = createSearchIndex(GRIM).search("grim");
+    const { kept } = applyCutoff(GRIM, hits);
+    expect(kept.map((r) => r.name)).toEqual(["grim", "grim-usage", "grimoire", "tagged"]);
   });
 });
 

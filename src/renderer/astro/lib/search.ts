@@ -3,9 +3,9 @@
 
 // The catalog's search: grim's relevance model, run in the browser.
 //
-// It is reached exclusively through `await import()` from `Catalog.tsx`, so
-// this file lands in a chunk of its own that nothing downloads until a reader
-// actually types.
+// It is reached exclusively through `await import()` — from `Catalog.tsx` and
+// from the `/marketplace/` search — so this file lands in a chunk of its own
+// that nothing downloads until a reader actually types.
 //
 // It is also where the catalog stops being limited to what the island was
 // handed. `Catalog.tsx` receives `CardPackage` — the fourteen fields a card
@@ -36,9 +36,9 @@
 // (contains `/`, `.` or `:`): every package shares a handful of hosts, and
 // `github.com/m…` alone letter-matches `grim`.
 //
-// The relative cutoff that drops the weak tail lives in `Catalog.tsx`, not
-// here — it has to run after the kind chips, keywords and deprecation
-// toggle have narrowed the set, so it is relative to what is on screen.
+// The relative cutoff that drops the weak tail is `applyCutoff` below, but
+// the caller runs it — after the kind chips, keywords and deprecation toggle
+// have narrowed the set, so it is relative to what is on screen.
 
 /**
  * How long to wait for `/all.json` before giving up on this matcher.
@@ -431,22 +431,42 @@ export function skimScore(choice: string, pattern: string): number | null {
 }
 
 /**
- * Fetch the full catalog and build the matcher over it.
+ * Drop matches scoring under this percent of the best match in the list.
  *
- * Rejects rather than degrading quietly — the caller decides what a failure
- * means, and for the island it means "keep the substring filter". Records
- * without a string `ref` are dropped instead of failing the whole load: `ref`
- * is how a hit is joined back onto the card the island already holds, so a
- * record without one could never be shown even if it matched.
+ * grim's `options.search_min_relevance` default, and the same rule: the
+ * weights above put a whole-word summary hit at most 2/3 of the weakest clean
+ * name hit and a description hit at most 1/3, so at 50 a query like `grim`
+ * returns the packages named for it rather than every package whose blurb
+ * mentions it. Relative, not absolute, because the scores grow with the
+ * term's length.
  */
-export async function loadSearchIndex(url: string): Promise<SearchIndex> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!response.ok) {
-    throw new Error(`GET ${url}: ${response.status} ${response.statusText}`);
-  }
-  const raw: unknown = await response.json();
-  if (!Array.isArray(raw)) throw new Error(`${url}: expected an array of records`);
-  const entries = raw
+const MIN_RELEVANCE = 50;
+
+export interface Cutoff<T> {
+  kept: T[];
+  /** How many `list` entries fell under the cutoff. */
+  weak: number;
+}
+
+/**
+ * Split `list` at the relevance cutoff. Run it after every other filter so
+ * "the best match" is the best one the reader can actually see. An all-zero
+ * set (a kind-only query) keeps everything.
+ */
+export function applyCutoff<T extends { ref: string }>(list: readonly T[], scores: Scores): Cutoff<T> {
+  const best = list.reduce((m, p) => Math.max(m, scores.get(p.ref) ?? 0), 0);
+  const kept = list.filter((p) => (scores.get(p.ref) ?? 0) * 100 >= best * MIN_RELEVANCE);
+  return { kept, weak: list.length - kept.length };
+}
+
+/**
+ * The matcher over already-parsed records. Records without a string `ref` are
+ * dropped instead of failing the whole build: `ref` is how a hit is joined
+ * back onto the card the caller already holds, so a record without one could
+ * never be shown even if it matched.
+ */
+export function createSearchIndex(records: readonly unknown[]): SearchIndex {
+  const entries = records
     .filter(isRecord)
     .filter((record): record is WireRecord & { ref: string } => typeof record.ref === "string")
     .map(toEntry);
@@ -463,4 +483,20 @@ export async function loadSearchIndex(url: string): Promise<SearchIndex> {
       return scores;
     },
   };
+}
+
+/**
+ * Fetch the full catalog and build the matcher over it.
+ *
+ * Rejects rather than degrading quietly — the caller decides what a failure
+ * means, and for the island it means "keep the substring filter".
+ */
+export async function loadSearchIndex(url: string): Promise<SearchIndex> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!response.ok) {
+    throw new Error(`GET ${url}: ${response.status} ${response.statusText}`);
+  }
+  const raw: unknown = await response.json();
+  if (!Array.isArray(raw)) throw new Error(`${url}: expected an array of records`);
+  return createSearchIndex(raw);
 }
