@@ -32,6 +32,21 @@ absolute paths, backslashes and NUL never survive.
 `theme/`, `index.config.json`, the CI, and `public/` — so a submitted package
 cannot add a page, replace a component, or change what the site executes.
 
+`marketplace.toml` and `marketplace.lock` at the repository root are the one
+exception to the path list, and they still never auto-merge. A change to either
+is refused with `marketplace changes need maintainer review`, because the
+marketplace is what a harness installs on your people's machines. The gate also
+checks that every registry member is a package the index serves, and adds its
+own reason when one is not. A member the gate cannot read - a malformed entry or
+a key it does not know - gets a reason too, and so does a TOML syntax error,
+reported by line and column only. The gate runs on pull requests that touch
+either file, so a marketplace-only change is never skipped.
+
+The gate judges the pull request head, not the result of merging it. A package
+removed from `main` after the branch point still counts as indexed for the
+marketplace check, so the maintainer review that every marketplace change gets
+is where that gap closes.
+
 Beyond the path check, the gate verifies that the author owns the namespace,
 that the registry host is on the committed allowlist in `index-policy.json`,
 and that the OCI ref actually resolves.

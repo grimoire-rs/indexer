@@ -21,7 +21,7 @@
  */
 
 import { createForge, type NamespaceIdentity } from "./adapters/forge.js";
-import { readIndexFile } from "./adapters/files.js";
+import { listIndexMetadata, readIndexFile } from "./adapters/files.js";
 import { refReachable } from "./adapters/registry.js";
 import {
   ownerLogin,
@@ -31,6 +31,15 @@ import {
   validateMetadata,
   type Metadata,
 } from "./core/metadata.js";
+import {
+  lockMembers,
+  manifestMembers,
+  MARKETPLACE_FILES,
+  MAX_MARKETPLACE_BYTES,
+  memberReasons,
+  stripRef,
+  type Member,
+} from "./core/marketplace.js";
 import { parseIndexPath, type IndexPath } from "./core/paths.js";
 import {
   botOwnsNamespace,
@@ -131,10 +140,17 @@ async function collectReasons(options: ValidateOptions): Promise<string[]> {
   if (changed.length === 0) return ["empty change set"];
 
   // 1. Path gate. Nothing else runs until every path is in bounds — no forge
-  //    call, no registry call, no read of PR content.
+  //    call, no registry call, no read of PR content. The two marketplace
+  //    files are the only in-bounds paths outside `index/`, but they are never
+  //    auto-merged: each carries a review reason (step 4), and the member rule
+  //    adds its own on top.
+  const marketplaceTouched = changed.some((file) =>
+    (MARKETPLACE_FILES as readonly string[]).includes(file),
+  );
   const paths: IndexPath[] = [];
   const pathReasons: string[] = [];
   for (const file of changed) {
+    if ((MARKETPLACE_FILES as readonly string[]).includes(file)) continue;
     const parsed = parseIndexPath(file, options.forge, host);
     if (parsed === null) {
       pathReasons.push(
@@ -198,6 +214,57 @@ async function collectReasons(options: ValidateOptions): Promise<string[]> {
   for (const path of paths) {
     const reason = await checkFile(path, identities, options);
     if (reason !== null) reasons.push(`${path.file}: ${reason}`);
+  }
+
+  // 4. Marketplace members, against the index as the change leaves it.
+  if (marketplaceTouched) {
+    for (const file of changed.filter((f) => (MARKETPLACE_FILES as readonly string[]).includes(f))) {
+      reasons.push(`${file}: marketplace changes need maintainer review`);
+    }
+    reasons.push(...(await marketplaceReasons(options.prTree, options.forge, host)));
+  }
+  return reasons;
+}
+
+/**
+ * Every registry member of the marketplace must be a package this index
+ * serves; path and project members cannot be served from an index at all.
+ * Reads the post-change tree: `prTree` is the PR head, so a package added by
+ * the same change counts. It is the PR head, not the merge result: a base
+ * commit that landed after the branch point is not seen here.
+ */
+async function marketplaceReasons(
+  prTree: string,
+  forge: ValidateOptions["forge"],
+  host: string,
+): Promise<string[]> {
+  const indexed = new Set<string>();
+  for (const file of await listIndexMetadata(prTree, forge, host)) {
+    const read = await readIndexFile(prTree, file);
+    if (read.kind !== "text") continue;
+    const parsed = parseMetadataJson(read.text);
+    const ref = parsed.ok ? (parsed.value as { ref?: unknown }).ref : undefined;
+    if (typeof ref === "string") indexed.add(stripRef(ref));
+  }
+
+  const reasons: string[] = [];
+  const parsers: Record<string, (text: string) => Member[]> = {
+    "marketplace.toml": manifestMembers,
+    "marketplace.lock": lockMembers,
+  };
+  for (const file of MARKETPLACE_FILES) {
+    const read = await readIndexFile(prTree, file, MAX_MARKETPLACE_BYTES);
+    // Absent = deleted by this change; nothing left to hold to the rule.
+    if (read.kind === "missing") continue;
+    if (read.kind === "error") {
+      reasons.push(`${file}: ${read.reason}`);
+      continue;
+    }
+    try {
+      reasons.push(...memberReasons(file, parsers[file]!(read.text), indexed));
+    } catch (error) {
+      reasons.push(`${file}: invalid TOML: ${(error as Error).message}`);
+    }
   }
   return reasons;
 }
