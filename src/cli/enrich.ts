@@ -3,8 +3,10 @@
 
 // `grim-indexer enrich` — the one online step. Everything else in this CLI
 // reads the checkout and nothing else.
+import fs from "node:fs";
 import path from "node:path";
 
+import type { GrimRunner } from "../enrich/index.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 
 export interface EnrichFlags {
@@ -62,6 +64,22 @@ async function seedSidecars(rootDir: string): Promise<void> {
   if (seeded > 0) console.log(`seeded ${seeded} sidecar(s) from ${url}`);
 }
 
+/**
+ * Export the index's own `marketplace.toml`, when it has one (C-006). Warn and
+ * continue: the site renders without it, and a failed export keeps the last one.
+ */
+async function enrichMarketplaceExport(rootDir: string, run: GrimRunner): Promise<void> {
+  if (!fs.existsSync(path.join(rootDir, "marketplace.toml"))) return;
+  try {
+    const { enrichMarketplace } = await import("../enrich/marketplace.js");
+    const result = await enrichMarketplace(rootDir, run);
+    for (const warning of result.warnings) console.warn(`warn: ${warning}`);
+    if (result.exported) console.log(`marketplace: ${result.plugins} plugin(s)`);
+  } catch (err) {
+    console.warn(`warn: marketplace export skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
   const concurrency = resolveConcurrency(flags.concurrency);
@@ -79,6 +97,8 @@ export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode
     // anything that escapes the loop.
     throw new CliError(err instanceof Error ? err.message : String(err), EXIT.unavailable);
   }
+
+  await enrichMarketplaceExport(rootDir, spawnGrim(bin));
 
   for (const failure of result.failures) console.error(`warn: ${failure}`);
   console.log(`enriched ${result.enriched}/${result.total} package(s)`);

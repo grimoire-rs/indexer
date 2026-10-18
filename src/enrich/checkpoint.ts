@@ -36,6 +36,7 @@ import path from "node:path";
 import { findMetadataFiles, namespaceOf } from "../data/index.js";
 import { LOGO_EXT, clearCompanions, clearContents } from "./index.js";
 import { LARGE_RESPONSE_BYTES, request } from "../validate/adapters/http.js";
+import { packMarketplace, seedMarketplace } from "./marketplace.js";
 
 /** Published name, and the path `--seed` appends to `site`. */
 export const CHECKPOINT_FILE = "enrich.json";
@@ -71,6 +72,12 @@ interface CheckpointDocument {
   schema_version: number;
   /** Keyed `"<namespace>/<name>"`, the same id the content collections use. */
   packages: Record<string, CheckpointPackage>;
+  /**
+   * The index's own marketplace: the exported tree and `meta.json` (`./marketplace.ts`). Additive:
+   * absent from every document written before it existed, and ignored by every
+   * reader that predates it, so `schema_version` does not move.
+   */
+  marketplace?: unknown;
 }
 
 /** What `compileIndex` hands over — it has already walked the tree. */
@@ -111,7 +118,12 @@ function soleLogo(dir: string): string | undefined {
  * inlining the markdown as UTF-8 would save a fifth of the file in exchange
  * for a validity branch on data that is not guaranteed to be text.
  */
-export function packCheckpoint(outDir: string, entries: readonly CheckpointEntry[]): void {
+export function packCheckpoint(
+  outDir: string,
+  entries: readonly CheckpointEntry[],
+  /** `enrich/marketplace` of the index root, when the caller has one. */
+  marketplaceDir?: string,
+): void {
   const packages: Record<string, CheckpointPackage> = {};
 
   for (const { namespace, name, dir } of entries) {
@@ -143,9 +155,11 @@ export function packCheckpoint(outDir: string, entries: readonly CheckpointEntry
   // Nothing enriched yet. An absent document and an empty one behave
   // identically to the reader, and not writing keeps `dist/` honest about
   // what this build actually had.
-  if (Object.keys(packages).length === 0) return;
+  const marketplace = marketplaceDir ? packMarketplace(marketplaceDir) : null;
+  if (Object.keys(packages).length === 0 && !marketplace) return;
 
   const document: CheckpointDocument = { schema_version: SCHEMA_VERSION, packages };
+  if (marketplace) document.marketplace = marketplace;
   const body = JSON.stringify(document) + "\n";
   if (Buffer.byteLength(body) > LARGE_RESPONSE_BYTES) {
     // Silence here would be a permanent, invisible regression: the file
@@ -212,7 +226,11 @@ async function loadCheckpoint(url: string): Promise<CheckpointDocument | null> {
     return null;
   }
 
-  return { schema_version: SCHEMA_VERSION, packages: packages as Record<string, CheckpointPackage> };
+  return {
+    schema_version: SCHEMA_VERSION,
+    packages: packages as Record<string, CheckpointPackage>,
+    marketplace: doc.marketplace,
+  };
 }
 
 /**
@@ -343,6 +361,10 @@ export async function seedFromCheckpoint(opts: SeedOptions): Promise<number> {
     reconcile(record, dir, namespace, name, written);
     fs.writeFileSync(path.join(dir, "data.json"), JSON.stringify(record, null, 1) + "\n");
     seeded += 1;
+  }
+
+  if (document.marketplace !== undefined && seedMarketplace(path.join(enrichDir, "marketplace"), document.marketplace)) {
+    console.log("seeded the marketplace export");
   }
 
   return seeded;

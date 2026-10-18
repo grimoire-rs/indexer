@@ -36,6 +36,7 @@ export interface HttpResponse {
 async function readCapped(
   response: Response,
   cap: number,
+  encoding: BufferEncoding,
 ): Promise<string | null> {
   if (!response.body) return "";
   const reader = response.body.getReader();
@@ -56,7 +57,7 @@ async function readCapped(
   } finally {
     reader.releaseLock();
   }
-  return Buffer.concat(chunks).toString("utf8");
+  return Buffer.concat(chunks).toString(encoding);
 }
 
 /** Everything past a plain GET. Omitted leaves `fetch`'s own defaults. */
@@ -75,6 +76,12 @@ export interface RequestOptions {
    * failure, which is how an oversized page got reported as one.
    */
   maxBytes?: number;
+  /**
+   * How the body is decoded into `HttpResponse.body`. `"latin1"` is the
+   * lossless one for a binary payload — `Buffer.from(body, "latin1")` gives
+   * the exact bytes back, which the default UTF-8 decode would have mangled.
+   */
+  encoding?: "utf8" | "latin1";
 }
 
 export async function request(
@@ -95,7 +102,11 @@ export async function request(
       redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    const body = await readCapped(response, options.maxBytes ?? MAX_RESPONSE_BYTES);
+    const body = await readCapped(
+      response,
+      options.maxBytes ?? MAX_RESPONSE_BYTES,
+      options.encoding ?? "utf8",
+    );
     if (body === null) return none;
     return {
       status: response.status,

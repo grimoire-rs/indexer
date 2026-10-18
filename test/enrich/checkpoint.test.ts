@@ -191,6 +191,23 @@ describe("packCheckpoint", () => {
   });
 });
 
+describe("the marketplace tree in the checkpoint", () => {
+  it("publishes and restores a marketplace-only repo (no packages) through enrich.json", async () => {
+    const mk = path.join(dir, "enrich", "marketplace");
+    fs.mkdirSync(path.join(mk, "export"), { recursive: true });
+    fs.writeFileSync(path.join(mk, "meta.json"), '{"clients":["claude"],"members":{}}\n');
+    fs.writeFileSync(path.join(mk, "export", "README.md"), "# m\n");
+
+    packCheckpoint(outDir, [], mk);
+    const body = fs.readFileSync(path.join(outDir, CHECKPOINT_FILE), "utf8");
+    fs.rmSync(path.join(dir, "enrich"), { recursive: true, force: true });
+
+    expect(await seed(body)).toBe(0);
+    expect(fs.readFileSync(path.join(mk, "export", "README.md"), "utf8")).toBe("# m\n");
+    expect(fs.readFileSync(path.join(mk, "meta.json"), "utf8")).toContain('"claude"');
+  });
+});
+
 describe("seedFromCheckpoint", () => {
   /** Enrich once, publish the checkpoint, wipe, seed, and enrich again. */
   async function reseed(): Promise<string[][]> {

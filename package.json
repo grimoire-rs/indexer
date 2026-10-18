@@ -30,6 +30,7 @@
     "build": "tsc -p tsconfig.json && mkdir -p dist/renderer/astro dist/renderer/public && cp -r src/renderer/astro/. dist/renderer/astro/ && cp -r src/renderer/public/. dist/renderer/public/ && node scripts/prune-template-maps.mjs",
     "dev": "npm run build && node scripts/dev.mjs",
     "dev:smoke": "npm run build && node scripts/dev.mjs --smoke",
+    "dev:smoke:marketplace": "npm run build && node scripts/dev.mjs --smoke --marketplace-only",
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -59,7 +60,8 @@
     "commander": "^15.0.0",
     "lucide-preact": "^1.27.0",
     "preact": "^10.29.7",
-    "preact-render-to-string": "^6.7.0"
+    "preact-render-to-string": "^6.7.0",
+    "smol-toml": "^1.7.1"
   },
   "repository": {
     "type": "git",
