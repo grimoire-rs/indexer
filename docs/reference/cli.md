@@ -89,13 +89,18 @@ tag lists, and the curated annotations grim reports (`revision`, `authors`,
 **The only step that goes online, and the only one that needs `grim` on
 `PATH`.**
 
+**It needs grim 0.9.0 or newer, and 0.15.0 or newer when the repository has a
+`marketplace.toml`.** `enrich` runs `grim --version` before any registry call
+and exits 69 naming the binary when it is older. `grim-indexer ci` refuses a
+`ci.grimVersion` pinned below 0.9.0.
+
 | Flag | Effect |
 |---|---|
 | `--grim <path>` | Which grim binary reads the registry (default `grim`) |
 | `--seed` | Restore `enrich/` from `<site>/enrich.json` first, so a pipeline that commits nothing still only downloads what moved |
 | `--concurrency <n>` | Packages refreshed at once (default `8`, whole number of 1 or more; anything else exits 64) |
 
-With a `marketplace.toml` at the repository root, `enrich` also runs `grim export marketplace` on it into `enrich/marketplace/export/` and writes `enrich/marketplace/meta.json`, which the site reads to render the marketplace. It never fails the run: a failed export keeps the previous one and warns, and a `marketplace.lock` the export had to rewrite warns that it was stale. See [Marketplace](config-schema.md#marketplace) for the three site modes.
+With a `marketplace.toml` at the repository root, `enrich` also runs `grim export marketplace` on it into `enrich/marketplace/export/` and writes `enrich/marketplace/meta.json`, which the site reads to render the marketplace. Past the version check it never fails the run: a failed export keeps the previous one and warns, and a `marketplace.lock` the export had to rewrite warns that it was stale. See [Marketplace](config-schema.md#marketplace) for the three site modes.
 
 **Probe first.** A package whose artifact digest and description-companion
 digest both match what the sidecar stored is carried forward untouched: two

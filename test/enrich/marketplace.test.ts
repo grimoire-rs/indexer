@@ -179,17 +179,6 @@ describe("enrichMarketplace", () => {
     expect(meta()).toEqual({ clients: ["claude"], members: {} });
   });
 
-  it("names the missing command when grim is too old to have export marketplace", async () => {
-    curator();
-    const result = await enrichMarketplace(dir, async () => {
-      throw Object.assign(new Error("Command failed: grim export marketplace"), {
-        stderr: "error: unrecognized subcommand 'marketplace'",
-      });
-    });
-    expect(result.exported).toBe(false);
-    expect(result.warnings).toEqual([expect.stringMatching(/no `export marketplace`.*0\.15\.0/)]);
-  });
-
   it("keeps the new export and still writes meta.json when the lock or the report cannot be parsed", async () => {
     curator("= not toml");
     put(`${EXPORT}/old.json`, "old");

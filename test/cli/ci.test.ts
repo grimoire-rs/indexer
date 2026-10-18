@@ -977,6 +977,11 @@ describe("config validation", () => {
     expect(validateCi({ grimVersion: "v0.12.0" })).toEqual({ grimVersion: "v0.12.0" });
   });
 
+  it("refuses a pinned grim below the floor enrich runs with", () => {
+    expect(() => validateCi({ grimVersion: "v0.8.4" })).toThrow(/grimVersion v0\.8\.4 is older than 0\.9\.0/);
+    expect(validateCi({ grimVersion: "0.9.0" })).toEqual({ grimVersion: "0.9.0" });
+  });
+
   it("treats a missing index.config.json as defaults", async () => {
     expect(await loadCiConfig(dir)).toEqual({});
   });

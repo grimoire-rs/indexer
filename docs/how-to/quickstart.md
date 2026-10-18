@@ -26,7 +26,7 @@ uses the version that repo locked:
 ```sh
 npm run dev        # local preview
 npm run build      # index/** -> dist/
-npm run enrich     # needs `grim` on PATH
+npm run enrich     # needs `grim` 0.9.0+ on PATH (0.15.0+ with a marketplace.toml)
 npm run validate   # the contribution gate
 npm run ci         # re-render CI after editing index.config.json
 npm run ci:check   # fail on drift (what the verify-ci job runs)
