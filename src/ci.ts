@@ -18,6 +18,7 @@ import path from "node:path";
 import { CliError, EXIT } from "./cli/exit.js";
 import { CONFIG_FILE, SiteConfigError } from "./config.js";
 import type { DownloadsConfig } from "./downloads/config.js";
+import { MINIMUM_GRIM_VERSION, grimTooOld } from "./grim.js";
 import type { RatingsConfig } from "./ratings/config.js";
 import { fromTemplate } from "./templates.js";
 
@@ -152,6 +153,11 @@ export function validateCi(raw: unknown): CiConfig {
     if (typeof value === "string" && !/^[\w.@^~><=* +-]+$/.test(value)) {
       fail(`${key} must be a plain version or range`);
     }
+  }
+  // A pinned release tag is checked against the floor here, so CI never installs a grim `enrich` then refuses.
+  const pinned = typeof ci.grimVersion === "string" ? /^v?(\d+\.\d+\.\d+)$/.exec(ci.grimVersion)?.[1] : undefined;
+  if (pinned !== undefined && grimTooOld(pinned)) {
+    fail(`grimVersion ${String(ci.grimVersion)} is older than ${MINIMUM_GRIM_VERSION}, the oldest grim enrich runs with`);
   }
   for (const key of ["enrich", "allowManualEdits", "autoMerge"]) {
     if (ci[key] !== undefined && typeof ci[key] !== "boolean") fail(`${key} must be a boolean`);

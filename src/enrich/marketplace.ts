@@ -27,9 +27,6 @@ const MEMBER_KINDS = ["skill", "rule", "agent", "mcp", "hook"] as const;
 /** `grim export marketplace` fetches every member, so it gets far more than the shared per-call ceiling. */
 export const MARKETPLACE_EXPORT_TIMEOUT_MS = 10 * 60_000;
 
-/** First grim release with `export marketplace` (the version it ships in, shown in the warning only). */
-const MIN_GRIM_VERSION = "0.15.0";
-
 export interface MarketplaceEnrichResult {
   /** `false` when there is no `marketplace.toml` or the export failed (previous export kept). */
   exported: boolean;
@@ -120,12 +117,6 @@ function degrade<T>(warnings: string[], what: string, fallback: T, step: () => T
   }
 }
 
-/** Does the failure say this `grim` has no `export marketplace` (clap's wording)? */
-function lacksExportMarketplace(err: unknown): boolean {
-  const e = err as { message?: unknown; stderr?: unknown } | null;
-  return /unrecognized subcommand/i.test(`${e?.message ?? ""}\n${e?.stderr ?? ""}`);
-}
-
 /**
  * C-006: when `<root>/marketplace.toml` exists, run `grim export marketplace
  * --marketplace <root>/marketplace.toml -o <dir>/export.next --force` through
@@ -204,9 +195,6 @@ export async function enrichMarketplace(root: string, run: GrimRunner): Promise<
   } catch (err) {
     fs.rmSync(next, { recursive: true, force: true });
     fs.rmSync(metaNext, { force: true });
-    if (lacksExportMarketplace(err)) {
-      return kept(`this grim has no \`export marketplace\` (need grim ${MIN_GRIM_VERSION} or newer)`);
-    }
     return kept(err instanceof Error ? err.message : String(err));
   }
 }

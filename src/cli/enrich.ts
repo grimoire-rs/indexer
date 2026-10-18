@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { GrimRunner } from "../enrich/index.js";
+import { MARKETPLACE_GRIM_VERSION, grimTooOld, supportsMarketplaceExport, tooOldMessage } from "../grim.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 
 export interface EnrichFlags {
@@ -80,14 +81,33 @@ async function enrichMarketplaceExport(rootDir: string, run: GrimRunner): Promis
   }
 }
 
+/** Refuse a grim this index cannot be enriched with, before any registry call. */
+async function checkGrim(rootDir: string, bin: string, probe: (bin: string) => Promise<string | undefined>): Promise<void> {
+  let version;
+  try {
+    version = await probe(bin);
+  } catch (err) {
+    throw new CliError(`\`${bin} --version\` failed: ${err instanceof Error ? err.message : String(err)}`, EXIT.unavailable);
+  }
+  // Not installed: every package then fails and the run exits 69, while an index with nothing to enrich still passes.
+  if (version === undefined) return;
+  if (grimTooOld(version)) throw new CliError(tooOldMessage(bin, version), EXIT.unavailable);
+  // grim-polyfill<0.15.0: an older grim rejects `export marketplace` (clap, exit 64); refusing here keeps the site from publishing the last export as current.
+  if (fs.existsSync(path.join(rootDir, "marketplace.toml")) && !supportsMarketplaceExport(version)) {
+    throw new CliError(tooOldMessage(bin, version, MARKETPLACE_GRIM_VERSION, "marketplace.toml"), EXIT.unavailable);
+  }
+}
+
 export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
   const concurrency = resolveConcurrency(flags.concurrency);
-  const { enrichIndex, spawnGrim } = await import("../enrich/index.js");
+  const { enrichIndex, grimVersion, spawnGrim } = await import("../enrich/index.js");
+
+  const bin = flags.grim ?? "grim";
+  await checkGrim(rootDir, bin, grimVersion);
 
   if (flags.seed) await seedSidecars(rootDir);
 
-  const bin = flags.grim ?? "grim";
   let result;
   try {
     result = await enrichIndex({ root: rootDir, run: spawnGrim(bin), concurrency });

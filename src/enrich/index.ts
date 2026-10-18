@@ -29,6 +29,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { findMetadataFiles, namespaceOf } from "../data/index.js";
+import { parseGrimVersion } from "../grim.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -72,6 +73,24 @@ interface CompanionFile {
   path: string;
   content: string;
   encoding?: string;
+}
+
+/**
+ * The version `<bin> --version` reports (`""` when it names none), or
+ * `undefined` when `bin` is not installed. Any other failure throws.
+ */
+export async function grimVersion(bin = "grim"): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync(bin, ["--version"], {
+      timeout: TIMEOUT_MS,
+      maxBuffer: 64 * 1024,
+      encoding: "utf8",
+    });
+    return parseGrimVersion(stdout);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
 }
 
 export function spawnGrim(bin = "grim"): GrimRunner {
