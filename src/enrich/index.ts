@@ -44,7 +44,7 @@ const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 export const LOGO_EXT = /^[A-Za-z0-9]{1,8}$/;
 
 /** Runs one `grim` subcommand and parses its JSON. Injected so tests need no binary. */
-export type GrimRunner = (args: string[]) => Promise<unknown>;
+export type GrimRunner = (args: string[], opts?: { timeoutMs?: number }) => Promise<unknown>;
 
 export interface EnrichOptions {
   /** Index repo root — holds `index/`, gains `enrich/`. */
@@ -75,9 +75,9 @@ interface CompanionFile {
 }
 
 export function spawnGrim(bin = "grim"): GrimRunner {
-  return async (args) => {
+  return async (args, opts) => {
     const { stdout } = await execFileAsync(bin, [...args, "--format", "json"], {
-      timeout: TIMEOUT_MS,
+      timeout: opts?.timeoutMs ?? TIMEOUT_MS,
       maxBuffer: MAX_OUTPUT_BYTES,
       encoding: "utf8",
     });

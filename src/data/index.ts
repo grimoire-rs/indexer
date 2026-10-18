@@ -166,7 +166,8 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
 
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
-  fs.cpSync(indexDir, path.join(outDir, "index"), { recursive: true });
+  // A marketplace-only repo has no `index/`.
+  if (fs.existsSync(indexDir)) fs.cpSync(indexDir, path.join(outDir, "index"), { recursive: true });
   fs.writeFileSync(path.join(outDir, "all.json"), JSON.stringify(packages, null, 1) + "\n");
   for (const { src, rel } of logos) {
     const dst = path.join(outDir, "logos", rel);
@@ -175,7 +176,7 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
   }
   // Downstream of the `rmSync` above, like `all.json` — that is what lets
   // `stage()`'s last `public/` layer publish it rather than Astro wiping it.
-  packCheckpoint(outDir, sidecars);
+  packCheckpoint(outDir, sidecars, path.join(enrichDir, "marketplace"));
 
   const namespaces = [...new Set(packages.map((p) => p.namespace))].sort();
   return { count: packages.length, namespaces };

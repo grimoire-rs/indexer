@@ -22,6 +22,18 @@ afterEach(() => {
 });
 
 describe("compileIndex", () => {
+  it("compiles a marketplace-only repo with no index/ directory", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "index-empty-"));
+    try {
+      const result = await compileIndex({ root, outDir });
+      expect(result).toEqual({ count: 0, namespaces: [] });
+      expect(JSON.parse(fs.readFileSync(path.join(outDir, "all.json"), "utf8"))).toEqual([]);
+      expect(fs.existsSync(path.join(outDir, "index"))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("compiles a valid tree, merging the enrichment sidecar and copying the logo", async () => {
     const result = await compileIndex({ root: path.join(FIXTURES, "valid"), outDir });
 
