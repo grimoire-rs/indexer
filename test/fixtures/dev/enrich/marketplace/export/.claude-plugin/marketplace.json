@@ -1,0 +1,36 @@
+{
+  "name": "dev-marketplace",
+  "owner": {
+    "name": "Acme"
+  },
+  "metadata": {
+    "description": "The plugins the Acme engineering department installs"
+  },
+  "plugins": [
+    {
+      "name": "hex",
+      "source": "./claude/hex",
+      "version": "0.0.0+2047f82734c9",
+      "description": "Tiered multi-agent swarm orchestration: plan, execute, review, architect",
+      "category": "workflow"
+    },
+    {
+      "name": "review-kit",
+      "source": "./claude/review-kit",
+      "version": "0.0.0+792ded31d749",
+      "description": "Review a diff against the team checklist and keep Rust idiomatic",
+      "author": {
+        "name": "Acme platform team",
+        "url": "https://acme.example.test"
+      },
+      "homepage": "https://acme.example.test/review-kit",
+      "license": "Apache-2.0",
+      "keywords": [
+        "review",
+        "quality",
+        "rust"
+      ],
+      "category": "quality"
+    }
+  ]
+}

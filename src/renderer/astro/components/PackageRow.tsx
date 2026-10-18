@@ -11,12 +11,12 @@
 // unstable for now.
 import { ArrowBigUp, ArrowDownToLine } from "lucide-preact";
 import { CardLogo } from "./CardLogo.js";
-import { DEPRECATED_MARK, KIND_MARKS, KindMark } from "./KindMark.js";
-import { withBase } from "../lib/base.js";
+import { DEPRECATED_MARK, KindMark, kindMark } from "./KindMark.js";
 import {
   compactCount,
   exactCount,
   lastUpdated,
+  packageHref,
   timeAgo,
   type CardPackage,
 } from "../lib/catalog.js";
@@ -27,18 +27,20 @@ export interface PackageRowProps {
   hasRatings: boolean;
   /** Same, for download counts. Only an Artifactory-backed index has any. */
   hasDownloads: boolean;
+  /** Link template, see `packageHref`. */
+  href: string;
   /** The catalog's own arrow-key navigation. */
   onKeyDown: (event: KeyboardEvent) => void;
 }
 
-export function PackageRow({ pkg: p, hasRatings, hasDownloads, onKeyDown }: PackageRowProps) {
+export function PackageRow({ pkg: p, hasRatings, hasDownloads, href, onKeyDown }: PackageRowProps) {
   const at = lastUpdated(p);
   const ago = at && timeAgo(at) ? timeAgo(at) : null;
   return (
       <a
               class="row"
         data-slot="package-row"
-        href={withBase(`/p/${p.namespace}/${p.name}/`)}
+        href={packageHref(href, p)}
         // The full identity, since the visible name is clipped and the
         // namespace is not shown at all.
         title={`${p.namespace}/${p.name}`}
@@ -68,7 +70,7 @@ export function PackageRow({ pkg: p, hasRatings, hasDownloads, onKeyDown }: Pack
             an SVG takes its tooltip from a `<title>` child, and a `title`
             attribute on it does nothing at all. */}
         {(() => {
-          const mark = p.deprecated ? DEPRECATED_MARK : KIND_MARKS[p.kind];
+          const mark = p.deprecated ? DEPRECATED_MARK : kindMark(p.kind);
           const label = p.deprecated ? `${p.kind}, deprecated` : p.kind;
           return (
             <span

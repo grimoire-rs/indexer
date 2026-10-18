@@ -25,6 +25,17 @@ import {
   type StatsDocument,
   type StatsSeed,
 } from "../ratings/seed.js";
+import { listedPlugins } from "./astro/lib/plugins.js";
+import {
+  loadMarketplace,
+  MAX_DOC_BYTES,
+  MAX_LOGO_BYTES,
+  readRegular,
+  siteMode,
+  validLogo,
+  type LoadedMarketplace,
+} from "../marketplace/read.js";
+import { navFor } from "./astro/lib/nav.js";
 import type { CatalogPackage } from "./types.js";
 import { SHIKI_THEMES } from "./astro/lib/code.js";
 
@@ -639,10 +650,13 @@ async function stage(
   root: string,
   outDir: string,
   srcDir?: string,
+  marketplaceFiles: LoadedMarketplace["files"] = new Map(),
+  /** The site's base path without a trailing slash (`""` at a domain root). */
+  base = "",
 ): Promise<{ dir: string; src: string; original: string }> {
   const dir = await fs.mkdtemp(path.join(root, ".index-"));
   try {
-    return await stageInto(dir, root, outDir, srcDir);
+    return await stageInto(dir, root, outDir, srcDir, marketplaceFiles, base);
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
     throw err;
@@ -654,7 +668,9 @@ async function stageInto(
   dir: string,
   root: string,
   outDir: string,
-  srcDir?: string,
+  srcDir: string | undefined,
+  marketplaceFiles: LoadedMarketplace["files"],
+  base: string,
 ): Promise<{ dir: string; src: string; original: string }> {
   // A caller-supplied `srcDir` is used in place of the staged copy: Vite
   // watches `srcDir` directly, so dev edits in the working tree hot-reload.
@@ -718,7 +734,54 @@ async function stageInto(
     // ponytail: copy, not rename — an index's data is kilobytes plus logos.
     if (await exists(layer)) await fs.cp(layer, staticDir, { recursive: true, force: true });
   }
+  await stageMarketplace(dir, marketplaceFiles, base);
   return { dir, src, original };
+}
+
+/** Where a plugin's logo is served, before the site's base path. */
+const logoPath = (plugin: string, ext: string) => `/marketplace/logos/${plugin}.${ext}`;
+
+/**
+ * Put the marketplace's plugin docs where the content collections look
+ * (`<stage>/marketplace-docs/<plugin>/{readme,changelog}.md`) and its logos in
+ * the staged `public/`. Always makes the docs directory: a glob loader on a
+ * missing base logs a warning per collection.
+ */
+export async function stageMarketplace(dir: string, files: LoadedMarketplace["files"], base = ""): Promise<void> {
+  await fs.mkdir(path.join(dir, "marketplace-docs"), { recursive: true });
+  for (const [name, f] of files) {
+    for (const kind of ["readme", "changelog"] as const) {
+      const from = f[kind];
+      if (!from) continue;
+      // Re-checked and read in one step: what is written is the bytes that passed
+      // here, not whatever the path names by the time of a second open.
+      const read = readRegular(from, MAX_DOC_BYTES);
+      if ("why" in read) throw new Error(`marketplace plugin ${name}: ${kind.toUpperCase()} changed after it was checked (${read.why})`);
+      const to = path.join(dir, "marketplace-docs", name, `${kind}.md`);
+      await fs.mkdir(path.dirname(to), { recursive: true });
+      await fs.writeFile(to, kind === "readme" ? relinkLogo(read.bytes.toString("utf8"), name, f.logo?.ext, base) : read.bytes);
+    }
+    if (f.logo) {
+      const read = readRegular(f.logo.file, MAX_LOGO_BYTES);
+      if ("why" in read || !validLogo(f.logo.ext, read.bytes)) {
+        throw new Error(`marketplace plugin ${name}: logo changed after it was checked`);
+      }
+      const to = path.join(dir, "public", logoPath(name, f.logo.ext));
+      await fs.mkdir(path.dirname(to), { recursive: true });
+      await fs.writeFile(to, read.bytes);
+    }
+  }
+}
+
+/**
+ * grim's plugin README opens with `![name](assets/logo.<ext>)`, a path that is
+ * only true inside the export tree. On the site the logo is served from
+ * `logoPath`: point the image there, or drop the line when there is no logo.
+ */
+function relinkLogo(readme: string, plugin: string, ext: string | undefined, base: string): string {
+  return readme.replace(/^(!\[[^\]\n]*\])\(assets\/logo\.(?:png|svg|webp)\)[ \t]*(\r?\n|$)/gm, (_all, alt: string, eol: string) =>
+    ext ? `${alt}(${base}${logoPath(plugin, ext)})${eol}` : "",
+  );
 }
 
 /**
@@ -736,6 +799,17 @@ async function resolveInputs(opts: BuildSiteOptions) {
   // the packages themselves.
   const stats = publishedStats(packages, sidecar);
   const css = await readCustomCss(opts.root, config.customCss);
+  const loaded = loadMarketplace(opts.root, packages);
+  // The page prints `logo` as a site path; the file is copied there by `stageMarketplace`.
+  const marketplace = loaded && {
+    ...loaded.marketplace,
+    plugins: loaded.marketplace.plugins.map((p) => {
+      const logo = loaded.files.get(p.name)?.logo;
+      return logo ? { ...p, logo: logoPath(p.name, logo.ext) } : p;
+    }),
+  };
+
+  const listed = marketplace ? listedPlugins({ marketplace }) : [];
 
   // A site on GitHub/GitLab *project* Pages lives under a path segment, and
   // `site` is the only place that fact is recorded. Its path becomes Astro's
@@ -745,7 +819,19 @@ async function resolveInputs(opts: BuildSiteOptions) {
   // Taken here rather than at the call site so `buildSite` and `devSite` stamp
   // the same way — a dev preview shows when the server started, which is the
   // honest answer to the same question.
-  return { config, packages, css, stats, builtAt: stamp(), base: new URL(config.site).pathname };
+  return {
+    config,
+    packages,
+    css,
+    stats,
+    marketplace,
+    marketplaceFiles: loaded?.files ?? new Map(),
+    // Pages exist only for the plugins a client can install from here.
+    listedPlugins: listed.map((p) => p.name),
+    siteMode: siteMode(packages.length, marketplace, listed.length),
+    builtAt: stamp(),
+    base: new URL(config.site).pathname,
+  };
 }
 
 /**
@@ -755,7 +841,7 @@ async function resolveInputs(opts: BuildSiteOptions) {
 function inlineConfig(
   opts: BuildSiteOptions,
   staged: Awaited<ReturnType<typeof stage>>,
-  { config, packages, css, builtAt, base }: Awaited<ReturnType<typeof resolveInputs>>,
+  { config, packages, css, marketplace, siteMode, builtAt, base }: Awaited<ReturnType<typeof resolveInputs>>,
 ) {
   return {
     // The staged dir, never the index repo — see `stage`.
@@ -779,7 +865,7 @@ function inlineConfig(
     },
     vite: {
       define: {
-        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, builtAt }),
+        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, marketplace, siteMode, builtAt }),
         __GRIMOIRE_BASE__: JSON.stringify(base),
       },
       // What a page under `theme/pages/` imports the shipped components and
@@ -870,7 +956,8 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
       `${JSON.stringify(inputs.stats)}\n`,
     );
   }
-  const staged = await stage(opts.root, opts.outDir);
+  // Same route as `stats.json`: `outDir` is `stage`'s last `public/` layer.
+  const staged = await stage(opts.root, opts.outDir, undefined, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""));
   const astro = inlineConfig(opts, staged, inputs);
 
   // Astro routes its server build through `<cwd>/.astro/` whenever `outDir`
@@ -886,12 +973,17 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
     process.chdir(cwd);
     await fs.rm(staged.dir, { recursive: true, force: true });
   }
+  // `/` is the marketplace in this mode; whatever page the build wrote at
+  // `/marketplace/` is not a route (C-010).
+  if (inputs.siteMode === "marketplace") {
+    await fs.rm(path.join(opts.outDir, "marketplace", "index.html"), { force: true });
+  }
   // After the build, and outside the `finally`: there is nothing to check
   // against until the routes exist, and a build that threw has a real error
   // to report rather than a list of links that were never emitted.
   await warnDanglingLinks(
     [
-      { key: "nav", entries: inputs.config.nav },
+      { key: "nav", entries: navFor(inputs.config.nav, inputs.config.docsUrl, inputs.config.repoUrl, inputs.siteMode) },
       { key: "footerLinks", entries: inputs.config.footerLinks },
     ],
     opts.outDir,
@@ -930,12 +1022,13 @@ async function writeSitemap(
   const origin = base && site.endsWith(base) ? site.slice(0, -base.length) : site;
   const urls = [
     `${site}/`,
-    // C-030: the landing page exists exactly when the key is set, so the
-    // sitemap follows the same condition rather than probing the output.
-    ...(inputs.config.marketplace ? [`${site}/marketplace/`] : []),
+    // `/marketplace/` exists only in `both` mode (C-010); in `marketplace`
+    // mode `/` is the marketplace. Plugin pages exist in both modes.
+    ...(inputs.siteMode === "both" ? [`${site}/marketplace/`] : []),
     ...inputs.packages.map(
       (p) => `${origin}${base}/p/${p.namespace}/${p.name}/`,
     ),
+    ...inputs.listedPlugins.map((name) => `${origin}${base}/marketplace/${name}/`),
   ];
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -1149,7 +1242,7 @@ export function urlHost(address: string): string {
 
 export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
   const inputs = await resolveInputs(opts);
-  const staged = await stage(opts.root, opts.outDir, opts.srcDir);
+  const staged = await stage(opts.root, opts.outDir, opts.srcDir, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""));
   const astro = inlineConfig(opts, staged, inputs);
   const cwd = process.cwd();
   process.chdir(staged.dir);

@@ -21,7 +21,7 @@ import {
 import { PackageCard } from "./PackageCard.js";
 import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
-import { indexAgo, lastUpdated, type CardPackage } from "../lib/catalog.js";
+import { PACKAGE_HREF, indexAgo, lastUpdated, type CardPackage } from "../lib/catalog.js";
 import { withBase } from "../lib/base.js";
 // TYPE-ONLY, and it has to stay that way: `../lib/search.js` (the matcher,
 // and the `/all.json` fetch behind it) is loaded with `await import()` below
@@ -31,7 +31,7 @@ import type { applyCutoff, Scores, SearchIndex } from "../lib/search.js";
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
-const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook"];
+const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook", "plugin"];
 
 function kindOrder(kind: string): number {
   const i = KNOWN_KINDS.indexOf(kind);
@@ -334,12 +334,14 @@ function PackageTable({
   packages,
   hasRatings,
   hasDownloads,
+  href,
   onKeyDown,
   rootRef,
 }: {
   packages: CardPackage[];
   hasRatings: boolean;
   hasDownloads: boolean;
+  href: string;
   onKeyDown: (event: KeyboardEvent) => void;
   rootRef: { current: HTMLElement | null };
 }) {
@@ -359,6 +361,7 @@ function PackageTable({
           pkg={p}
           hasRatings={hasRatings}
           hasDownloads={hasDownloads}
+          href={href}
           onKeyDown={onKeyDown}
         />
       ))}
@@ -373,9 +376,15 @@ export default function Catalog({
   packages,
   vscodeExtension,
   builtAt,
+  searchUrl = "/all.json",
+  href = PACKAGE_HREF,
 }: {
   packages: CardPackage[];
   vscodeExtension: string | null;
+  /** Site-root URL of the record array the search matcher loads; the marketplace serves its own. */
+  searchUrl?: string;
+  /** Card and row link template, see `packageHref`. */
+  href?: string;
   /** When this site was rendered, RFC 3339 UTC. See `GrimoireData.builtAt`. */
   builtAt: string;
 }) {
@@ -1134,7 +1143,7 @@ export default function Catalog({
       try {
         const search = await import("../lib/search.js");
         setCutoff(() => search.applyCutoff);
-        setIndex(await search.loadSearchIndex(withBase("/all.json")));
+        setIndex(await search.loadSearchIndex(withBase(searchUrl)));
       } catch (err) {
         console.error("catalog: search index unavailable, using substring match", err);
       }
@@ -1837,6 +1846,7 @@ export default function Catalog({
           packages={visible}
           hasRatings={hasRatings}
           hasDownloads={hasDownloads}
+          href={href}
           onKeyDown={onCardKeyDown}
           rootRef={gridRef}
         />
@@ -1852,6 +1862,7 @@ export default function Catalog({
               key={`${p.namespace}/${p.name}`}
               pkg={p}
               vscodeExtension={vscodeExtension}
+              href={href}
               activeKeywords={keywords}
               onToggleKeyword={toggleKeyword}
               keywordsExpanded={expandedKeywords.has(`${p.namespace}/${p.name}`)}

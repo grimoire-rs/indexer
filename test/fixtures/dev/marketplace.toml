@@ -1,0 +1,24 @@
+[marketplace]
+name = "dev-marketplace"
+owner = { name = "Acme" }
+description = "The plugins the Acme engineering department installs"
+repository = "https://github.com/acme/index.git"
+
+[plugins.review-kit]
+include = ["ghcr.io/acme/code-review:1", "ghcr.io/acme/rust-style:1"]
+description = "Review a diff against the team checklist and keep Rust idiomatic"
+homepage = "https://acme.example.test/review-kit"
+license = "Apache-2.0"
+category = "quality"
+keywords = ["review", "quality", "rust"]
+logo = "plugins/review-kit/logo.png"
+changelog = "plugins/review-kit/CHANGELOG.md"
+
+[plugins.review-kit.author]
+name = "Acme platform team"
+url = "https://acme.example.test"
+
+[plugins.hex]
+include = ["ghcr.io/acme/hex-plan:1", "ghcr.io/acme/starter-pack:1"]
+description = "Tiered multi-agent swarm orchestration: plan, execute, review, architect"
+category = "workflow"

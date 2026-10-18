@@ -31,8 +31,13 @@ count, and nothing is written back here.
 | `enterprise-compliance-policy-pack` | rule | Long name, twelve keywords → overflow. Also the **long-description** case: a summary long enough to wrap several lines, beside a **3:1 wide** logo. Together they are what pins the detail header's logo alignment — centring the tile against the text pushed it down the header as the description grew |
 | `many-versions` | skill | Fourteen tags → version picker and cascade. Also the one **rated ref with no thread URL**: the count renders as plain text, not a link, and the badge keeps both ends round. Carries the **1:2.5 tall** logo, the other extreme against the square tile |
 | `changelog-only` | agent | Changelog but no README → the tab reports its own absence |
+| `hex-plan` | skill | An indexed package named in `hex`'s README Contents section |
 | `gitlab.com/team/mirror` | rule | Second namespace, nested, GitLab `login` owner, non-`ghcr.io` host |
 | `long-address` | rule | A namespace far wider than the card's head, as the case for the address line's leading ellipsis — the card must trim `registry.internal.…/` off the front rather than wrap to a second line |
+
+`marketplace.toml` and `marketplace.lock` make this a `both`-mode site: two plugins whose members are packages of this index. `review-kit` is the full state (logo, README, CHANGELOG, author, licence, keywords, both members linked to their package pages); `hex` is the bare one (README only, so no logo, no CHANGELOG tab). `enrich/marketplace/` is what `grim-indexer enrich` leaves behind: `export/` is the tree `grim export marketplace` writes (one marketplace file and plugin tree per client, and the root README), `meta.json` carries `repository`, `clients` and the lock's members. The registry refs are the dev index's own (`ghcr.io/acme/*`), so a real `grim` cannot resolve them and the export is written by hand to the shape a real run produced for `grimoire-rs/e2e-marketplace`.
+
+`npm run dev -- --marketplace-only` drops every package from the scratch copy: `/` becomes the marketplace and the header has no tabs. `npm run dev:smoke:marketplace` asserts it.
 
 `.stats.json` also rates `ghcr.io/acme/gone`, which no `metadata.json`
 mentions — the catalog must invent no card for it.

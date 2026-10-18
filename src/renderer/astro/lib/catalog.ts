@@ -6,6 +6,7 @@
 // data itself is compiled by `src/data/` into `<outDir>/all.json`, so
 // nothing here walks the index tree.
 import type { CatalogPackage } from "../../types.js";
+import { withBase } from "./base.js";
 
 export type { CatalogPackage } from "../../types.js";
 
@@ -81,6 +82,17 @@ export function cardPackage(p: CatalogPackage): CardPackage {
     if (p[key] !== undefined) out[key] = p[key];
   }
   return out as CardPackage;
+}
+
+/** Where a package card links by default; `{namespace}` and `{name}` are filled per record. */
+export const PACKAGE_HREF = "/p/{namespace}/{name}/";
+
+/**
+ * A card's link from a template. A template and not a function: the catalog is
+ * a hydrated island, and a function cannot cross into its serialized props.
+ */
+export function packageHref(template: string, p: Pick<CardPackage, "namespace" | "name">): string {
+  return withBase(template.split("{namespace}").join(p.namespace).split("{name}").join(p.name));
 }
 
 /**

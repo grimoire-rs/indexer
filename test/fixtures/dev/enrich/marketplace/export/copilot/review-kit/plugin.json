@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "review-kit",
+  "version": "0.0.0+72e15b93cd90",
+  "description": "Review a diff against the team checklist and keep Rust idiomatic",
+  "author": {
+    "name": "Acme platform team",
+    "url": "https://acme.example.test"
+  },
+  "homepage": "https://acme.example.test/review-kit",
+  "license": "Apache-2.0",
+  "keywords": [
+    "review",
+    "quality",
+    "rust"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "category": "quality",
+        "developerName": "Acme platform team",
+        "logo": "./assets/logo.png",
+        "websiteURL": "https://acme.example.test/review-kit"
+      }
+    }
+  }
+}

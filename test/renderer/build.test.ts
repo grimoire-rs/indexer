@@ -11,7 +11,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildSite, RenderInputError } from "../../src/renderer/index.js";
+import { build as buildCommand } from "../../src/cli/build.js";
+import { buildSite, RenderInputError, stageMarketplace } from "../../src/renderer/index.js";
 import type { SiteConfig } from "../../src/config.js";
 import { KIND_MARKS } from "../../src/renderer/astro/components/KindMark.tsx";
 import { KINDS } from "../../src/validate/core/metadata.js";
@@ -107,7 +108,12 @@ function pickerNames(n: number): string[] {
   return [...menu.matchAll(/data-os-name="([^"]+)"/g)].map((m) => m[1]!);
 }
 
-async function render(site: string, overrides: SiteConfig = {}): Promise<Built> {
+async function render(
+  site: string,
+  overrides: SiteConfig = {},
+  /** Runs against the copied index root before the build — for sidecars a test wants present. */
+  prepare?: (root: string) => Promise<void>,
+): Promise<Built> {
   // The shipping shape, deliberately: a bare directory in os.tmpdir() with
   // no `node_modules` anywhere on its parent chain. `npx @grimoire-rs/indexer
   // build` runs in exactly that, with no local install — so if the renderer
@@ -132,6 +138,8 @@ async function render(site: string, overrides: SiteConfig = {}): Promise<Built> 
     '{"name":"code-review"}\n',
   );
 
+  await prepare?.(root);
+
   await buildSite({ root, outDir, config: { ...config, site, ...overrides } });
 
   const cssDir = path.join(outDir, "_astro");
@@ -141,7 +149,8 @@ async function render(site: string, overrides: SiteConfig = {}): Promise<Built> 
     outDir,
     read,
     indexHtml: await read("index.html"),
-    detailHtml: await read("p/github.com/acme/code-review/index.html"),
+    // Empty for an index with no packages (mode `marketplace`).
+    detailHtml: await read("p/github.com/acme/code-review/index.html").catch(() => ""),
     bundledCss: (
       await Promise.all(cssFiles.map((f) => fs.readFile(path.join(cssDir, f), "utf8")))
     ).join("\n"),
@@ -1548,105 +1557,232 @@ describe("the index-updated stamp", () => {
   });
 });
 
-// C-030 / S-027. The landing page exists only when `marketplace` is set. Three
-// builds cover it: the shared default one (key absent), a project-Pages one
-// with a GitHub URL (shorthand, default clients, base path), and one fed a
-// hostile name and URL straight into `buildSite` — past `loadConfig`'s
-// validation, so what is under test is that the page still escapes.
-describe("the /marketplace/ landing page", () => {
-  const clientRows = (html: string) =>
-    [...html.matchAll(/<section class="mk-row" data-client="([a-z]+)"/g)].map((m) => m[1]);
-  /** The page's visible text, entities decoded — what a reader would read. */
-  const visibleText = (html: string) =>
-    html
-      .replace(/<script[\s\S]*?<\/script>/g, "")
-      .replace(/<style[\s\S]*?<\/style>/g, "")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&");
-  const sitemapLocs = async (built: Built) =>
-    [...(await built.read("sitemap.xml")).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+// The index's own marketplace (C-007, C-008, C-010 data and sitemap): `enrich`
+// leaves an export tree under `enrich/marketplace/`, the build reads it, serves
+// the logos, stages the docs for the plugin pages and lists the routes per
+// site mode. What the pages print is `test/renderer/marketplace_modes.test.ts`'s.
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
-  let github: Built;
-  let githubHtml: string;
-  let hostile: Built;
-  let hostileHtml: string;
+/** An export tree with plugin `hex` (README, CHANGELOG, logo) and a bare `plain`, under the index root. */
+async function writeExport(root: string): Promise<void> {
+  const dir = path.join(root, "enrich/marketplace");
+  // C-005: a marketplace exists iff the manifest does.
+  await fs.writeFile(path.join(root, "marketplace.toml"), '[marketplace]\nname = "acme-plugins"\n');
+  const hex = path.join(dir, "export/claude/hex");
+  await fs.mkdir(path.join(hex, "assets"), { recursive: true });
+  await fs.writeFile(path.join(hex, "assets/logo.png"), PNG);
+  // Not the logo the listing's plugin ships: must not be published.
+  await fs.writeFile(path.join(hex, "assets/stray.png"), PNG);
+  await fs.writeFile(path.join(hex, "README.md"), "![hex](assets/logo.png)\n\n# Hex swarm\n");
+  await fs.writeFile(path.join(hex, "CHANGELOG.md"), "## 1.2.3\n");
+  await fs.mkdir(path.join(dir, "export/.claude-plugin"), { recursive: true });
+  await fs.writeFile(
+    path.join(dir, "export/.claude-plugin/marketplace.json"),
+    JSON.stringify({
+      name: "acme-plugins",
+      plugins: [
+        { name: "hex", description: "Swarm", version: "1.2.3", source: "./claude/hex" },
+        { name: "plain", description: "No files", source: "./claude/plain" },
+      ],
+    }),
+  );
+}
 
-  beforeAll(async () => {
-    github = await render(SUB_SITE, {
-      marketplace: { url: "https://github.com/acme/marketplace", name: "acme-plugins" },
-    });
-    githubHtml = await github.read("marketplace/index.html");
-    hostile = await render("https://index.example.test", {
-      marketplace: {
-        url: "https://gitlab.example.com/<script>alert(1)</script>/mk?a=1&b=2",
-        name: "<script>alert(2)</script>",
-        clients: ["claude", "cursor"],
-      },
-    });
-    hostileHtml = await hostile.read("marketplace/index.html");
-  }, 300_000);
+const sitemapLocs = async (built: Built) =>
+  [...(await built.read("sitemap.xml")).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
 
-  afterAll(async () => {
-    await fs.rm(github.root, { recursive: true, force: true });
-    await fs.rm(hostile.root, { recursive: true, force: true });
-  });
-
-  it("emits no route and no sitemap entry when the key is unset", async () => {
-    await expect(readOut("marketplace/index.html")).rejects.toThrow();
-    const locs = (await site.read("sitemap.xml")).match(/marketplace/g);
-    expect(locs).toBeNull();
-    expect(indexHtml).not.toContain("/marketplace/");
-  });
-
-  it("emits /marketplace/ with one row per default client, and no cursor row", () => {
-    expect(clientRows(githubHtml)).toEqual(["claude", "copilot", "codex", "qoder"]);
-  });
-
-  it("shows a github.com repo as owner/repo in every add command", () => {
-    const text = visibleText(githubHtml);
-    expect(text).toContain("/plugin marketplace add acme/marketplace");
-    expect(text).toContain("copilot plugin marketplace add acme/marketplace");
-    expect(text).toContain("codex plugin marketplace add acme/marketplace");
-    expect(text).toContain("qoder plugins marketplace add acme/marketplace");
-    expect(text).not.toContain("https://github.com/acme/marketplace");
-  });
-
-  it("names the <plugin>@<name> install form and date-stamps each row", () => {
-    const text = visibleText(githubHtml);
-    expect(text).toContain("/plugin install <plugin>@acme-plugins");
-    expect(text).toContain("codex plugin add <plugin>@acme-plugins");
-    expect([...text.matchAll(/verified 2026-09-29/g)]).toHaveLength(4);
-  });
-
-  it("lists the page in the sitemap, base path included, absolute", async () => {
-    const locs = await sitemapLocs(github);
-    expect(locs).toContain(`${SUB_SITE}/marketplace/`);
-    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 2);
-  });
-
-  it("prefixes every site-root URL on the page with the base path", () => {
-    for (const url of rootRelativeUrls(githubHtml)) {
-      expect(url.startsWith(`${SUB_BASE}/`), url).toBe(true);
+describe("the removed marketplace config key", () => {
+  it("fails the build with the migration message (S-007)", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "index-s007-"));
+    try {
+      await fs.writeFile(
+        path.join(root, "index.config.json"),
+        JSON.stringify({ site: "https://index.example.test", marketplace: { url: "https://github.com/acme/m", name: "m" } }),
+      );
+      await expect(buildCommand(root, {})).rejects.toThrow(
+        "marketplace was removed; commit marketplace.toml at the repository root",
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
     }
   });
+});
 
-  it("renders a GitLab URL as the full URL, and a cursor row only when listed", () => {
-    expect(clientRows(hostileHtml)).toEqual(["claude", "cursor"]);
-    const text = visibleText(hostileHtml);
-    expect(text).toContain(
-      "/plugin marketplace add https://gitlab.example.com/<script>alert(1)</script>/mk?a=1&b=2",
-    );
-    expect(text).toContain("Import from Repo");
+describe("a package index without a marketplace", () => {
+  it("emits no marketplace route, logo or sitemap entry", async () => {
+    await expect(readOut("marketplace/index.html")).rejects.toThrow();
+    await expect(readOut("marketplace/all.json")).rejects.toThrow();
+    await expect(readOut("marketplace/logos/hex.png")).rejects.toThrow();
+    expect(await sitemapLocs(site)).toHaveLength(FIXTURE_PACKAGES.length + 1);
+    expect(indexHtml).not.toContain("/marketplace/");
+  });
+});
+
+describe("stageMarketplace", () => {
+  const withDir = async (run: (dir: string, src: string) => Promise<void>) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "index-stage-"));
+    try {
+      const src = path.join(dir, "src");
+      await fs.mkdir(src);
+      await run(dir, src);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("copies docs where the content collections look and the logo into the staged public/", () =>
+    withDir(async (dir, src) => {
+      await fs.writeFile(path.join(src, "README.md"), "README.md");
+      await fs.writeFile(path.join(src, "CHANGELOG.md"), "CHANGELOG.md");
+      await fs.writeFile(path.join(src, "logo.png"), PNG);
+      const stage = path.join(dir, "stage");
+      await stageMarketplace(
+        stage,
+        new Map([
+          ["hex", { readme: path.join(src, "README.md"), changelog: path.join(src, "CHANGELOG.md"), logo: { ext: "png", file: path.join(src, "logo.png") } }],
+          ["plain", {}],
+        ]),
+      );
+      expect(await fs.readFile(path.join(stage, "marketplace-docs/hex/readme.md"), "utf8")).toBe("README.md");
+      expect(await fs.readFile(path.join(stage, "marketplace-docs/hex/changelog.md"), "utf8")).toBe("CHANGELOG.md");
+      expect(await fs.readFile(path.join(stage, "public/marketplace/logos/hex.png"))).toEqual(PNG);
+      expect(await fs.readdir(path.join(stage, "marketplace-docs"))).toEqual(["hex"]);
+    }));
+
+  it("still creates the docs directory when there is nothing to stage", () =>
+    withDir(async (dir) => {
+      await stageMarketplace(dir, new Map());
+      expect((await fs.stat(path.join(dir, "marketplace-docs"))).isDirectory()).toBe(true);
+    }));
+
+  it("points the README's own logo link at where the logo is served, base path included", () =>
+    withDir(async (dir, src) => {
+      await fs.writeFile(path.join(src, "README.md"), "![hex](assets/logo.svg)\n\n# Hex\n\nBody ![x](assets/other.png)\n");
+      await fs.writeFile(path.join(src, "logo.png"), PNG);
+      const files = new Map([["hex", { readme: path.join(src, "README.md"), logo: { ext: "png" as const, file: path.join(src, "logo.png") } }]]);
+      await stageMarketplace(path.join(dir, "a"), files);
+      await stageMarketplace(path.join(dir, "b"), files, "/index-repo");
+      expect(await fs.readFile(path.join(dir, "a/marketplace-docs/hex/readme.md"), "utf8")).toBe(
+        "![hex](/marketplace/logos/hex.png)\n\n# Hex\n\nBody ![x](assets/other.png)\n",
+      );
+      expect(await fs.readFile(path.join(dir, "b/marketplace-docs/hex/readme.md"), "utf8")).toContain("(/index-repo/marketplace/logos/hex.png)");
+    }));
+
+  it("drops the README's logo line when the plugin has no valid logo to serve", () =>
+    withDir(async (dir, src) => {
+      await fs.writeFile(path.join(src, "README.md"), "![hex](assets/logo.png)\n# Hex\n");
+      await stageMarketplace(dir, new Map([["hex", { readme: path.join(src, "README.md") }]]));
+      expect(await fs.readFile(path.join(dir, "marketplace-docs/hex/readme.md"), "utf8")).toBe("# Hex\n");
+    }));
+
+  it("refuses a file that changed after it was validated: a symlink, an oversized doc, a logo that is no longer one", () =>
+    withDir(async (dir, src) => {
+      const secret = path.join(dir, "secret");
+      await fs.writeFile(secret, "x");
+      await fs.symlink(secret, path.join(src, "README.md"));
+      await expect(stageMarketplace(path.join(dir, "s1"), new Map([["hex", { readme: path.join(src, "README.md") }]]))).rejects.toThrow(/README/);
+
+      await fs.writeFile(path.join(src, "CHANGELOG.md"), Buffer.alloc(2 * 1024 * 1024, "a"));
+      await expect(stageMarketplace(path.join(dir, "s2"), new Map([["hex", { changelog: path.join(src, "CHANGELOG.md") }]]))).rejects.toThrow(/CHANGELOG/);
+
+      await fs.writeFile(path.join(src, "logo.png"), "<html><script>alert(1)</script></html>");
+      await expect(
+        stageMarketplace(path.join(dir, "s3"), new Map([["hex", { logo: { ext: "png" as const, file: path.join(src, "logo.png") } }]])),
+      ).rejects.toThrow(/logo/);
+      await expect(fs.stat(path.join(dir, "s3/public/marketplace/logos/hex.png"))).rejects.toThrow();
+    }));
+});
+
+describe("an index whose marketplace only imports through a GUI (cursor)", () => {
+  let built: Built;
+
+  beforeAll(async () => {
+    built = await render(SUB_SITE, {}, async (root) => {
+      await fs.writeFile(path.join(root, "marketplace.toml"), '[marketplace]\nname = "acme-plugins"\n');
+      const dir = path.join(root, "enrich/marketplace");
+      await fs.mkdir(path.join(dir, "export/.cursor-plugin"), { recursive: true });
+      await fs.writeFile(
+        path.join(dir, "export/.cursor-plugin/marketplace.json"),
+        JSON.stringify({ name: "acme-plugins", plugins: [{ name: "hex", description: "Swarm", source: "./cursor/hex" }] }),
+      );
+      await fs.writeFile(path.join(dir, "meta.json"), JSON.stringify({ clients: ["cursor"], members: {} }));
+    });
+  }, 300_000);
+  afterAll(async () => {
+    await fs.rm(built.root, { recursive: true, force: true });
   });
 
-  it("escapes a hostile name and URL instead of emitting markup", () => {
-    // Neither `<script>alert` may survive as a tag, in any spelling the
-    // highlighter or the template could have written it.
-    expect(hostileHtml).not.toMatch(/<script>alert/i);
-    expect(hostileHtml).not.toContain("<script>alert(2)");
-    expect(visibleText(hostileHtml)).toContain("<plugin>@<script>alert(2)</script>");
+  it("lists no plugin URL whose page does not exist", async () => {
+    const locs = await sitemapLocs(built);
+    expect(locs.filter((l) => l.includes("/marketplace/") && l !== `${SUB_SITE}/marketplace/`)).toEqual([]);
+    await expect(built.read("marketplace/hex/index.html")).rejects.toThrow();
+  });
+});
+
+describe("an index with packages and a marketplace (mode both)", () => {
+  let built: Built;
+
+  beforeAll(async () => {
+    built = await render(SUB_SITE, {}, writeExport);
+  }, 300_000);
+  afterAll(async () => {
+    await fs.rm(built.root, { recursive: true, force: true });
+  });
+
+  it("lists /marketplace/ and each plugin page after the packages, absolute and under the base path", async () => {
+    const locs = await sitemapLocs(built);
+    expect(locs).toContain(`${SUB_SITE}/`);
+    expect(locs).toContain(`${SUB_SITE}/marketplace/`);
+    expect(locs).toContain(`${SUB_SITE}/marketplace/hex/`);
+    expect(locs).toContain(`${SUB_SITE}/marketplace/plain/`);
+    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 4);
+  });
+
+  it("publishes the validated logo under /marketplace/logos/<plugin>.<ext>, and only that one", async () => {
+    expect((await built.read("marketplace/logos/hex.png")).length).toBeGreaterThan(0);
+    expect(await fs.readdir(path.join(built.outDir, "marketplace/logos"))).toEqual(["hex.png"]);
+  });
+
+  it("renders the README's own logo link at the served logo, under the base path", async () => {
+    const page = await built.read("marketplace/hex/index.html");
+    expect(page).toContain(`<img src="${SUB_BASE}/marketplace/logos/hex.png" alt="hex">`);
+    expect(page).not.toContain("assets/logo.png");
+  });
+
+  // Needs the marketplace pages (I3): the record file is built from the data.
+  it("hands the plugin its site logo path in the data", async () => {
+    const records = JSON.parse(await built.read("marketplace/all.json"));
+    expect(records).toEqual([
+      expect.objectContaining({ name: "hex", logo: "/marketplace/logos/hex.png" }),
+      expect.objectContaining({ name: "plain" }),
+    ]);
+    expect(records[1].logo).toBeUndefined();
+  });
+});
+
+describe("a marketplace-only index (mode marketplace)", () => {
+  let built: Built;
+
+  beforeAll(async () => {
+    built = await render("https://index.example.test", {}, async (root) => {
+      await writeExport(root);
+      await fs.writeFile(path.join(root, "dist/all.json"), "[]\n");
+    });
+  }, 300_000);
+  afterAll(async () => {
+    await fs.rm(built.root, { recursive: true, force: true });
+  });
+
+  it("lists / and the plugin pages, and has no /marketplace/ page or entry", async () => {
+    expect(await sitemapLocs(built)).toEqual([
+      "https://index.example.test/",
+      "https://index.example.test/marketplace/hex/",
+      "https://index.example.test/marketplace/plain/",
+    ]);
+    await expect(built.read("marketplace/index.html")).rejects.toThrow();
+  });
+
+  it("still publishes the logo", async () => {
+    expect((await built.read("marketplace/logos/hex.png")).length).toBeGreaterThan(0);
   });
 });

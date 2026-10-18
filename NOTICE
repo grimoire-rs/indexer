@@ -28,3 +28,9 @@ Material Design Icons (@mdi/js)
   https://github.com/Templarian/MaterialDesign
   Licensed under the Apache License, Version 2.0.
   Used only for brand marks Lucide does not carry.
+
+Qoder mark
+  https://qoder.com
+  The mark from Qoder's own site logo, inlined as SVG path data in
+  `src/renderer/astro/lib/commands.ts`. A trademark of its owner, used only to
+  name the client.
