@@ -7,10 +7,11 @@
  * size cap applies before any content is loaded.
  */
 
-import { lstat, readFile, realpath } from "node:fs/promises";
-import { isAbsolute, resolve, sep } from "node:path";
+import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, resolve, sep } from "node:path";
 
 import { MAX_METADATA_BYTES } from "../core/metadata.js";
+import { parseIndexPath, type Forge } from "../core/paths.js";
 
 export type FileRead =
   | { kind: "missing" }
@@ -30,6 +31,7 @@ function contained(base: string, target: string): boolean {
 export async function readIndexFile(
   root: string,
   relative: string,
+  maxBytes: number = MAX_METADATA_BYTES,
 ): Promise<FileRead> {
   if (relative.includes("\0") || isAbsolute(relative)) {
     return { kind: "error", reason: "path must be relative to the index root" };
@@ -61,8 +63,8 @@ export async function readIndexFile(
     return { kind: "error", reason: "symlinks are not accepted" };
   }
   if (!stat.isFile()) return { kind: "error", reason: "not a regular file" };
-  if (stat.size > MAX_METADATA_BYTES) {
-    return { kind: "error", reason: `larger than ${MAX_METADATA_BYTES} bytes` };
+  if (stat.size > maxBytes) {
+    return { kind: "error", reason: `larger than ${maxBytes} bytes` };
   }
 
   // Catches a symlinked *parent* directory, which lstat on the leaf cannot see.
@@ -72,4 +74,33 @@ export async function readIndexFile(
   }
 
   return { kind: "text", text: await readFile(target, "utf8") };
+}
+
+const MAX_INDEX_DEPTH = 8;
+
+/**
+ * Every `index/<host>/<ns>/<pkg>/metadata.json` under `root`, as repo-relative
+ * paths - the same grammar the path gate admits, so a stray `metadata.json`
+ * elsewhere under `index/` is not a package. Symlinks are skipped, not
+ * followed — the tree is untrusted.
+ */
+export async function listIndexMetadata(
+  root: string,
+  forge: Forge,
+  host: string,
+): Promise<string[]> {
+  const found: string[] = [];
+  const walk = async (relative: string, depth: number): Promise<void> => {
+    if (depth > MAX_INDEX_DEPTH) return;
+    const entries = await readdir(join(root, relative), { withFileTypes: true }).catch(
+      () => [],
+    );
+    for (const entry of entries) {
+      const child = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) await walk(child, depth + 1);
+      else if (entry.isFile() && parseIndexPath(child, forge, host) !== null) found.push(child);
+    }
+  };
+  await walk("index", 0);
+  return found;
 }

@@ -41,6 +41,8 @@ on:
     paths:
       - "index/**"
       - index-policy.json
+      - marketplace.toml
+      - marketplace.lock
 
 permissions: {}
 

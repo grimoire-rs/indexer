@@ -35,6 +35,7 @@ import { CliError, EXIT } from "../../src/cli/exit.js";
 import { run } from "../../src/cli/main.js";
 import { resolveOutDir } from "../../src/cli/out_dir.js";
 import { SiteConfigError } from "../../src/config.js";
+import { MARKETPLACE_FILES } from "../../src/validate/core/marketplace.js";
 
 const PAGES = ".github/workflows/pages.yml";
 const VALIDATE = ".github/workflows/validate.yml";
@@ -747,6 +748,17 @@ describe("generated GitHub workflows", () => {
     expect(collect, "no status filter").not.toContain("removed");
   });
 
+  // The gate is the only thing that puts marketplace changes on manual review,
+  // so a trigger list that omits the marketplace files lets a marketplace-only
+  // pull request skip the gate entirely - and with it the review reason.
+  it("triggers on every path the gate judges", () => {
+    const paths = dig(yaml.load(read(VALIDATE)), "on", "pull_request_target", "paths");
+
+    expect(paths).toEqual(
+      expect.arrayContaining(["index/**", "index-policy.json", ...MARKETPLACE_FILES]),
+    );
+  });
+
   // The scaffold told users to require the status check `validate`. As a thin
   // caller it reported `<caller job> / <called job>` instead, so that context
   // never reported and a passing gate sat at BLOCKED forever —
@@ -775,6 +787,15 @@ describe("generated GitLab CI", () => {
 
     expect(dig(gitlab, "stages")).toEqual(["test", "deploy"]);
     expect(dig(gitlab, "pages", "artifacts", "paths")).toEqual(["public"]);
+  });
+
+  // A `changes:` filter on the gate job is the GitLab form of the same hole:
+  // a merge request touching only the marketplace files would never run it.
+  it("runs the gate for every merge request, with no changes: filter", () => {
+    const rules = dig(yaml.load(read(GITLAB)), "grim-indexer:validate", "rules") as object[];
+
+    expect(rules.length).toBeGreaterThan(0);
+    expect(JSON.stringify(rules)).not.toContain("changes");
   });
 
   it("hands the gate every changed path, unfiltered", () => {
