@@ -45,4 +45,18 @@ const contentData = defineCollection({
   }),
 });
 
-export const collections = { readmes, changelogs, contents, contentData };
+// The index's own marketplace docs, staged by the build as
+// `<stage>/marketplace-docs/<plugin>/{readme,changelog}.md` (C-007). Ids are
+// `marketplace/docs/<plugin>`, so they cannot collide with a package id.
+const marketplaceDocId = (file: "readme" | "changelog") => ({ entry }: { entry: string }) =>
+  `marketplace/docs/${entry.replace(new RegExp(`/${file}\\.md$`), "")}`;
+
+const marketplaceReadmes = defineCollection({
+  loader: glob({ pattern: "*/readme.md", base: "./marketplace-docs", generateId: marketplaceDocId("readme") }),
+});
+
+const marketplaceChangelogs = defineCollection({
+  loader: glob({ pattern: "*/changelog.md", base: "./marketplace-docs", generateId: marketplaceDocId("changelog") }),
+});
+
+export const collections = { readmes, changelogs, contents, contentData, marketplaceReadmes, marketplaceChangelogs };

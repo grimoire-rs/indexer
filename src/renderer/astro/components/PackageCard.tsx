@@ -14,11 +14,11 @@ import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { CardLogo } from "./CardLogo.js";
 import { CopyButton } from "./CopyButton.js";
-import { withBase } from "../lib/base.js";
 import {
   compactCount,
   exactCount,
   lastUpdated,
+  packageHref,
   timeAgo,
   vscodeUrl,
   type CardPackage,
@@ -32,6 +32,8 @@ export interface PackageCardProps {
    * the build-time payload here would ship the whole catalog twice.
    */
   vscodeExtension: string | null;
+  /** Link template, see `packageHref`. */
+  href: string;
   /** Keyword facets currently applied, so a chip can render itself pressed. */
   activeKeywords: string[];
   /** Apply or clear one keyword facet. */
@@ -54,6 +56,7 @@ const INLINE_KEYWORDS = 5;
 export function PackageCard({
   pkg: p,
   vscodeExtension,
+  href,
   activeKeywords,
   onToggleKeyword,
   keywordsExpanded,
@@ -91,7 +94,7 @@ export function PackageCard({
           <CardLogo pkg={p} />
           <h2 data-slot="package-name">
             <a
-              href={withBase(`/p/${p.namespace}/${p.name}/`)}
+              href={packageHref(href, p)}
               title={`${p.namespace}/${p.name}`}
               tabIndex={-1}
             >
@@ -219,15 +222,20 @@ export function PackageCard({
             {/* Global first, matching the hero's scope picker — the two
                 are the same choice in two places, so they lead with the
                 same one. */}
-            <CopyButton
-              command={`grim add --global ${p.ref}`}
-              variant="global"
-              name={`global add for ${p.name}`}
-            />
-            <CopyButton
-              command={`grim add ${p.ref}`}
-              name={`project add for ${p.name}`}
-            />
+            {/* A plugin installs through its harness, on its page: `grim add` has no such ref. */}
+            {(p.kind as string) !== "plugin" && (
+              <>
+                <CopyButton
+                  command={`grim add --global ${p.ref}`}
+                  variant="global"
+                  name={`global add for ${p.name}`}
+                />
+                <CopyButton
+                  command={`grim add ${p.ref}`}
+                  name={`project add for ${p.name}`}
+                />
+              </>
+            )}
             {vscodeUrl(vscodeExtension, p.ref) && (
               <a
                 class="copy vscode"

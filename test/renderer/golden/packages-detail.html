@@ -1,0 +1,306 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Review a diff"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>code-review — acme package index</title><meta property="og:title" content="code-review — acme package index"><meta property="og:description" content="Review a diff"><meta property="og:image" content="/logos/github.com/acme/code-review.svg"><meta name="twitter:card" content="summary"><script>
+      // Reading `localStorage` *throws* in a browser set to block site data —
+      // it does not return null — and everything below this point, the
+      // command-bar helpers included, lives in the same script block. One
+      // guarded reader, so a blocked store costs a preference rather than
+      // the page.
+      const pref = (key) => {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      };
+
+      // Before first paint: stored preference wins, else system scheme.
+      document.documentElement.dataset.theme =
+        pref("theme") ??
+        (matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light");
+
+      // Before first paint too, and for the same reason the theme is: this
+      // one moves the space scale, so applying it after hydration would
+      // relayout the whole page in front of the reader. Absent attribute is
+      // the comfortable default, so only the non-default value is ever
+      // written — the same shape every other stored preference uses.
+      if (pref("grim.catalog.density") === "compact") {
+        document.documentElement.dataset.density = "compact";
+      }
+
+      // Also before first paint: a deep link (a keyword chip on a package
+      // page) or a stored preference means the catalog the server rendered —
+      // every package, empty search box, name order, deprecated hidden, as
+      // cards — is the wrong one. Flag it so CSS holds the catalog back
+      // rather than showing the full list and rearranging it a moment
+      // later. The island drops the flag once it has applied the view —
+      // which is the render after hydration, never the hydrating one
+      // itself; the timeout is the failsafe for an island that never
+      // hydrates, where a flash beats a blank page.
+      const view = new URLSearchParams(location.search);
+      const arranged = ["sort", "dir", "deprecated", "view"].some((k) =>
+        pref("grim.catalog." + k),
+      );
+      if (view.get("q") || view.get("kind") || view.get("kw") || arranged) {
+        document.documentElement.dataset.query = "";
+        setTimeout(() => delete document.documentElement.dataset.query, 3000);
+      }
+
+      // Selecting one choice in a command bar. Defined here, in the head,
+      // because it has two callers that cannot share a script: the click
+      // handler at the end of the document, and the host-platform preselect
+      // that has to run while the hero is still being parsed (see
+      // `index.astro`). One definition, so the two cannot drift.
+      window.__grimPick = (bar, pick) => {
+        const command = pick.dataset.osPick;
+        const field = bar.querySelector("[data-copy]");
+        const code = field?.querySelector("code");
+        // One element is both the shown command and what gets copied, so
+        // they cannot drift apart.
+        if (code) code.textContent = command;
+        if (field) field.dataset.copy = command;
+        // Keep the toast's name in step with the choice: the bar's noun is
+        // fixed ("install command"), the choice supplies the adjective.
+        if (field && bar.dataset.osNoun) {
+          field.dataset.copyName = `${pick.dataset.osName} ${bar.dataset.osNoun}`;
+        }
+        // A menu item is a `menuitemradio`; a card is a native radio input,
+        // which carries its own checked state. Matched by name, not identity:
+        // a bar can offer one choice twice (hero cards and the field's menu),
+        // and picking either must check both.
+        for (const other of bar.querySelectorAll("[data-os-pick]")) {
+          const on = other === pick || (!!pick.dataset.osName && other.dataset.osName === pick.dataset.osName);
+          if (other.type === "radio") other.checked = on;
+          else other.setAttribute("aria-checked", on ? "true" : "false");
+        }
+        // The trigger carries every glyph and shows one; swapping which is
+        // hidden beats rewriting an SVG path.
+        for (const glyph of bar.querySelectorAll("[data-os-glyph]")) {
+          glyph.hidden = glyph.dataset.osGlyph !== pick.dataset.osName;
+        }
+        // The action segment follows the choice where it has one to follow:
+        // the registry bar's VS Code link carries the scope the command names,
+        // so picking Global cannot leave the button writing project config.
+        // A choice with no href leaves the link alone rather than blanking it.
+        const link = bar.querySelector("[data-os-link]");
+        if (link && pick.dataset.osHref) link.href = pick.dataset.osHref;
+      };
+
+      // The platform a bar should start on, or null for one this visitor's
+      // host is not among. Order matters: a macOS UA string contains "Mac"
+      // but a Windows one contains "Win", and ChromeOS reports "CrOS" while
+      // running the same shell installer as Linux.
+      window.__grimHostOs = () => {
+        const ua = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent;
+        if (/mac|iphone|ipad|darwin/i.test(ua)) return "macOS";
+        if (/win/i.test(ua)) return "Windows";
+        if (/linux|android|cros|x11/i.test(ua)) return "Linux";
+        return null;
+      };
+    </script><link rel="stylesheet" href="/_astro/CommandBar.<HASH>.css"><link rel="stylesheet" href="/_astro/PackageDetail.<HASH>.css"></head><body><header data-slot="site-header"><div class="shell header-row"><a class="brand" href="/" data-slot="brand"><img class="brand-logo" src="/logo.svg" alt=""><span class="brand-mark">acme</span> package index</a><nav><a href="https://docs.example.test" target="_blank" rel="noopener noreferrer">docs</a><a href="https://github.com/acme/index" target="_blank" rel="noopener noreferrer">github</a><button id="theme-toggle" type="button" aria-label="Toggle theme"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-moon when-light" aria-hidden="true"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"></path></svg><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sun when-dark" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></button></nav></div></header><main class="shell"><div class="detail" data-astro-cid-ebjv2i7q><div class="detail-body" data-slot="detail-body" data-astro-cid-ebjv2i7q><div class="detail-col" data-astro-cid-ebjv2i7q><header class="detail-head" data-slot="detail-header" data-astro-cid-ebjv2i7q><span class="tile logo-slot" data-static data-state="loading" data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image logo-mark mark-loading" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image-off logo-mark mark-broken" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><line x1="2" x2="22" y1="2" y2="22"></line><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"></path><line x1="13.5" x2="6" y1="13.5" y2="21"></line><line x1="18" x2="21" y1="12" y2="15"></line><path d="M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"></path><path d="M21 15V5a2 2 0 0 0-2-2H9"></path></svg><img src="/logos/github.com/acme/code-review.svg" alt="" data-astro-cid-ebjv2i7q></span><div class="detail-head-text" data-astro-cid-ebjv2i7q><h1 data-astro-cid-ebjv2i7q>code-review <span class="badge kind-skill" data-astro-cid-ebjv2i7q>skill</span><span class="badge compat" title="Built for claude-code, cursor" data-astro-cid-ebjv2i7q>claude-code, cursor</span></h1><p class="summary" data-astro-cid-ebjv2i7q>Review a diff</p><p class="byline" data-astro-cid-ebjv2i7q>by Acme Platform Team · Acme, Inc.</p></div></header><div class="cmd-bar" data-os-switch data-os-noun="add command for code-review"><details class="os-menu"><summary title="Scope" aria-label="Choose the scope"><span class="os-glyph" data-os-glyph="Global"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg></span><span class="os-glyph" data-os-glyph="Project" hidden><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-root" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path><circle cx="12" cy="13" r="2"></circle><path d="M12 15v5"></path></svg></span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></summary><ul role="menu"><li><button type="button" role="menuitemradio" aria-checked="true" data-os-pick="grim add --global ghcr.io/acme/code-review" data-os-name="Global"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span>Global</span></button></li><li><button type="button" role="menuitemradio" aria-checked="false" data-os-pick="grim add ghcr.io/acme/code-review" data-os-name="Project"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-root" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path><circle cx="12" cy="13" r="2"></circle><path d="M12 15v5"></path></svg><span>Project</span></button></li></ul></details><button type="button" class="cmd-field" data-slot="install-command" data-copy="grim add --global ghcr.io/acme/code-review" data-copy-name="Global add command for code-review" aria-label="Copy the add command"><code>grim add --global ghcr.io/acme/code-review</code><span class="cmd-icons" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy icon-idle" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check icon-done" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><span class="sr-only" role="status"></span></button><a class="seg brand-link" href="vscode://acme.acme-vscode/open?repo=ghcr.io%2Facme%2Fcode-review" title="Open in VS Code" aria-label="Open code-review in VS Code" data-astro-cid-ebjv2i7q><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17,16.47V7.39L11,11.93M2.22,9.19C1.92,8.87 1.91,8.37 2.2,8.04L3.4,6.93C3.6,6.75 4.09,6.67 4.45,6.93L7.87,9.54L15.8,2.29C16.12,1.97 16.67,1.84 17.3,2.17L21.3,4.08C21.66,4.29 22,4.62 22,5.23V18.73C22,19.13 21.71,19.56 21.4,19.73L17,21.83C16.68,21.96 16.08,21.84 15.87,21.63L7.85,14.33L4.45,16.93C4.07,17.19 3.6,17.12 3.4,16.93L2.2,15.83C1.88,15.5 1.92,14.96 2.25,14.63L5.25,11.93"></path></svg></a></div><main class="detail-main" data-astro-cid-ebjv2i7q><input type="radio" name="panel" id="panel-readme" class="sr-only" checked data-astro-cid-ebjv2i7q><input type="radio" name="panel" id="panel-contents" class="sr-only" data-astro-cid-ebjv2i7q><input type="radio" name="panel" id="panel-changelog" class="sr-only" data-astro-cid-ebjv2i7q><div class="ribbon" data-astro-cid-ebjv2i7q><label for="panel-readme" data-astro-cid-ebjv2i7q>Readme</label><label for="panel-contents" data-astro-cid-ebjv2i7q>Contents</label><label for="panel-changelog" data-astro-cid-ebjv2i7q>Changelog</label><span class="rating-group" data-astro-cid-ebjv2i7q><a class="rating-count" href="https://github.com/acme/index/discussions/42" target="_blank" rel="noopener noreferrer" title="12 upvotes — open the thread to vote" aria-label="12 upvotes. Open the voting thread" data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-big-up" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z"></path></svg>12</a><a class="rating-vote" href="vscode://acme.acme-vscode/vote?repo=ghcr.io%2Facme%2Fcode-review" title="Upvote in VS Code" aria-label="Upvote code-review in VS Code" data-astro-cid-ebjv2i7q><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M17,16.47V7.39L11,11.93M2.22,9.19C1.92,8.87 1.91,8.37 2.2,8.04L3.4,6.93C3.6,6.75 4.09,6.67 4.45,6.93L7.87,9.54L15.8,2.29C16.12,1.97 16.67,1.84 17.3,2.17L21.3,4.08C21.66,4.29 22,4.62 22,5.23V18.73C22,19.13 21.71,19.56 21.4,19.73L17,21.83C16.68,21.96 16.08,21.84 15.87,21.63L7.85,14.33L4.45,16.93C4.07,17.19 3.6,17.12 3.4,16.93L2.2,15.83C1.88,15.5 1.92,14.96 2.25,14.63L5.25,11.93"></path></svg></a></span></div><div class="prose tab-panel" id="tab-readme" data-astro-cid-ebjv2i7q><h1 id="code-review">code-review</h1>
+<p>Fixture README, loaded from <code>enrich/</code> relative to the Astro root.</p>
+</div><div class="prose tab-panel" id="tab-contents" data-astro-cid-ebjv2i7q><h2 id="code-review">code-review</h2>
+<p>The entry point the artifact ships — <code>SKILL.md</code>, rendered rather than quoted.</p>
+<ol>
+<li>Read the diff.</li>
+<li>Check it against the list.</li>
+<li>Say what is wrong, once.</li>
+</ol>
+</div><div class="prose tab-panel" id="tab-changelog" data-astro-cid-ebjv2i7q><h1 id="changelog">Changelog</h1>
+<h2 id="123">1.2.3</h2>
+<ul>
+<li>Fixture changelog, loaded from <code>enrich/</code> beside the README.</li>
+</ul>
+<h2 id="110">1.1.0</h2>
+<ul>
+<li>The first release the strip still lists under “older”.</li>
+</ul>
+</div></main></div><aside class="detail-rail" data-slot="detail-rail" data-astro-cid-ebjv2i7q><section data-astro-cid-ebjv2i7q><h2 data-astro-cid-ebjv2i7q>Versions</h2><div class="cascade" data-astro-cid-ebjv2i7q><button type="button" class="version current" data-slot="version-pill" data-copy="ghcr.io/acme/code-review" data-copy-name="reference" data-menu="vm-latest" aria-current="true" title="Copy ghcr.io/acme/code-review — right-click for commands" data-astro-cid-3oqgkrws>latest</button><div popover="manual" id="vm-latest" class="version-menu" data-astro-cid-3oqgkrws><button type="button" class="cmd" data-copy="ghcr.io/acme/code-review" data-copy-name="grim copy reference" title="ghcr.io/acme/code-review" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>copy reference</span></button><button type="button" class="cmd" data-copy="grim add ghcr.io/acme/code-review" data-copy-name="grim add to project" title="grim add ghcr.io/acme/code-review" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add to project</span></button><button type="button" class="cmd" data-copy="grim add --global ghcr.io/acme/code-review" data-copy-name="grim add globally" title="grim add --global ghcr.io/acme/code-review" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add globally</span></button><button type="button" class="cmd" data-copy="grim describe ghcr.io/acme/code-review" data-copy-name="grim describe" title="grim describe ghcr.io/acme/code-review" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>describe</span></button><button type="button" class="cmd" data-copy="grim fetch ghcr.io/acme/code-review" data-copy-name="grim fetch" title="grim fetch ghcr.io/acme/code-review" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>fetch</span></button></div><button type="button" class="version" data-slot="version-pill" data-copy="ghcr.io/acme/code-review:1" data-copy-name="pinned 1" data-menu="vm-1" title="Copy ghcr.io/acme/code-review:1 — right-click for commands" data-astro-cid-3oqgkrws>1</button><div popover="manual" id="vm-1" class="version-menu" data-astro-cid-3oqgkrws><button type="button" class="cmd" data-copy="ghcr.io/acme/code-review:1" data-copy-name="grim copy reference" title="ghcr.io/acme/code-review:1" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>copy reference</span></button><button type="button" class="cmd" data-copy="grim add ghcr.io/acme/code-review:1" data-copy-name="grim add to project" title="grim add ghcr.io/acme/code-review:1" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add to project</span></button><button type="button" class="cmd" data-copy="grim add --global ghcr.io/acme/code-review:1" data-copy-name="grim add globally" title="grim add --global ghcr.io/acme/code-review:1" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add globally</span></button><button type="button" class="cmd" data-copy="grim describe ghcr.io/acme/code-review:1" data-copy-name="grim describe" title="grim describe ghcr.io/acme/code-review:1" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>describe</span></button><button type="button" class="cmd" data-copy="grim fetch ghcr.io/acme/code-review:1" data-copy-name="grim fetch" title="grim fetch ghcr.io/acme/code-review:1" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>fetch</span></button></div><button type="button" class="version" data-slot="version-pill" data-copy="ghcr.io/acme/code-review:1.2" data-copy-name="pinned 1.2" data-menu="vm-1-2" title="Copy ghcr.io/acme/code-review:1.2 — right-click for commands" data-astro-cid-3oqgkrws>1.2</button><div popover="manual" id="vm-1-2" class="version-menu" data-astro-cid-3oqgkrws><button type="button" class="cmd" data-copy="ghcr.io/acme/code-review:1.2" data-copy-name="grim copy reference" title="ghcr.io/acme/code-review:1.2" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>copy reference</span></button><button type="button" class="cmd" data-copy="grim add ghcr.io/acme/code-review:1.2" data-copy-name="grim add to project" title="grim add ghcr.io/acme/code-review:1.2" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add to project</span></button><button type="button" class="cmd" data-copy="grim add --global ghcr.io/acme/code-review:1.2" data-copy-name="grim add globally" title="grim add --global ghcr.io/acme/code-review:1.2" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add globally</span></button><button type="button" class="cmd" data-copy="grim describe ghcr.io/acme/code-review:1.2" data-copy-name="grim describe" title="grim describe ghcr.io/acme/code-review:1.2" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>describe</span></button><button type="button" class="cmd" data-copy="grim fetch ghcr.io/acme/code-review:1.2" data-copy-name="grim fetch" title="grim fetch ghcr.io/acme/code-review:1.2" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>fetch</span></button></div><button type="button" class="version" data-slot="version-pill" data-copy="ghcr.io/acme/code-review:1.2.3" data-copy-name="pinned 1.2.3" data-menu="vm-1-2-3" title="Copy ghcr.io/acme/code-review:1.2.3 — right-click for commands" data-astro-cid-3oqgkrws>1.2.3</button><div popover="manual" id="vm-1-2-3" class="version-menu" data-astro-cid-3oqgkrws><button type="button" class="cmd" data-copy="ghcr.io/acme/code-review:1.2.3" data-copy-name="grim copy reference" title="ghcr.io/acme/code-review:1.2.3" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>copy reference</span></button><button type="button" class="cmd" data-copy="grim add ghcr.io/acme/code-review:1.2.3" data-copy-name="grim add to project" title="grim add ghcr.io/acme/code-review:1.2.3" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add to project</span></button><button type="button" class="cmd" data-copy="grim add --global ghcr.io/acme/code-review:1.2.3" data-copy-name="grim add globally" title="grim add --global ghcr.io/acme/code-review:1.2.3" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add globally</span></button><button type="button" class="cmd" data-copy="grim describe ghcr.io/acme/code-review:1.2.3" data-copy-name="grim describe" title="grim describe ghcr.io/acme/code-review:1.2.3" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>describe</span></button><button type="button" class="cmd" data-copy="grim fetch ghcr.io/acme/code-review:1.2.3" data-copy-name="grim fetch" title="grim fetch ghcr.io/acme/code-review:1.2.3" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>fetch</span></button></div></div><details class="older" data-astro-cid-ebjv2i7q><summary data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="m9 18 6-6-6-6"></path></svg>older versions</summary><div class="cascade" data-astro-cid-ebjv2i7q><button type="button" class="version" data-slot="version-pill" data-copy="ghcr.io/acme/code-review:1.1.0" data-copy-name="pinned 1.1.0" data-menu="vm-1-1-0" title="Copy ghcr.io/acme/code-review:1.1.0 — right-click for commands" data-astro-cid-3oqgkrws>1.1.0</button><div popover="manual" id="vm-1-1-0" class="version-menu" data-astro-cid-3oqgkrws><button type="button" class="cmd" data-copy="ghcr.io/acme/code-review:1.1.0" data-copy-name="grim copy reference" title="ghcr.io/acme/code-review:1.1.0" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>copy reference</span></button><button type="button" class="cmd" data-copy="grim add ghcr.io/acme/code-review:1.1.0" data-copy-name="grim add to project" title="grim add ghcr.io/acme/code-review:1.1.0" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add to project</span></button><button type="button" class="cmd" data-copy="grim add --global ghcr.io/acme/code-review:1.1.0" data-copy-name="grim add globally" title="grim add --global ghcr.io/acme/code-review:1.1.0" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>add globally</span></button><button type="button" class="cmd" data-copy="grim describe ghcr.io/acme/code-review:1.1.0" data-copy-name="grim describe" title="grim describe ghcr.io/acme/code-review:1.1.0" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>describe</span></button><button type="button" class="cmd" data-copy="grim fetch ghcr.io/acme/code-review:1.1.0" data-copy-name="grim fetch" title="grim fetch ghcr.io/acme/code-review:1.1.0" data-astro-cid-3oqgkrws><span data-astro-cid-3oqgkrws>fetch</span></button></div></div></details></section><section class="downloads" data-astro-cid-ebjv2i7q><h2 data-astro-cid-ebjv2i7q>Downloads</h2><table data-astro-cid-ebjv2i7q><tbody data-astro-cid-ebjv2i7q><tr class="dl-total" data-astro-cid-ebjv2i7q><th scope="row" data-astro-cid-ebjv2i7q>total</th><td data-astro-cid-ebjv2i7q>8,241</td></tr><tr data-astro-cid-ebjv2i7q><th scope="row" data-astro-cid-ebjv2i7q>1.2.3</th><td data-astro-cid-ebjv2i7q>7,100</td></tr></tbody></table><details class="older dl-fold" data-astro-cid-ebjv2i7q><summary data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="m9 18 6-6-6-6"></path></svg>older versions</summary><div class="dl-scroll" role="region" aria-label="Downloads per release" tabindex="0" data-astro-cid-ebjv2i7q><table data-astro-cid-ebjv2i7q><tbody data-astro-cid-ebjv2i7q><tr data-astro-cid-ebjv2i7q><th scope="row" data-astro-cid-ebjv2i7q>1.1.0</th><td data-astro-cid-ebjv2i7q>1,141</td></tr></tbody></table></div></details></section><section class="support" data-astro-cid-ebjv2i7q><h2 data-astro-cid-ebjv2i7q>Get help</h2><ul data-astro-cid-ebjv2i7q><li data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bug" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M12 20v-9"></path><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z"></path><path d="M14.12 3.88 16 2"></path><path d="M21 21a4 4 0 0 0-3.81-4"></path><path d="M21 5a4 4 0 0 1-3.55 3.97"></path><path d="M22 13h-4"></path><path d="M3 21a4 4 0 0 1 3.81-4"></path><path d="M3 5a4 4 0 0 0 3.55 3.97"></path><path d="M6 13H2"></path><path d="m8 2 1.88 1.88"></path><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"></path></svg><a href="https://github.com/acme/code-review/issues" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>Issue tracker</a></li><li data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-circle" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"></path></svg><a href="https://acme.example/chat" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>Chat</a></li><li data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"></path><rect x="2" y="4" width="20" height="16" rx="2"></rect></svg><a href="mailto:support@acme.example" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>Contact</a></li><li data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-alert" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg><a href="https://github.com/acme/code-review/security/policy" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>Report a vulnerability</a></li></ul></section><section data-astro-cid-ebjv2i7q><h2 data-astro-cid-ebjv2i7q>Details</h2><dl data-astro-cid-ebjv2i7q><dt data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scale" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M12 3v18"></path><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"></path><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M7 21h10"></path></svg>License</dt><dd data-astro-cid-ebjv2i7q>Apache-2.0</dd><dt data-astro-cid-ebjv2i7q><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12,2A10,10 0 0,0 2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10 0 0,0 12,2Z"></path></svg>Repository</dt><dd data-astro-cid-ebjv2i7q><a href="https://github.com/acme/code-review" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>source</a></dd><dt data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-house" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>Homepage</dt><dd data-astro-cid-ebjv2i7q><a href="https://acme.example/code-review" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>website</a></dd><dt data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"></path></svg>Docs</dt><dd data-astro-cid-ebjv2i7q><a href="https://docs.acme.example/code-review" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>documentation</a></dd><dt data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>Owner</dt><dd data-astro-cid-ebjv2i7q><a href="https://github.com/acme" target="_blank" rel="noopener noreferrer" data-astro-cid-ebjv2i7q>acme</a></dd><dt data-astro-cid-ebjv2i7q><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw-clock" aria-hidden="true" data-astro-cid-ebjv2i7q="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg>Updated</dt><dd data-astro-cid-ebjv2i7q><time datetime="2026-07-01T10:00:00+00:00" title="2026-07-01T10:00:00+00:00 · revision 3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39" data-astro-cid-ebjv2i7q>4 months ago</time></dd></dl><ul class="keywords" data-astro-cid-ebjv2i7q><li data-astro-cid-ebjv2i7q><a href="/?kw=review" title="Find packages tagged review" data-astro-cid-ebjv2i7q>review</a></li><li data-astro-cid-ebjv2i7q><a href="/?kw=diff" title="Find packages tagged diff" data-astro-cid-ebjv2i7q>diff</a></li></ul></section></aside></div></div></main><footer data-slot="site-footer"><div class="shell"><p>Raw data: <a href="/all.json"><code>/all.json</code></a> · fixture footer note</p><p class="footer-links"><a href="https://acme.example.test/privacy" target="_blank" rel="noopener noreferrer">privacy</a></p><p class="attribution">Built with <span aria-hidden="true">♥</span><span class="sr-only">love</span> using <a href="https://grimoire.rs" target="_blank" rel="noopener">Grimoire</a></p></div></footer><div id="copy-toast" aria-hidden="true"><span class="toast-name"></span><code class="toast-value"></code></div><script>
+      // Optional: an index repo that replaces `SiteHeader.astro` is free to
+      // ship a header with no toggle, and this block runs on every page
+      // regardless. Unguarded, that one dereference threw and took every
+      // script below it with it — copy buttons, picker wiring, toast.
+      document.getElementById("theme-toggle")?.addEventListener("click", () => {
+        const root = document.documentElement;
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        root.dataset.theme = next;
+        localStorage.setItem("theme", next);
+      });
+
+      // Static-page logo slots. The catalog island runs the same state
+      // machine in Preact, because it owns those nodes; this drives the ones
+      // Astro rendered. The placeholder is already in the markup, so all
+      // there is to do is move the slot from `loading` to `ready`/`broken`.
+      //
+      // The initial `complete` sweep is not redundant with the listeners: an
+      // image starts loading while the document is parsed, so a fast result
+      // can land before this script runs and fire its event at nobody.
+      // `complete` says the browser finished, not how it went — `decode()`
+      // separates them, and unlike `naturalWidth === 0` it does not
+      // misreport an SVG that has no intrinsic size.
+      // `[data-static]` is load-bearing, not decoration: the catalog island
+      // renders `.logo-slot` too, and Preact owns `data-state` there. Writing
+      // it from here made the slot flip to the script's answer, then back to
+      // Preact's `loading` on hydration, then forward again — the icon fading
+      // in and straight back out.
+      for (const slot of document.querySelectorAll(".logo-slot[data-static]")) {
+        const img = slot.querySelector("img");
+        if (!img) continue;
+        const settle = (state) => slot.setAttribute("data-state", state);
+        img.addEventListener("load", () => settle("ready"));
+        img.addEventListener("error", () => settle("broken"));
+        if (img.complete) {
+          img.decode().then(
+            () => settle("ready"),
+            () => settle("broken"),
+          );
+        }
+      }
+
+      // Command-bar pickers. `__grimPick` (head) does the swap; this only
+      // wires the ways a choice gets made and the menu closed. The copy
+      // handler reads `data-copy` at click time, so it needs no part in this.
+      for (const bar of document.querySelectorAll("[data-os-switch]")) {
+        const menu = bar.querySelector(".os-menu");
+        const summary = menu?.querySelector("summary");
+        for (const pick of bar.querySelectorAll("[data-os-pick]")) {
+          pick.addEventListener("click", () => {
+            window.__grimPick(bar, pick);
+            // A card is a radio: closing the menu and pulling focus to its
+            // trigger would break arrow-key travel along the cards.
+            if (pick.type === "radio") return;
+            if (menu) menu.open = false;
+            summary?.focus();
+          });
+        }
+        // `<details>` opens and closes itself but knows nothing about the
+        // two ways every other menu closes.
+        if (menu) {
+          document.addEventListener("click", (event) => {
+            if (!menu.contains(event.target)) menu.open = false;
+          });
+          menu.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return;
+            menu.open = false;
+            summary?.focus();
+          });
+        }
+      }
+
+      // Preselect the host platform in every bar that asked for it. Lives
+      // here rather than in `index.astro` because `detect` has to mean the
+      // same thing wherever a bar is drawn — a page under `theme/pages/`
+      // rendering `<CommandBar detect />` gets this, and used to get the
+      // configured first choice however the visitor arrived. A platform the
+      // bar does not offer leaves that first choice alone.
+      //
+      // The landing page ALSO runs this in its own script, right beside the
+      // hero: this one sits past the whole catalog, late enough for the
+      // browser to paint a Linux command at someone on Windows first. Both
+      // runs pick the same choice and `__grimPick` is idempotent, so the
+      // duplicate costs nothing and the early one is what a visitor sees.
+      for (const bar of document.querySelectorAll("[data-os-detect]")) {
+        const host = window.__grimHostOs();
+        const match = [...bar.querySelectorAll("[data-os-pick]")].find(
+          (p) => p.dataset.osName === host,
+        );
+        if (match) window.__grimPick(bar, match);
+      }
+
+      // One toast for every copy on the page. The in-place check confirms
+      // that *something* was copied; a card has three copy buttons a few
+      // pixels apart, all of which flash the same check, so the toast is
+      // what says WHICH. It carries both readings: a name for what was
+      // copied, and the exact string, because "the install command" is the
+      // useful part when you meant to pick a different platform and the raw
+      // text is the useful part when you are not sure what landed.
+      //
+      // Announcing is left to the per-button status span that already exists
+      // — this element is `aria-hidden`, or every copy would be read twice.
+      const toast = document.getElementById("copy-toast");
+      let toastTimer;
+      function showToast(name, value) {
+        if (!toast) return;
+        toast.querySelector(".toast-name").textContent = name
+          ? `Copied ${name}`
+          : "Copied";
+        toast.querySelector(".toast-value").textContent = value;
+        // Restart the animation even mid-fade: without the reflow a second
+        // copy inside the window leaves the class already set and nothing
+        // moves.
+        toast.classList.remove("show");
+        void toast.offsetWidth;
+        toast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+      }
+      // Hydrated islands cannot reach this function, so they say so by event.
+      document.addEventListener("grimoire:copied", (event) => {
+        showToast(event.detail.name, event.detail.value);
+      });
+
+      // A copy button on every code block. Injected rather than authored:
+      // the blocks come out of Shiki, inside rendered markdown, so there is
+      // no markup to add one to. `data-copy` is all it takes to join the
+      // handler below — same clipboard path, same flash, same toast.
+      const CLIPBOARD_ICON =
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>' +
+        '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+
+      for (const pre of document.querySelectorAll("pre.astro-code")) {
+        // `CodeBlock.astro` already ships the wrapper and the action slot, so
+        // adopt them where they are there. Wrapping a second time would nest
+        // two positioning contexts and orphan whatever the component put in
+        // the slot.
+        const parent = pre.parentElement;
+        let wrapper = parent?.classList.contains("code-block") ? parent : null;
+        if (!wrapper) {
+          wrapper = document.createElement("div");
+          wrapper.className = "code-block";
+          pre.replaceWith(wrapper);
+          wrapper.append(pre);
+        }
+
+        let actions = wrapper.querySelector(".code-actions");
+        if (!actions) {
+          actions = document.createElement("span");
+          actions.className = "code-actions";
+          wrapper.append(actions);
+        }
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "code-copy";
+        btn.title = "Copy";
+        btn.setAttribute("aria-label", "Copy this code block");
+        // `textContent`, not `innerText`: the block is not rendered yet at
+        // this point, and `innerText` would collapse its whitespace.
+        btn.dataset.copy = pre.textContent ?? "";
+        // A component-rendered block names itself; a markdown one cannot.
+        btn.dataset.copyName = wrapper.dataset.copyName || "code block";
+        btn.innerHTML = CLIPBOARD_ICON + '<span class="sr-only" role="status"></span>';
+        actions.append(btn);
+      }
+
+      for (const btn of document.querySelectorAll("[data-copy]")) {
+        // The visible label never changes — swapping "copy" for "copied"
+        // resized the button and shifted its neighbours. `.copied` swaps the
+        // icon instead, and the status span carries the same news to a
+        // screen reader without occupying any width.
+        const status = btn.querySelector('[role="status"]');
+        btn.addEventListener("click", () => {
+          const value = btn.dataset.copy ?? "";
+          navigator.clipboard.writeText(value).then(() => {
+            btn.classList.add("copied");
+            if (status) status.textContent = "copied";
+            showToast(btn.dataset.copyName ?? "", value);
+            setTimeout(() => {
+              btn.classList.remove("copied");
+              if (status) status.textContent = "";
+            }, 1500);
+          });
+        });
+      }
+    </script></body></html><script type="module">var e=null,t=()=>{e?.hidePopover(),e=null};document.addEventListener(`click`,t),document.addEventListener(`scroll`,t,!0),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&t()});for(let n of document.querySelectorAll(`[data-menu]`)){let r=document.getElementById(n.dataset.menu??``);r&&n.addEventListener(`contextmenu`,i=>{i.preventDefault(),t();let a=n.getBoundingClientRect();r.style.left=`${i.clientX||a.left}px`,r.style.top=`${i.clientY||a.bottom}px`,r.showPopover(),e=r;let o=r.getBoundingClientRect();o.right>innerWidth&&(r.style.left=`${innerWidth-o.width-8}px`),o.bottom>innerHeight&&(r.style.top=`${innerHeight-o.height-8}px`)})}</script>

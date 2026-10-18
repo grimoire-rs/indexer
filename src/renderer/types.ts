@@ -9,6 +9,7 @@
 // is meant to read.
 import type { IndexRecord } from "../data/index.js";
 import type { ResolvedSiteConfig } from "../config.js";
+import type { LocalMarketplace, SiteMode } from "../marketplace/read.js";
 
 /**
  * A record from `all.json` viewed through the fields the catalog renders.
@@ -109,6 +110,13 @@ export interface GrimoireData {
   config: ResolvedSiteConfig;
   /** Every record from `<outDir>/all.json`, sorted by name. */
   packages: CatalogPackage[];
+  /** Which of packages and marketplace the site serves (`siteMode`). */
+  siteMode: SiteMode;
+  /**
+   * The index's own marketplace, read from `enrich/marketplace/` (validated,
+   * text-only); `null` when `marketplace.toml` is absent or nothing was exported.
+   */
+  marketplace: LocalMarketplace | null;
   /** Contents of `config.customCss`, already read from disk. Empty = none. */
   css: string;
   /**

@@ -15,16 +15,27 @@
 import { Moon, Sun } from "lucide-preact";
 import { linkAttrs, withBase } from "../lib/base";
 import { data } from "../lib/data";
+import { navFor } from "../lib/nav";
 
 const { config } = data;
+const nav = navFor(config.nav, config.docsUrl, config.repoUrl, data.siteMode);
 // The mark is styled separately, so it only applies when it really is the
 // leading run of the brand — otherwise the header renders the plain text.
 const brandRest =
   config.brandMark && config.brand.startsWith(config.brandMark)
     ? config.brand.slice(config.brandMark.length)
     : null;
-// `config.nav` arrives resolved: `resolveConfig` synthesized the docs/forge
-// pair for an index that configured no nav, and named the forge host itself.
+// The tab the visitor is on: a site-root link is current on its own page and
+// below it, and the package index (`/`) also on the package pages (`/p/…`).
+const path = Astro.url.pathname;
+const home = withBase("/");
+const current = (href: string) => {
+  if (!href.startsWith("/") || href.startsWith("//")) return false;
+  const target = withBase(href);
+  return target === home ? path === home || path.startsWith(withBase("/p/")) : path.startsWith(target);
+};
+// `navFor` synthesizes the docs/forge pair (and the mode's tabs) for an index
+// that configured no nav, and names the forge host itself.
 ---
 
 <header data-slot="site-header">
@@ -54,8 +65,8 @@ const brandRest =
           shape. An internal link must not open a tab, or browsing the
           index's own guide pages litters the visitor's. */}
       {
-        config.nav.map((link) => (
-          <a href={withBase(link.href)} {...linkAttrs(link)}>
+        nav.map((link) => (
+          <a href={withBase(link.href)} aria-current={current(link.href) ? "page" : undefined} {...linkAttrs(link)}>
             {link.label}
           </a>
         ))

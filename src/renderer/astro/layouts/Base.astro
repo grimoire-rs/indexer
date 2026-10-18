@@ -105,8 +105,14 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         if (field && bar.dataset.osNoun) {
           field.dataset.copyName = `${pick.dataset.osName} ${bar.dataset.osNoun}`;
         }
+        // A menu item is a `menuitemradio`; a card is a native radio input,
+        // which carries its own checked state. Matched by name, not identity:
+        // a bar can offer one choice twice (hero cards and the field's menu),
+        // and picking either must check both.
         for (const other of bar.querySelectorAll("[data-os-pick]")) {
-          other.setAttribute("aria-checked", other === pick ? "true" : "false");
+          const on = other === pick || (!!pick.dataset.osName && other.dataset.osName === pick.dataset.osName);
+          if (other.type === "radio") other.checked = on;
+          else other.setAttribute("aria-checked", on ? "true" : "false");
         }
         // The trigger carries every glyph and shows one; swapping which is
         // hidden beats rewriting an SVG path.
@@ -215,6 +221,9 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         for (const pick of bar.querySelectorAll("[data-os-pick]")) {
           pick.addEventListener("click", () => {
             window.__grimPick(bar, pick);
+            // A card is a radio: closing the menu and pulling focus to its
+            // trigger would break arrow-key travel along the cards.
+            if (pick.type === "radio") return;
             if (menu) menu.open = false;
             summary?.focus();
           });
@@ -436,7 +445,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           color: var(--grim-color-muted);
           text-decoration: none;
         }
-        nav a:hover {
+        nav a:hover,
+        nav a[aria-current="page"] {
           color: var(--grim-color-fg);
         }
         /* Borderless and colour-inheriting: same resting and hover colours as
@@ -706,6 +716,8 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
           left: 0;
           z-index: 5;
           min-width: 9rem;
+          /* Long client names ("GitHub Copilot CLI") stay on one line. */
+          width: max-content;
           margin: 0;
           padding: var(--grim-space-2);
           list-style: none;
@@ -1976,6 +1988,9 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         }
         .kind-hook {
           color: var(--grim-color-kind-hook);
+        }
+        .kind-plugin {
+          color: var(--grim-color-kind-plugin);
         }
         .badge.deprecated {
           color: var(--grim-color-deprecated);

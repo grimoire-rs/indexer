@@ -44,6 +44,7 @@ const { values } = parseArgs({
     root: { type: "string" },
     config: { type: "string" },
     bulk: { type: "string" },
+    "marketplace-only": { type: "boolean", default: false },
     port: { type: "string", default: "4321" },
     host: { type: "string" },
     smoke: { type: "boolean", default: false },
@@ -53,7 +54,7 @@ const { values } = parseArgs({
 
 if (values.help) {
   console.log(`
-usage: npm run dev -- [--root <index-repo>] [--port <n>] [--host [addr]] [--smoke]
+usage: npm run dev -- [--root <index-repo>] [--marketplace-only] [--port <n>] [--host [addr]] [--smoke]
 
   --root   an index repo to render (a checkout of grimoire-rs/index, or your
            own). Default: test/fixtures/dev, the bundled dev index — one
@@ -70,6 +71,11 @@ usage: npm run dev -- [--root <index-repo>] [--port <n>] [--host [addr]] [--smok
            rather than the fifteen states the dev index curates. The clones
            live in the scratch copy only; nothing is written to the source.
              npm run dev -- --bulk 250
+  --marketplace-only
+           drop every package from the scratch copy, so the root's
+           marketplace.toml is all the site has: "/" is the marketplace and
+           there are no tabs. Needs a root that ships a marketplace (the
+           default does).
   --port   dev server port (default 4321).
   --host   expose the server beyond loopback. Bare, it binds every interface,
            which is what a dev container, a VM or a WSL guest needs before a
@@ -138,6 +144,12 @@ if (values.config) {
   console.log(`config override: ${values.config}`);
 }
 
+if (values["marketplace-only"]) {
+  // An empty `index/` still routes through `compileIndex`, which yields zero packages.
+  await fs.rm(path.join(root, "index"), { recursive: true, force: true });
+  await fs.mkdir(path.join(root, "index"));
+}
+
 if (await fs.stat(path.join(root, "index")).then(() => true, () => false)) {
   if (bulk) {
     const made = await inflate(root, bulk);
@@ -168,27 +180,57 @@ const server = await devSite({
 });
 
 if (values.smoke) {
+  const base = `${server.url.replace(/\/?$/, "/")}`;
+  const at = (page) => new URL(page, base).href;
   const detail = "p/github.com/acme/code-review/";
-  const checks = [
-    [server.url, "<title>"],
-    // The dev server, not the build, is what a rendering change is reviewed
-    // in — and it is the one path a stale Vite cache can serve old markup
-    // from. So the catalog's enrichment is asserted *here*: the card's
-    // upvote figure only renders when a rating sidecar was read.
-    [server.url, 'class="vote-count"'],
-    // A heading the detail page only emits when enrichment arrived and had a
-    // `support` block — so this fails on a broken render *and* on a dev index
-    // whose enrich sidecars stopped being read.
-    [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, "Get help"],
-    // The vote badge reaches the detail page too, with both halves live —
-    // it was missing here long after the cards had it.
-    [new URL(detail, `${server.url.replace(/\/?$/, "/")}`).href, 'class="rating-vote"'],
+  // The marketplace pages assert the same things in both modes the dev index
+  // can show them: the add bar's `repository`, and the logo the dev server
+  // must serve (the staged public dir is what a dev run forgot once).
+  const home = values["marketplace-only"] ? server.url : at("marketplace/");
+  const marketplace = [
+    [home, "acme/index.git"],
+    [at("marketplace/review-kit/"), "Contents"],
+    // A bundle include is listed as the bundle, linked only while it is an
+    // indexed package (marketplace-only mode indexes none, so plain text).
+    values["marketplace-only"]
+      ? [at("marketplace/hex/"), "!href=\"/p/github.com/acme/starter-pack/\""]
+      : [at("marketplace/hex/"), 'href="/p/github.com/acme/starter-pack/"'],
+    [at("marketplace/logos/review-kit.png"), ""],
   ];
+  const checks = values["marketplace-only"]
+    ? [
+        // `/` is the marketplace and the header has no tabs to the catalog.
+        [server.url, "review-kit"],
+        [server.url, "!href=\"/marketplace/\""],
+        ...marketplace,
+      ]
+    : [
+        [server.url, "<title>"],
+        // The dev server, not the build, is what a rendering change is reviewed
+        // in — and it is the one path a stale Vite cache can serve old markup
+        // from. So the catalog's enrichment is asserted *here*: the card's
+        // upvote figure only renders when a rating sidecar was read.
+        [server.url, 'class="vote-count"'],
+        // A heading the detail page only emits when enrichment arrived and had a
+        // `support` block — so this fails on a broken render *and* on a dev index
+        // whose enrich sidecars stopped being read.
+        [at(detail), "Get help"],
+        // The vote badge reaches the detail page too, with both halves live —
+        // it was missing here long after the cards had it.
+        [at(detail), 'class="rating-vote"'],
+        // `both` mode: the tab, the catalog of plugins, and a Contents member
+        // linking to its package page.
+        [server.url, 'href="/marketplace/"'],
+        [home, "review-kit"],
+        [at("marketplace/review-kit/"), 'href="/p/github.com/acme/code-review/"'],
+        ...marketplace,
+      ];
   let failed = 0;
   for (const [url, needle] of checks) {
     const res = await fetch(url);
     const body = await res.text();
-    const ok = res.ok && body.includes(needle);
+    const absent = needle.startsWith("!");
+    const ok = res.ok && (absent ? !body.includes(needle.slice(1)) : body.includes(needle));
     if (!ok) failed++;
     console.log(`${ok ? "ok  " : "FAIL"} ${url} (${res.status}, expected ${needle})`);
   }

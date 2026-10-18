@@ -1,0 +1,36 @@
+[metadata]
+lock_version = 1
+declaration_hash_version = 1
+declaration_hash = "sha256:06c91f5b8995b14fc2ced5e4dda7aceb7e7b4d42a9375db0a38a9ccc1ebf234c"
+generated_by = "grim 0.15.0"
+generated_at = "2026-10-01T09:00:00Z"
+
+[[plugin]]
+name = "review-kit"
+declaration_hash = "sha256:f153fcd7f5f3b09a4d6d0e898cd0ae00bd1e7167577a432df592a659a9715e2b"
+
+[[plugin]]
+name = "hex"
+declaration_hash = "sha256:128df13c1e54ffaaafcc9d07ec7427d61f764214e6ae0321de23c94d261d0860"
+
+[[skill]]
+name = "code-review"
+plugin = "review-kit"
+pinned = "ghcr.io/acme/code-review@sha256:4b4f790102f0bd35942cb3c8a868d9aed0fc2b1bca81a6fa28ecd38c4670ae92"
+
+[[rule]]
+name = "rust-style"
+plugin = "review-kit"
+pinned = "ghcr.io/acme/rust-style@sha256:bb89c545d732f45a75a85251d084690d56127d962316ce1b813934612f5111c4"
+
+[[skill]]
+name = "hex-plan"
+plugin = "hex"
+pinned = "ghcr.io/acme/hex-plan@sha256:d19ccf66cb4ef53bf59766a80f2c92f7f4354d1088190a6b22435c95e7bc8ab4"
+
+[[rule]]
+name = "docs-style"
+plugin = "hex"
+pinned = "ghcr.io/acme/docs-style@sha256:7ba24c8deecaa8337aee70860e050bbd449fd14941a06dd9d91cb42b1cf171b1"
+bundle = "ghcr.io/acme/starter-pack"
+bundle_tag = "1"

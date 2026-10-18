@@ -1,0 +1,16 @@
+{
+  "name": "review-kit",
+  "version": "0.0.0+792ded31d749",
+  "description": "Review a diff against the team checklist and keep Rust idiomatic",
+  "author": {
+    "name": "Acme platform team",
+    "url": "https://acme.example.test"
+  },
+  "homepage": "https://acme.example.test/review-kit",
+  "license": "Apache-2.0",
+  "keywords": [
+    "review",
+    "quality",
+    "rust"
+  ]
+}

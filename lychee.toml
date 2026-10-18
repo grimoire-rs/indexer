@@ -11,6 +11,9 @@ exclude_path = [
   # Synthetic hosts by design: the dev index's config points at
   # `index.example.test` and friends precisely because they must not resolve.
   "test/fixtures",
+  # Rendered pages frozen for the golden tests: root-relative links and the
+  # fixtures' fake `acme` repositories, never served.
+  "test/renderer/golden",
   # Build output, republished from sources this run already checked.
   "site",
   "dist",

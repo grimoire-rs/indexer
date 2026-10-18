@@ -32,37 +32,13 @@ export interface RegistryHint {
 }
 
 /**
- * Clients the `/marketplace/` page can show an add command for. The same five
- * `grim export marketplace` can emit a tree for — a client outside this set
+ * Clients the marketplace pages can show an add command for. `codex` is the
+ * page's "ChatGPT / Codex" harness — ChatGPT imports the same
+ * `.agents/plugins/marketplace.json` Codex reads; a client outside this set
  * has no marketplace format for the page to describe.
  */
 export const MARKETPLACE_CLIENTS = ["claude", "copilot", "codex", "qoder", "cursor"] as const;
 export type MarketplaceClient = (typeof MARKETPLACE_CLIENTS)[number];
-
-/** Shown when `clients` is omitted: the four with a shell command. Cursor is opt-in. */
-export const DEFAULT_MARKETPLACE_CLIENTS: readonly MarketplaceClient[] = [
-  "claude",
-  "copilot",
-  "codex",
-  "qoder",
-];
-
-/**
- * The generated plugin-marketplace repo this index points at. Set, it turns on
- * a `/marketplace/` page listing how each client adds it; `null` — the
- * default — emits no such route at all.
- */
-export interface MarketplaceHint {
-  /** https git URL of the marketplace repo. No userinfo, no shell metacharacters. */
-  url: string;
-  /** The marketplace's own name — the `@<name>` half of `<plugin>@<name>`. */
-  name: string;
-  /** Clients to list, in order. Default: `claude`, `copilot`, `codex`, `qoder`. */
-  clients?: MarketplaceClient[];
-}
-
-/** `MarketplaceHint` after `resolveConfig` — `clients` always present, deduplicated. */
-export type ResolvedMarketplace = Required<MarketplaceHint>;
 
 /** One header or footer link. */
 export interface NavLink {
@@ -83,30 +59,6 @@ export interface NavLink {
    * exactly as it did before this field existed.
    */
   external?: boolean;
-}
-
-/**
- * Forges whose name is worth showing instead of their host. Ordered by
- * nothing — `repoLabel` takes the first substring hit, and no two of these
- * appear in one hostname.
- */
-const FORGES = ["github", "gitlab", "bitbucket", "codeberg", "sourcehut"];
-
-/**
- * Name the forge `repoUrl` actually points at, rather than assuming one.
- * `repoUrl` is free-form config: an index hosted on GitLab was previously
- * labelled "GitHub" in its own header. An unrecognized host is named
- * outright — honest, and already lowercase, which is the house style for
- * this nav.
- */
-export function repoLabel(url: string): string {
-  let host: string;
-  try {
-    host = new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "repo";
-  }
-  return FORGES.find((forge) => host.includes(forge)) ?? host;
 }
 
 /**
@@ -173,12 +125,6 @@ export interface SiteConfig {
   /** "Add this index" copy-paste block. `null` omits it. */
   registry?: RegistryHint | null;
   /**
-   * The plugin-marketplace repo generated from this index's packages. Set, the
-   * build emits `/marketplace/` (and lists it in `sitemap.xml`) with one row
-   * per client; `null` emits neither.
-   */
-  marketplace?: MarketplaceHint | null;
-  /**
    * Footer sentence after the `/all.json` link — licensing, provenance,
    * whatever this index wants to say. `null` drops it and leaves the raw-data
    * link alone.
@@ -212,15 +158,10 @@ export interface SiteConfig {
 /**
  * A `SiteConfig` with every gap filled — what the templates actually read.
  *
- * `nav` and `marketplace` are the keys whose resolved type is narrower than
- * their input type: `resolveConfig` turns `nav`'s `null` default into the
- * synthesized pair and fills `marketplace.clients`, so a template never
- * repeats either fallback.
+ * `nav` stays `null` when the config declares none: the header's links then
+ * depend on the site mode, which only the renderer knows (`navFor`).
  */
-export type ResolvedSiteConfig = Omit<Required<SiteConfig>, "nav" | "marketplace"> & {
-  nav: NavLink[];
-  marketplace: ResolvedMarketplace | null;
-};
+export type ResolvedSiteConfig = Required<SiteConfig>;
 
 export const DEFAULT_CONFIG: Required<SiteConfig> = {
   site: "https://index.grimoire.rs",
@@ -230,8 +171,8 @@ export const DEFAULT_CONFIG: Required<SiteConfig> = {
     "Browse and search AI-config packages (skills, rules, agents, MCP servers, bundles, and hooks), installable with the grim package manager.",
   tagline:
     "Skills, rules, agents, MCP servers, bundles, and hooks for AI coding agents, hosted on OCI registries.",
-  // Synthesized from `docsUrl`/`repoUrl` by `resolveConfig`, so an index
-  // that never configures a nav keeps the header it already had.
+  // Synthesized from `docsUrl`/`repoUrl` and the site mode by `navFor`, so
+  // an index that never configures a nav keeps the header it already had.
   nav: null,
   notice: null,
   // grimoire.rs is the tool's documentation, which is the same page whoever
@@ -258,8 +199,6 @@ export const DEFAULT_CONFIG: Required<SiteConfig> = {
   // `grim config registry add hub --index https://index.grimoire.rs` — a
   // working command pointing at the wrong index.
   registry: null,
-  // Off: an index only has a marketplace once someone generated one.
-  marketplace: null,
   // Two facts a visitor may actually need: what they may do with the data
   // they just read, and where the packages themselves are. Dropped from the
   // old default: "pointers, not payloads", which explains the architecture
@@ -434,62 +373,6 @@ function validateLinks(raw: Record<string, unknown>, key: string): void {
 }
 
 /**
- * Characters a `marketplace.url` may carry. Closed rather than escaped: the
- * value is printed into `<plugin marketplace add …>` lines a reader pastes
- * into a terminal, and a git remote has no use for `;`, `&`, `$`, quotes,
- * backticks or a query. Userinfo is refused separately (`@` stays legal for a
- * path segment such as `/@scope/repo`).
- */
-const MARKETPLACE_URL_CHARS = /^[A-Za-z0-9._~:/%+=@,-]+$/;
-
-/** C-009's marketplace name grammar; the length cap is checked alongside. */
-const MARKETPLACE_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-
-function validateMarketplace(value: unknown): void {
-  if (value === undefined || value === null) return;
-  if (typeof value !== "object" || Array.isArray(value)) {
-    fail("marketplace must be an object with url and name, or null");
-  }
-  const raw = value as Record<string, unknown>;
-  for (const key of Object.keys(raw)) {
-    if (!["url", "name", "clients"].includes(key)) {
-      fail(`marketplace.${key} is not a key — expected url, name, clients`);
-    }
-  }
-
-  const { url, name, clients } = raw;
-  if (typeof url !== "string") fail("marketplace.url is required and must be a string");
-  if (!/^https:\/\//i.test(url)) fail("marketplace.url must be an https URL");
-  if (!MARKETPLACE_URL_CHARS.test(url)) {
-    fail("marketplace.url may only contain letters, digits and . _ ~ : / % + = @ , -");
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    fail("marketplace.url must be an absolute https URL");
-  }
-  if (parsed.username !== "" || parsed.password !== "") {
-    fail("marketplace.url must not carry userinfo — https://user@host reads as one host and fetches another");
-  }
-
-  if (typeof name !== "string" || name.length > 64 || !MARKETPLACE_NAME.test(name)) {
-    fail("marketplace.name must be lowercase letters, digits and hyphens, at most 64 characters, starting and ending alphanumeric");
-  }
-
-  if (clients !== undefined) {
-    if (!Array.isArray(clients) || clients.length === 0) {
-      fail(`marketplace.clients must be a non-empty array of ${MARKETPLACE_CLIENTS.join(", ")}`);
-    }
-    for (const client of clients) {
-      if (!(MARKETPLACE_CLIENTS as readonly unknown[]).includes(client)) {
-        fail(`marketplace.clients has an unknown client — expected ${MARKETPLACE_CLIENTS.join(", ")}`);
-      }
-    }
-  }
-}
-
-/**
  * Every top-level key `index.config.json` may carry.
  *
  * Derived from `DEFAULT_CONFIG` rather than written out by hand: it is typed
@@ -512,6 +395,9 @@ function validate(raw: unknown): SiteConfig {
     fail("must contain a JSON object");
   }
   const cfg = raw as Record<string, unknown>;
+
+  // C-005: the marketplace is `<root>/marketplace.toml` now, not config.
+  if ("marketplace" in cfg) fail("marketplace was removed; commit marketplace.toml at the repository root");
 
   // An unrecognised key is a typo signal, not a fatal error — the file is
   // hand-edited, and the failure worth catching is a misspelling that does
@@ -582,7 +468,6 @@ function validate(raw: unknown): SiteConfig {
     if (typeof reg.index !== "string") fail("registry.index is required");
   }
 
-  validateMarketplace(cfg.marketplace);
 
   return cfg as SiteConfig;
 }
@@ -619,19 +504,5 @@ export function resolveConfig(config: SiteConfig): ResolvedSiteConfig {
       (merged as Record<string, unknown>)[key] = DEFAULT_CONFIG[key as keyof Required<SiteConfig>];
     }
   }
-  // `null` means "nobody configured a nav", which is every index that
-  // predates the key — so it resolves to the two links the header has always
-  // shown. An explicit `[]` is a decision and survives as one.
-  const nav =
-    merged.nav ??
-    [
-      merged.docsUrl ? { label: "docs", href: merged.docsUrl } : null,
-      merged.repoUrl ? { label: repoLabel(merged.repoUrl), href: merged.repoUrl } : null,
-    ].filter((link) => link !== null);
-  const marketplace = merged.marketplace && {
-    ...merged.marketplace,
-    // First mention wins, as `grim export` treats the same list.
-    clients: [...new Set(merged.marketplace.clients ?? DEFAULT_MARKETPLACE_CLIENTS)],
-  };
-  return { ...merged, nav, marketplace };
+  return merged as ResolvedSiteConfig;
 }

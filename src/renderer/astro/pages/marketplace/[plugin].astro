@@ -1,0 +1,73 @@
+---
+// The detail page of one marketplace plugin, `/marketplace/<plugin>/`: the
+// package detail page fed a plugin record, the README and changelog the build
+// staged for it, its Contents members and the plugin's install bar. Present
+// whenever there is a marketplace.
+import PackageDetail from "../../components/PackageDetail.astro";
+import { data } from "../../lib/data";
+import { marketplaceHome } from "../../lib/marketplace";
+import { listedPlugins } from "../../lib/plugins";
+import { getEntry } from "astro:content";
+
+export function getStaticPaths() {
+  return listedPlugins(data).map((plugin) => ({ params: { plugin: plugin.name }, props: { plugin } }));
+}
+
+const { plugin } = Astro.props as { plugin: ReturnType<typeof listedPlugins>[number] };
+// The build stages a plugin's docs as `marketplace-docs/<plugin>/…`, which the
+// marketplace collections' loaders turn into this id.
+const id = `marketplace/docs/${plugin.name}`;
+---
+
+<PackageDetail
+  pkg={plugin.record}
+  readmeEntry={await getEntry("marketplaceReadmes", id)}
+  changelogEntry={await getEntry("marketplaceChangelogs", id)}
+  install={{
+    choices: plugin.choices,
+    noun: "install command",
+    copyLabel: "Copy the install command",
+    pickerTitle: "Harness",
+    pickerLabel: "Choose your harness",
+  }}
+  members={plugin.members}
+  vscode={false}
+  home={marketplaceHome(data.siteMode)}
+/>
+
+<style is:global>
+  @layer grimoire {
+    /* The Contents list of a plugin: kind mark and name, then the ref. Here
+       and not in PackageDetail's own sheet, which every package page links:
+       those pages must stay as they were. */
+    .plugin-members {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--grim-space-4) var(--grim-space-5);
+      align-items: center;
+    }
+    .plugin-members li {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+      align-items: center;
+    }
+    .plugin-members .member-name {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--grim-space-3);
+    }
+    .plugin-members svg {
+      flex: none;
+      color: var(--grim-color-muted);
+    }
+    .plugin-members code {
+      color: var(--grim-color-muted);
+      font-size: var(--grim-text-sm);
+      overflow-wrap: anywhere;
+    }
+  }
+</style>

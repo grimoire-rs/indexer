@@ -19,11 +19,19 @@ import path from "node:path";
 const root = path.join(process.cwd(), "dist", "renderer", "astro");
 const TRAILING_MAP = /\n\/\/# sourceMappingURL=.*\s*$/;
 
+// Astro routes are the copied sources. tsc's `[name].json.js` / `.d.ts` beside
+// a `.ts` endpoint read as extra dynamic routes with no getStaticPaths and
+// fail the packaged build (GetStaticPathsRequired).
+const pagesDir = path.join(root, "pages") + path.sep;
+
 let removed = 0;
 for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
   if (!entry.isFile()) continue;
   const file = path.join(entry.parentPath, entry.name);
-  if (entry.name.endsWith(".map")) {
+  if (file.startsWith(pagesDir) && /\.(js|d\.ts)$/.test(entry.name)) {
+    rmSync(file);
+    removed += 1;
+  } else if (entry.name.endsWith(".map")) {
     rmSync(file);
     removed += 1;
   } else if (entry.name.endsWith(".js")) {

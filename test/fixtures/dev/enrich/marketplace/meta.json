@@ -1,0 +1,35 @@
+{
+ "repository": "https://github.com/acme/index.git",
+ "clients": [
+  "claude",
+  "copilot",
+  "codex",
+  "qoder"
+ ],
+ "members": {
+  "review-kit": [
+   {
+    "kind": "skill",
+    "name": "code-review",
+    "ref": "ghcr.io/acme/code-review"
+   },
+   {
+    "kind": "rule",
+    "name": "rust-style",
+    "ref": "ghcr.io/acme/rust-style"
+   }
+  ],
+  "hex": [
+   {
+    "kind": "skill",
+    "name": "hex-plan",
+    "ref": "ghcr.io/acme/hex-plan"
+   },
+   {
+    "kind": "bundle",
+    "name": "starter-pack",
+    "ref": "ghcr.io/acme/starter-pack"
+   }
+  ]
+ }
+}

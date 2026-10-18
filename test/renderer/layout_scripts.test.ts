@@ -208,3 +208,44 @@ describe("C-012 — the scope picker steers the VS Code link too", () => {
     );
   });
 });
+
+/** The marketplace hero: harness cards (radios) and the field's menu, one switch. */
+const HERO_BAR = `
+  <div data-os-switch data-os-noun="add command">
+    <input type="radio" name="mk-harness" checked data-os-pick="claude plugin add a" data-os-name="Claude Code">
+    <input type="radio" name="mk-harness" data-os-pick="codex add a" data-os-name="Codex">
+    <div data-copy="claude plugin add a" data-copy-name="Claude Code add command"><code>claude plugin add a</code></div>
+    <details class="os-menu" open>
+      <summary></summary>
+      <button type="button" role="menuitemradio" aria-checked="true" data-os-pick="claude plugin add a" data-os-name="Claude Code"></button>
+      <button type="button" role="menuitemradio" aria-checked="false" data-os-pick="codex add a" data-os-name="Codex"></button>
+    </details>
+  </div>
+`;
+
+describe("the hero harness cards share a switch with the field's menu", () => {
+  // A card is a radio: picking one must leave focus on it (arrow keys walk
+  // the group) and must not touch the menu.
+  it("keeps focus on a picked card and syncs the menu", () => {
+    const doc = renderPage(HERO_BAR);
+    const card = doc.querySelectorAll<HTMLInputElement>('input[data-os-pick]')[1]!;
+    card.focus();
+    card.click();
+
+    expect(doc.activeElement).toBe(card);
+    expect(card.checked).toBe(true);
+    expect(doc.querySelector("[data-copy]")!.getAttribute("data-copy")).toBe("codex add a");
+    expect(doc.querySelector("button[data-os-name=Codex]")!.getAttribute("aria-checked")).toBe("true");
+  });
+
+  // Without a plugin list no page script re-checks the cards, so the pick
+  // itself has to check the card of the same name.
+  it("checks the matching card when the menu picks", () => {
+    const doc = renderPage(HERO_BAR);
+    doc.querySelector<HTMLElement>("button[data-os-name=Codex]")!.click();
+
+    const cards = doc.querySelectorAll<HTMLInputElement>('input[data-os-pick]');
+    expect([...cards].map((c) => c.checked)).toEqual([false, true]);
+    expect(doc.querySelector<HTMLDetailsElement>(".os-menu")!.open).toBe(false);
+  });
+});

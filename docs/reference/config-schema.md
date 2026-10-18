@@ -96,23 +96,46 @@ One `install` row usually covers several platforms (`"Linux / macOS"`), and
 the picker expands it into one button per platform it names. A row naming none
 keeps a single generic button, so an unrecognized platform is never dropped.
 
-## Marketplace page
+## Marketplace
 
-| Key | Type | Default | Effect |
-|---|---|---|---|
-| `marketplace` | `{url, name, clients?}` \| null | `null` | Emits `/marketplace/` and lists it in `sitemap.xml`. `null` emits neither |
-| `marketplace.url` | string | *(required)* | https git URL of the generated marketplace repo. No userinfo, and only letters, digits and `. _ ~ : / % + = @ , -` |
-| `marketplace.name` | string | *(required)* | The marketplace's name, the `@<name>` half of `<plugin>@<name>`. Lowercase letters, digits and hyphens, at most 64, starting and ending alphanumeric |
-| `marketplace.clients` | string[] | `claude`, `copilot`, `codex`, `qoder` | Rows to show, in order, from `claude`, `copilot`, `codex`, `qoder`, `cursor`. Cursor is opt-in |
+There is no `marketplace` key. An index declares its marketplace in
+`marketplace.toml` at the repository root, in the format `grim export
+marketplace` reads, with its `marketplace.lock` beside it. A config that still
+sets the key fails to load with `marketplace was removed; commit marketplace.toml
+at the repository root`.
 
-The page gives each listed client its add command and the `<plugin>@<name>`
-install form, stamped with the date those commands were last checked. Cursor has
-no shell command: its row describes the team-admin dashboard import instead.
+| Source | What the site takes from it |
+|---|---|
+| `[marketplace].name` | The `@<name>` half of `<plugin>@<name>` in every add command |
+| `[marketplace].repository` | The https clone URL the add bar prints. Without it the commands carry a placeholder and a hint to set it |
+| `[marketplace].clients` | The harnesses shown, in order (`claude`, `copilot`, `codex`, `qoder`, `cursor`; `codex` is labelled "ChatGPT / Codex"). Cursor is opt-in |
+| `[plugins.<name>]` | One plugin page per entry at `/marketplace/<plugin>/`, with its README, CHANGELOG, logo, author, licence, links, category and keywords |
 
-A `github.com` URL with exactly two path segments, the second not ending in
-`.git`, is shown as `owner/repo`; any other URL is shown in full, minus a trailing slash. The URL is refused
-outright, not escaped, if it carries a character a shell would act on, because
-the page prints it into a line readers paste into a terminal.
+`grim-indexer enrich` runs `grim export marketplace` on the manifest into
+`enrich/marketplace/export/` and records `repository`, the exported clients and
+each plugin's registry members in `enrich/marketplace/meta.json`. A failed
+export keeps the previous tree and warns. A `marketplace.lock` that the export
+had to rewrite warns that it was stale: run `grim update --marketplace` and
+commit it.
+
+The site picks one of three modes from what the index holds.
+
+| Mode | When | What is served |
+|---|---|---|
+| `packages` | No `marketplace.toml` | The package catalog only, and the build is byte-identical to one that never heard of marketplaces |
+| `both` | A marketplace and at least one package | The catalog at `/`, the marketplace at `/marketplace/`, and `packages` and `marketplace` tabs in the header |
+| `marketplace` | A marketplace and no packages | The marketplace at `/`, no tabs, and no `/marketplace/` route |
+
+Each plugin page has a Contents tab. A member that is a package of this index
+links to its package page; any other member is printed as plain text. An
+explicit `nav` in `index.config.json` replaces the mode's tabs.
+
+`grim-indexer validate` never auto-merges a change to `marketplace.toml` or
+`marketplace.lock`: it reports `marketplace changes need maintainer review`.
+It also adds one reason per registry member that is not a package of the index
+and per path or project member, naming the plugin and the member, so the
+reviewer sees what would break. See [Security and
+trust](../explanation/security-and-trust-model.md).
 
 ## Appearance
 

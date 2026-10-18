@@ -37,9 +37,5 @@
   "ci": {
     "forge": "github",
     "autoMerge": true
-  },
-  "marketplace": {
-    "url": "https://github.com/grimoire-rs/e2e-marketplace.git",
-    "name": "grimoire-e2e"
   }
 }

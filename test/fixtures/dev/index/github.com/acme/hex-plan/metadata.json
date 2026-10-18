@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "hex-plan",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/hex-plan",
+  "description": "Plan a feature as a contract-first, test-first task graph.",
+  "repository": "https://github.com/acme/hex-plan",
+  "keywords": [
+    "planning",
+    "swarm"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

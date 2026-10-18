@@ -75,3 +75,15 @@ describe("published manifest", () => {
     expect(url).toContain(REPO);
   });
 });
+
+describe("built template routes", () => {
+    const pages = path.join(root, "dist", "renderer", "astro", "pages");
+    // dist only exists after `npm run build`; skip rather than fail on a bare checkout.
+    it.skipIf(!fs.existsSync(pages))("leaves no tsc output beside the page sources", () => {
+        const stray = fs
+            .readdirSync(pages, { recursive: true })
+            .map(String)
+            .filter((f) => /\.(js|d\.ts)$/.test(f));
+        expect(stray).toEqual([]);
+    });
+});

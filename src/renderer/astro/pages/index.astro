@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import MarketplaceView from "../components/MarketplaceView.astro";
 import Catalog from "../components/Catalog.tsx";
 import CommandBar from "../components/CommandBar.astro";
 import { BrandMark } from "../components/BrandMark.tsx";
@@ -10,6 +11,12 @@ import { data } from "../lib/data";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 
 const { config, packages } = data;
+// `/` is the marketplace when the index has no packages, only a marketplace.
+// The package page below stays unindented inside the branch: Astro keeps an
+// inline script's whitespace byte for byte, and numbers hydrated islands by
+// render order, so neither re-indenting nor moving the markup into a component
+// may change what a package-only index serves.
+const marketplaceOnly = data.siteMode === "marketplace";
 
 // One-click counterpart of the `grim config registry add` line: the VS Code
 // extension registers a URI handler that writes the registry after a modal
@@ -33,6 +40,7 @@ const addCommand = registryAddCommand(config);
 const scopeChoices = registryScopeChoices(config);
 ---
 
+{marketplaceOnly ? <MarketplaceView title={config.brand} description={config.description} /> : (
 <Base title={config.brand} description={config.description}>
   <div class="hero">
     <h1>{config.brand}</h1>
@@ -177,3 +185,4 @@ const scopeChoices = registryScopeChoices(config);
     builtAt={data.builtAt}
   />
 </Base>
+)}
