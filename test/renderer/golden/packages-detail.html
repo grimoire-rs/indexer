@@ -86,6 +86,37 @@
         if (link && pick.dataset.osHref) link.href = pick.dataset.osHref;
       };
 
+      // Picks the visitor made, newest first, by choice name. Harness,
+      // platform and scope names never overlap, so one list serves every bar:
+      // each takes the newest name it offers.
+      const PICKS = "grim.picks";
+      const storedPicks = () => {
+        try {
+          const list = JSON.parse(pref(PICKS) ?? "[]");
+          return Array.isArray(list) ? list : [];
+        } catch {
+          return [];
+        }
+      };
+      window.__grimRemember = (name) => {
+        if (!name) return;
+        const list = [name, ...storedPicks().filter((n) => n !== name)].slice(0, 8);
+        try {
+          localStorage.setItem(PICKS, JSON.stringify(list));
+        } catch {}
+      };
+
+      // A bar's starting choice: the visitor's stored pick, else (for a
+      // `detect` bar) the host platform, else the configured first choice.
+      window.__grimPreselect = (bar) => {
+        const picks = [...bar.querySelectorAll("[data-os-pick]")];
+        const byName = (name) => picks.find((p) => p.dataset.osName === name);
+        const match =
+          storedPicks().map(byName).find(Boolean) ??
+          ("osDetect" in bar.dataset ? byName(window.__grimHostOs()) : undefined);
+        if (match) window.__grimPick(bar, match);
+      };
+
       // The platform a bar should start on, or null for one this visitor's
       // host is not among. Order matters: a macOS UA string contains "Mac"
       // but a Windows one contains "Win", and ChromeOS reports "CrOS" while
@@ -166,6 +197,7 @@
         for (const pick of bar.querySelectorAll("[data-os-pick]")) {
           pick.addEventListener("click", () => {
             window.__grimPick(bar, pick);
+            window.__grimRemember(pick.dataset.osName);
             // A card is a radio: closing the menu and pulling focus to its
             // trigger would break arrow-key travel along the cards.
             if (pick.type === "radio") return;
@@ -187,25 +219,22 @@
         }
       }
 
-      // Preselect the host platform in every bar that asked for it. Lives
-      // here rather than in `index.astro` because `detect` has to mean the
-      // same thing wherever a bar is drawn — a page under `theme/pages/`
-      // rendering `<CommandBar detect />` gets this, and used to get the
-      // configured first choice however the visitor arrived. A platform the
-      // bar does not offer leaves that first choice alone.
-      //
-      // The landing page ALSO runs this in its own script, right beside the
-      // hero: this one sits past the whole catalog, late enough for the
-      // browser to paint a Linux command at someone on Windows first. Both
-      // runs pick the same choice and `__grimPick` is idempotent, so the
-      // duplicate costs nothing and the early one is what a visitor sees.
-      for (const bar of document.querySelectorAll("[data-os-detect]")) {
-        const host = window.__grimHostOs();
-        const match = [...bar.querySelectorAll("[data-os-pick]")].find(
-          (p) => p.dataset.osName === host,
-        );
-        if (match) window.__grimPick(bar, match);
+      // Restore the stored pick, or the host platform, in every bar. Here so
+      // a page under `theme/pages/` gets it too. The landing page also runs
+      // this beside its hero, since this one sits past the whole catalog and
+      // the browser can paint the wrong command first; `__grimPick` is
+      // idempotent, so the duplicate costs nothing.
+      for (const bar of document.querySelectorAll("[data-os-switch]")) {
+        window.__grimPreselect(bar);
       }
+      // Back/forward restores a page from bfcache without rerunning scripts,
+      // so a pick made on the page left would never reach this one.
+      window.addEventListener("pageshow", (e) => {
+        if (!e.persisted) return;
+        for (const bar of document.querySelectorAll("[data-os-switch]")) {
+          window.__grimPreselect(bar);
+        }
+      });
 
       // One toast for every copy on the page. The in-place check confirms
       // that *something* was copied; a card has three copy buttons a few

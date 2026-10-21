@@ -49,7 +49,9 @@ const plugins = listedPlugins(data);
         <div class="hero-side hero-side-stack" data-os-switch data-os-noun="add command">
           {/* The harness cards are picks too: native radios carrying
               `data-os-pick` inside the same `[data-os-switch]` as the field's
-              own picker, so either one swaps the command and checks both. */}
+              own picker, so either one swaps the command and checks both.
+              `autocomplete="off"`: on Back the browser restores the old
+              checked card after preselect runs, splitting card from command. */}
           <div class="mk-harness" role="radiogroup" aria-labelledby="mk-harness-label">
             <span class="side-label" id="mk-harness-label">Choose your harness</span>
             <div class="mk-picks">
@@ -58,6 +60,7 @@ const plugins = listedPlugins(data);
                   <input
                     type="radio"
                     name="mk-harness"
+                    autocomplete="off"
                     checked={i === 0}
                     data-os-pick={choice.command}
                     data-os-name={choice.name}

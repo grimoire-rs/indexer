@@ -131,12 +131,8 @@ const scopeChoices = registryScopeChoices(config);
       few microseconds and nothing else. A platform the bar does not offer
       leaves the configured first choice alone. */}
   <script is:inline>
-    for (const bar of document.querySelectorAll("[data-os-detect]")) {
-      const host = window.__grimHostOs();
-      const match = [...bar.querySelectorAll("[data-os-pick]")].find(
-        (p) => p.dataset.osName === host,
-      );
-      if (match) window.__grimPick(bar, match);
+    for (const bar of document.querySelectorAll("[data-os-switch]")) {
+      window.__grimPreselect(bar);
     }
   </script>
 

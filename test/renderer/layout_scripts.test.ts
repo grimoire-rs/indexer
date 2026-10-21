@@ -249,3 +249,43 @@ describe("the hero harness cards share a switch with the field's menu", () => {
     expect(doc.querySelector<HTMLDetailsElement>(".os-menu")!.open).toBe(false);
   });
 });
+
+describe("a pick survives the next page", () => {
+  it("stores the picked name and restores it in a fresh page", () => {
+    const first = renderPage(HERO_BAR);
+    first.querySelector<HTMLElement>("button[data-os-name=Codex]")!.click();
+    const stored = first.defaultView!.localStorage.getItem("grim.picks")!;
+
+    const next = renderPage(HERO_BAR, { "grim.picks": stored });
+
+    expect(next.querySelector("[data-copy]")!.getAttribute("data-copy")).toBe("codex add a");
+    const cards = next.querySelectorAll<HTMLInputElement>("input[data-os-pick]");
+    expect([...cards].map((c) => c.checked)).toEqual([false, true]);
+  });
+
+  // A stored harness must not stop a platform bar from detecting the host,
+  // and a stored platform beats detection.
+  it("lets each bar take the newest name it offers, else detect", () => {
+    const harnessOnly = renderPage(DETECTING_BAR, { "grim.picks": '["Codex"]' });
+    expect(harnessOnly.querySelector('[data-os-name="Windows"]')!.getAttribute("aria-checked")).toBe("true");
+
+    const linux = renderPage(DETECTING_BAR, { "grim.picks": '["Codex","Linux"]' });
+    expect(linux.querySelector('[data-os-name="Linux"]')!.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("ignores a stored value that is not a list", () => {
+    const doc = renderPage(HERO_BAR, { "grim.picks": "{oops" });
+    expect(doc.querySelector("[data-copy]")!.getAttribute("data-copy")).toBe("claude plugin add a");
+  });
+});
+
+describe("a page restored from the back-forward cache", () => {
+  it("takes the pick made on the page the visitor came back from", () => {
+    const doc = renderPage(HERO_BAR);
+    const win = doc.defaultView!;
+    win.localStorage.setItem("grim.picks", '["Codex"]');
+    win.dispatchEvent(new win.PageTransitionEvent("pageshow", { persisted: true }));
+
+    expect(doc.querySelector("[data-copy]")!.getAttribute("data-copy")).toBe("codex add a");
+  });
+});
