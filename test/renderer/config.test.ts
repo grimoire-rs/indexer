@@ -78,7 +78,7 @@ describe("loadConfig", () => {
     ["a malformed extension id", '{"vscodeExtension":"nodot"}'],
     ["a non-array install", '{"install":"curl … | sh"}'],
     ["an install row missing `command`", '{"install":[{"os":"Linux"}]}'],
-    ["a registry with no index", '{"registry":{"alias":"acme"}}'],
+    ["a non-string registry index", '{"registry":{"alias":"acme","index":42}}'],
     ["a registry alias with a slash", '{"registry":{"alias":"a/b","index":"https://a.test"}}'],
     ["a non-array footerLinks", '{"footerLinks":{"label":"privacy"}}'],
     ["a footer link that is not an object", '{"footerLinks":["privacy"]}'],
@@ -214,6 +214,11 @@ describe("loadConfig", () => {
     expect(config.docsUrl).toBeNull();
     expect(config.vscodeExtension).toBeNull();
     expect(config.registry).toBeNull();
+  });
+
+  it("accepts a registry with no index", async () => {
+    const config = resolveConfig(await loadConfig(await rootWith('{"registry":{"alias":"acme"}}')));
+    expect(config.registry).toEqual({ alias: "acme" });
   });
 });
 

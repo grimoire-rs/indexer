@@ -15,6 +15,7 @@ import "../styles/tokens.css";
 import SiteHeader from "../components/SiteHeader.astro";
 import SiteFooter from "../components/SiteFooter.astro";
 import { withBase } from "../lib/base";
+import { derivedIndex } from "../lib/commands";
 import { data } from "../lib/data";
 
 interface Props {
@@ -26,6 +27,7 @@ const { config, css } = data;
 // `og:image` falls back to the logo before the favicon: a favicon is drawn to
 // read at 16px, and a link preview is not that.
 const { title, description, image = config.logo ?? config.favicon } = Astro.props;
+const builtIndex = derivedIndex(config);
 ---
 
 <html lang="en">
@@ -39,6 +41,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
     <meta property="og:description" content={description} />
     <meta property="og:image" content={withBase(image)} />
     <meta name="twitter:card" content="summary" />
+    {builtIndex && <meta name="grim-index" content={builtIndex} />}
     <script is:inline>
       // Reading `localStorage` *throws* in a browser set to block site data —
       // it does not return null — and everything below this point, the
@@ -125,6 +128,37 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
         // A choice with no href leaves the link alone rather than blanking it.
         const link = bar.querySelector("[data-os-link]");
         if (link && pick.dataset.osHref) link.href = pick.dataset.osHref;
+      };
+
+      // An index with no `registry.index` hands out the address the visitor
+      // loaded it from, not the build's `site`: a mirror or private host
+      // would otherwise copy a command that adds a different index.
+      window.__grimDeriveIndex = () => {
+        const meta = document.querySelector('meta[name="grim-index"]');
+        if (!meta || !/^https?:$/.test(location.protocol)) return;
+        const built = meta.content;
+        const here = (location.origin + new URL(built).pathname).replace(/\/+$/, "");
+        if (here === built) return;
+        const swap = (s) => (s?.endsWith(" --index " + built) ? s.slice(0, -built.length) + here : s);
+        for (const el of document.querySelectorAll("[data-os-pick]")) el.dataset.osPick = swap(el.dataset.osPick);
+        for (const el of document.querySelectorAll("[data-copy]")) {
+          el.dataset.copy = swap(el.dataset.copy);
+          const code = el.querySelector("code");
+          if (code) code.textContent = swap(code.textContent);
+        }
+        const deepLink = (href) => {
+          const url = new URL(href);
+          if (url.searchParams.get("index") !== new URL(built).href) return href;
+          url.searchParams.set("index", new URL(here).href);
+          return url.href;
+        };
+        for (const el of document.querySelectorAll("[data-os-href]")) el.dataset.osHref = deepLink(el.dataset.osHref);
+        for (const link of document.querySelectorAll("a[data-os-link]")) {
+          // The extension refuses a non-https index (see `addRegistryUrl`), so
+          // a link to one would open VS Code onto an error.
+          if (location.protocol !== "https:") link.remove();
+          else link.href = deepLink(link.href);
+        }
       };
 
       // Picks the visitor made, newest first, by choice name. Harness,
@@ -279,6 +313,7 @@ const { title, description, image = config.logo ?? config.favicon } = Astro.prop
       // this beside its hero, since this one sits past the whole catalog and
       // the browser can paint the wrong command first; `__grimPick` is
       // idempotent, so the duplicate costs nothing.
+      window.__grimDeriveIndex();
       for (const bar of document.querySelectorAll("[data-os-switch]")) {
         window.__grimPreselect(bar);
       }

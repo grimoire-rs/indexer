@@ -41,7 +41,7 @@ function layoutScripts(): [string, string] {
  * and the head script reads at parse time. Both are what a browser would
  * have answered; neither is under test.
  */
-function renderPage(body: string, prefs: Record<string, string> = {}) {
+function renderPage(body: string, prefs: Record<string, string> = {}, url = "https://index.example.test/") {
   const [head, tail] = layoutScripts();
   const seed = Object.entries(prefs)
     .map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`)
@@ -55,7 +55,7 @@ function renderPage(body: string, prefs: Record<string, string> = {}) {
       </script>
       <script>${head}</script>
     </head><body>${body}<script>${tail}</script></body></html>`,
-    { runScripts: "dangerously", url: "https://index.example.test/" },
+    { runScripts: "dangerously", url },
   );
   return window.document;
 }
@@ -287,5 +287,62 @@ describe("a page restored from the back-forward cache", () => {
     win.dispatchEvent(new win.PageTransitionEvent("pageshow", { persisted: true }));
 
     expect(doc.querySelector("[data-copy]")!.getAttribute("data-copy")).toBe("codex add a");
+  });
+});
+
+/** The landing page's registry bar for an index built with `site` = `https://acme.test/idx`. */
+function registryBar(meta: boolean): string {
+  const add = "grim config registry add acme --index https://acme.test/idx";
+  const link = (scope: string) =>
+    `vscode://x.y/add-registry?index=https%3A%2F%2Facme.test%2Fidx&alias=acme&scope=${scope}`;
+  return `
+    ${meta ? '<meta name="grim-index" content="https://acme.test/idx">' : ""}
+    <div class="cmd-bar" data-os-switch data-os-noun="registry add command">
+      <button data-os-pick="grim --global ${add.slice(5)}" data-os-name="Global" data-os-href="${link("global")}" aria-checked="true"></button>
+      <button data-os-pick="${add}" data-os-name="Project" data-os-href="${link("project")}" aria-checked="false"></button>
+      <div data-copy="grim --global ${add.slice(5)}"><code>grim --global ${add.slice(5)}</code></div>
+      <a data-os-link href="${link("global")}"></a>
+    </div>`;
+}
+
+const copied = (doc: Document) => doc.querySelector("[data-copy]")!.getAttribute("data-copy");
+const linkIndex = (doc: Document) =>
+  new URL(doc.querySelector<HTMLAnchorElement>("a[data-os-link]")!.href).searchParams.get("index");
+
+describe("a registry with no configured index", () => {
+  it("hands out the address the page was loaded from", () => {
+    const doc = renderPage(registryBar(true), {}, "https://mirror.acme.test/idx/p/a/b/");
+    expect(copied(doc)).toBe("grim --global config registry add acme --index https://mirror.acme.test/idx");
+    expect(doc.querySelector("code")!.textContent).toBe(copied(doc));
+    expect(linkIndex(doc)).toBe("https://mirror.acme.test/idx");
+  });
+
+  it("carries the derived index through a scope switch", () => {
+    const doc = renderPage(registryBar(true), {}, "https://mirror.acme.test/idx/");
+    doc.querySelector<HTMLElement>("[data-os-name=Project]")!.click();
+    expect(copied(doc)).toBe("grim config registry add acme --index https://mirror.acme.test/idx");
+    const link = new URL(doc.querySelector<HTMLAnchorElement>("a[data-os-link]")!.href);
+    expect(link.searchParams.get("index")).toBe("https://mirror.acme.test/idx");
+    expect(link.searchParams.get("scope")).toBe("project");
+  });
+
+  it("drops the VS Code link off https, since the extension refuses the index", () => {
+    const doc = renderPage(registryBar(true), {}, "http://localhost:4321/idx/");
+    expect(copied(doc)).toBe("grim --global config registry add acme --index http://localhost:4321/idx");
+    expect(doc.querySelector("a[data-os-link]")).toBeNull();
+  });
+
+  it("leaves the built command alone on the site it was built for", () => {
+    const doc = renderPage(registryBar(true), {}, "https://acme.test/idx/");
+    expect(copied(doc)).toBe("grim --global config registry add acme --index https://acme.test/idx");
+    expect(linkIndex(doc)).toBe("https://acme.test/idx");
+  });
+});
+
+describe("a registry with a configured index", () => {
+  it("hands out that index wherever the page is served", () => {
+    const doc = renderPage(registryBar(false), {}, "https://mirror.acme.test/idx/");
+    expect(copied(doc)).toBe("grim --global config registry add acme --index https://acme.test/idx");
+    expect(linkIndex(doc)).toBe("https://acme.test/idx");
   });
 });

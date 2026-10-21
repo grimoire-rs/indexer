@@ -89,7 +89,7 @@ worse than the typo.
 | Key | Type | Default | Effect |
 |---|---|---|---|
 | `install` | `{os, command}[]` | the grimoire.rs installers | Hero installer one-liners. `[]` hides the strip |
-| `registry` | `{alias, index}` \| null | `null` | The "add this index" block. `null` omits it |
+| `registry` | `{alias, index?}` \| null | `null` | The "add this index" block. `null` omits it. Without `index` it hands out the address the visitor loaded the page from (`site` before scripts run) |
 | `vscodeExtension` | string \| null | `grimoire-rs.grimoire-vscode` | `publisher.extension` id behind the deep links. `null` hides every VS Code affordance |
 
 One `install` row usually covers several platforms (`"Linux / macOS"`), and

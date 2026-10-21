@@ -27,8 +27,12 @@ export interface InstallCommand {
 export interface RegistryHint {
   /** Alias the visitor's `grimoire.toml` will use, e.g. `"hub"`. */
   alias: string;
-  /** Public index URL or git remote grim browses. */
-  index: string;
+  /**
+   * Public index URL or git remote grim browses. Omitted, it is the address
+   * the page is served from: `site` in the built HTML, rewritten in the
+   * browser to the visitor's own origin.
+   */
+  index?: string;
 }
 
 /**
@@ -465,7 +469,6 @@ function validate(raw: unknown): SiteConfig {
       fail("registry.alias must be an alphanumeric alias");
     }
     optionalUrl(reg, "index");
-    if (typeof reg.index !== "string") fail("registry.index is required");
   }
 
 

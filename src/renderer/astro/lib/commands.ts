@@ -82,6 +82,23 @@ export function installChoices(config: ResolvedSiteConfig): Choice[] {
 }
 
 /**
+ * `registry` with its index filled in. An omitted index is this site's own
+ * address: `site` here, which `derivedIndex` lets the page rewrite to the
+ * origin the visitor actually loaded it from.
+ */
+export function resolveRegistry(
+  config: ResolvedSiteConfig,
+  registry: RegistryHint | null = config.registry,
+): Required<RegistryHint> | null {
+  return registry ? { alias: registry.alias, index: registry.index ?? config.site.replace(/\/+$/, "") } : null;
+}
+
+/** The built index the page swaps for its own address, or `null` when `registry.index` is set. */
+export function derivedIndex(config: ResolvedSiteConfig): string | null {
+  return config.registry && config.registry.index === undefined ? resolveRegistry(config)!.index : null;
+}
+
+/**
  * The one command a visitor needs to point their own grim at this index —
  * the `helm repo add` ergonomic. `null` when `registry` is unconfigured,
  * which means the index has no public URL to hand out; the block is omitted
@@ -96,8 +113,9 @@ export function registryAddCommand(
   config: ResolvedSiteConfig,
   registry: RegistryHint | null = config.registry,
 ): string | null {
-  return registry
-    ? `grim config registry add ${registry.alias} --index ${registry.index}`
+  const resolved = resolveRegistry(config, registry);
+  return resolved
+    ? `grim config registry add ${resolved.alias} --index ${resolved.index}`
     : null;
 }
 
@@ -120,7 +138,7 @@ export function registryScopeChoices(
   const add = registryAddCommand(config, registry);
   if (!add) return [];
   const link = (scope: "global" | "project") =>
-    addRegistryUrl(config.vscodeExtension, registry, scope) ?? undefined;
+    addRegistryUrl(config.vscodeExtension, resolveRegistry(config, registry), scope) ?? undefined;
   return [
     {
       name: "Global",

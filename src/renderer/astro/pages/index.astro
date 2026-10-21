@@ -6,7 +6,7 @@ import CommandBar from "../components/CommandBar.astro";
 import { BrandMark } from "../components/BrandMark.tsx";
 import { addRegistryUrl, cardPackage } from "../lib/catalog";
 import { withBase } from "../lib/base";
-import { installChoices, registryAddCommand, registryScopeChoices } from "../lib/commands";
+import { installChoices, registryAddCommand, registryScopeChoices, resolveRegistry } from "../lib/commands";
 import { data } from "../lib/data";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 
@@ -25,7 +25,7 @@ const marketplaceOnly = data.siteMode === "marketplace";
 // Scoped `global` because that is the choice the picker beside it starts on;
 // picking Project rewrites this href from `data-os-href` (see `__grimPick`),
 // so the two halves of the bar never disagree about where the write lands.
-const addRegistry = addRegistryUrl(config.vscodeExtension, config.registry, "global");
+const addRegistry = addRegistryUrl(config.vscodeExtension, resolveRegistry(config), "global");
 
 // The extension's own marketplace page — the one thing on this page that
 // helps a visitor who does not have it installed yet.
@@ -131,6 +131,7 @@ const scopeChoices = registryScopeChoices(config);
       few microseconds and nothing else. A platform the bar does not offer
       leaves the configured first choice alone. */}
   <script is:inline>
+    window.__grimDeriveIndex();
     for (const bar of document.querySelectorAll("[data-os-switch]")) {
       window.__grimPreselect(bar);
     }
