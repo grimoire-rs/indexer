@@ -375,13 +375,13 @@ const UPDATED_KEY = "updated";
 const UPDATED_PROVIDER = "indexer";
 
 /**
- * Now, as RFC 3339 UTC to the second — the shape `statsDocument` writes, every
- * ratings fixture pins, and the catalog's index-updated stamp carries. One
- * function so the two callers cannot drift into two spellings of the same
- * instant.
+ * An instant (now, by default) as RFC 3339 UTC to the second — the shape
+ * `statsDocument` writes, every ratings fixture pins, and the catalog's
+ * index-updated stamp carries. One function so the callers cannot drift into
+ * two spellings of the same instant.
  */
-function stamp(): string {
-  return new Date().toISOString().replace(/\.\d+Z$/, "Z");
+function stamp(at: Date = new Date()): string {
+  return at.toISOString().replace(/\.\d+Z$/, "Z");
 }
 
 /**
@@ -489,15 +489,20 @@ function withDownloads(packages: CatalogPackage[], stats: StatsFile | null): Cat
  * `schema_version` and `generated_at` are carried over rather than
  * re-stamped. The ratings job stamped this document, and re-stamping it here
  * would make the published bytes differ on every rebuild of an unchanged
- * index — a fresh stamp is taken only when there was no document to carry.
+ * index. With no document to carry, `generated_at` is the newest `updated`
+ * date (the epoch when none parses), never the clock: the catalog's stats
+ * blob and `root.stats` stay put until an input moves.
  */
 function publishedStats(
   packages: CatalogPackage[],
   stats: StatsFile | null,
 ): StatsDocument | null {
   const fresh: Record<string, unknown> = {};
+  let newest = 0;
   for (const p of packages) {
-    if (typeof p.updated === "string" && p.updated !== "") fresh[p.ref] = { at: p.updated };
+    if (typeof p.updated !== "string" || p.updated === "") continue;
+    fresh[p.ref] = { at: p.updated };
+    newest = Math.max(newest, Date.parse(p.updated) || 0);
   }
   // Nothing published and nothing to publish. An index whose packages all
   // predate the `updated` field keeps behaving exactly as it did.
@@ -511,7 +516,7 @@ function publishedStats(
   return {
     schema_version:
       typeof stats?.schema_version === "number" ? stats.schema_version : SCHEMA_VERSION,
-    generated_at: typeof stats?.generated_at === "string" ? stats.generated_at : stamp(),
+    generated_at: typeof stats?.generated_at === "string" ? stats.generated_at : stamp(new Date(newest)),
     ...merged,
   };
 }
@@ -521,6 +526,50 @@ async function exists(target: string): Promise<boolean> {
     () => true,
     () => false,
   );
+}
+
+/** Site directories the catalog plane owns in every layout. */
+const RESERVED_SITE_DIRS = new Set(["c", "browse"]);
+
+/**
+ * Files in one operator layer that would publish under a reserved directory,
+ * layer-relative. A page's route is its path minus the extension, so a
+ * top-level `c.astro` is the reserved route itself. Compared lowercase because
+ * the build may run on a case-insensitive filesystem, where `C/` is `c/`.
+ */
+async function reservedFiles(layer: string, pages: boolean): Promise<string[]> {
+  if (!(await exists(layer))) return [];
+  const entries = await fs.readdir(layer, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => path.relative(layer, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"))
+    .filter((rel) => {
+      const first = rel.split("/")[0] ?? rel;
+      return RESERVED_SITE_DIRS.has((pages && first === rel ? path.parse(rel).name : first).toLowerCase());
+    });
+}
+
+/**
+ * Refuse a build whose operator-owned `public/` or `theme/pages` files, or
+ * the configured theme package's, would publish under `c/` or `browse/`.
+ * `outDir`, the last `public/` layer, is the plane's own output and is
+ * deliberately not scanned; neither are the renderer's shipped layers, which
+ * are not the operator's to move. Unchecked, a package's file there would
+ * publish under the catalog's directory, or be overwritten by the plane's own,
+ * with no error.
+ */
+export async function assertReservedPaths(root: string, themePackage: ThemePackage | null = null): Promise<void> {
+  const under = async (base: string, label: string): Promise<string[]> => [
+    ...(await reservedFiles(path.join(base, "public"), false)).map((rel) => `${label}public/${rel}`),
+    ...(await reservedFiles(path.join(base, THEME_DIR, "pages"), true)).map((rel) => `${label}${THEME_DIR}/pages/${rel}`),
+  ];
+  const hits = [...(await under(root, "")), ...(themePackage ? await under(themePackage.dir, `${themePackage.name}/`) : [])];
+  if (hits.length === 0) return;
+  const lines = hits
+    .slice(0, 10)
+    .map((hit) => `${hit}: c/ and browse/ are reserved for the catalog in every layout — move this file to another directory`);
+  if (hits.length > 10) lines.push(`…and ${hits.length - 10} more`);
+  throw new RenderInputError(lines.join("\n"));
 }
 
 /**
@@ -570,7 +619,7 @@ async function resolveThemePackage(root: string, name: string | null): Promise<T
 }
 
 /** A resolved `theme` package: its configured name and its directory. */
-type ThemePackage = { name: string; dir: string };
+export type ThemePackage = { name: string; dir: string };
 
 /** A theme package's optional `theme.css`. Absent = none. */
 async function readThemeCss(pkg: ThemePackage | null): Promise<string> {
@@ -840,12 +889,13 @@ function relinkLogo(readme: string, plugin: string, ext: string | undefined, bas
  */
 async function resolveInputs(opts: BuildSiteOptions) {
   const config = resolveConfig(opts.config);
+  const themePackage = await resolveThemePackage(opts.root, config.theme);
+  await assertReservedPaths(opts.root, themePackage);
   const sidecar = await readStats(opts.root);
   const packages = withDownloads(withRatings(await readPackages(opts.outDir), sidecar), sidecar);
   // Downstream of the join, because the `updated` it publishes is read off
   // the packages themselves.
   const stats = publishedStats(packages, sidecar);
-  const themePackage = await resolveThemePackage(opts.root, config.theme);
   // The package's sheet first, so the index's own `customCss` overrides it.
   const css = [await readThemeCss(themePackage), await readCustomCss(opts.root, config.customCss)]
     .filter(Boolean)

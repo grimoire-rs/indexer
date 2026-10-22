@@ -8,9 +8,11 @@
 // `os.tmpdir()` deliberately: nothing on its parent chain has `node_modules`,
 // which is the shipping shape (`npx @grimoire-rs/indexer build` in an index repo
 // with no local install).
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +41,28 @@ function addSidecar(namespace: string, name: string, updated: string): void {
   const out = path.join(dir, "enrich", namespace, name);
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, "data.json"), JSON.stringify({ updated }));
+}
+
+const sha256 = (b: Buffer): string => createHash("sha256").update(b).digest("hex");
+const dist = (rel: string): Buffer => fs.readFileSync(path.join(dir, "dist", rel));
+
+interface PublishedRoot {
+  flat: { sha256: string; size: number } | null;
+  stats: { sha256: string; size: number } | null;
+  generation: number;
+  generated_at: string;
+  planes: { catalog: null; enrich: null };
+  search: null;
+}
+
+function readRoot(): PublishedRoot {
+  return JSON.parse(dist("c/root.json").toString("utf8")) as PublishedRoot;
+}
+
+function setSync(sync: Record<string, unknown>): void {
+  const file = path.join(dir, "index.config.json");
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+  fs.writeFileSync(file, JSON.stringify({ ...config, sync }, null, 2) + "\n");
 }
 
 beforeEach(async () => {
@@ -143,5 +167,44 @@ describe("build", () => {
     fs.writeFileSync(path.join(pkg, "metadata.json"), JSON.stringify({ schema: 1, name: "broken" }));
 
     expect(await run(["node", "grim-indexer", "build", dir])).toBe(65);
+  }, 120_000);
+
+  // The `c/` tree is written after the site step, from the files the deploy
+  // actually carries: a root naming bytes other than `all.json` and
+  // `stats.json` would make a flat client and a root client disagree.
+  it("IX-R05 P-1 V-45 publishes c/root.json whose stats ref and .gz siblings match the files in dist/", async () => {
+    addPackage("acme", "hello");
+    addSidecar("acme", "hello", "2026-07-01T10:00:00+00:00");
+    const before = Date.now();
+
+    expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+    const root = readRoot();
+    const stats = dist("stats.json");
+    expect(root.flat).toBeNull();
+    expect(root.stats).toEqual({ sha256: sha256(stats), size: stats.length });
+    expect(gunzipSync(dist(`c/f/sha256/${root.stats?.sha256}.json.gz`)).equals(stats)).toBe(true);
+    expect(fs.readdirSync(path.join(dir, "dist", "c/f/sha256"))).toEqual([`${root.stats?.sha256}.json.gz`]);
+    expect(gunzipSync(dist("all.json.gz")).equals(dist("all.json"))).toBe(true);
+    expect(dist("stats.json.gz").equals(dist(`c/f/sha256/${root.stats?.sha256}.json.gz`))).toBe(true);
+    expect(root.planes).toEqual({ catalog: null, enrich: null });
+    expect(root.search).toBeNull();
+    expect(root.generation).toBeGreaterThanOrEqual(Math.floor(before / 1000));
+    expect(root.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  }, 120_000);
+
+  it("IX-R05 P-1 P-5 layout anchored: root.flat names the digest of the all.json served beside it", async () => {
+    addPackage("acme", "hello");
+    setSync({ layout: "anchored" });
+
+    expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+    const root = readRoot();
+    const all = dist("all.json");
+    expect(root.flat).toEqual({ sha256: sha256(all), size: all.length });
+    expect(gunzipSync(dist(`c/f/sha256/${root.flat?.sha256}.json.gz`)).equals(all)).toBe(true);
+    // No ratings job and nothing to date: the build has no stats.json to name.
+    expect(root.stats).toBeNull();
+    expect(fs.existsSync(path.join(dir, "dist", "stats.json.gz"))).toBe(false);
   }, 120_000);
 });
