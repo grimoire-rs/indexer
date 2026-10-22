@@ -405,7 +405,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
                         ) : (
                           <span>{member.name}</span>
                         )}
-                        <span class={`badge kind-${member.kind}`}>{member.kind}</span>
+                        <span class={kindMark(member.kind) ? `badge kind-${member.kind}` : "badge"}>{member.kind}</span>
                         <code>{member.ref}</code>
                       </li>
                     ))}

@@ -39,6 +39,7 @@ import {
 import { navFor } from "./astro/lib/nav.js";
 import type { CatalogPackage } from "./types.js";
 import { SHIKI_CLASSES, SHIKI_THEMES } from "./astro/lib/code.js";
+import { markdownProcessor } from "./markdown.js";
 import { postProcessSite } from "./postprocess.js";
 
 export interface BuildSiteOptions {
@@ -907,6 +908,9 @@ function inlineConfig(
     // them. A single theme was dark on a light page. The transformer moves
     // those colours out of `style=""` into classes; see `SHIKI_CLASSES`.
     markdown: {
+      // READMEs are third-party HTML: Astro's default processor takes no
+      // rehype plugins, so the sanitizing pipeline replaces it.
+      processor: markdownProcessor(),
       shikiConfig: { themes: SHIKI_THEMES, wrap: false, transformers: [SHIKI_CLASSES] },
     },
     vite: {

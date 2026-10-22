@@ -103,6 +103,19 @@ describe("C-012 — the layout's scripts do not depend on the header", () => {
   });
 });
 
+describe("the copy toast", () => {
+  // A README heading `# copy-toast` gets that id as well, and sits earlier in
+  // the page than the layout's own toast. Its anchor must not change.
+  it("lands in the layout's toast, not in a README heading with the same id", () => {
+    const doc = renderPage(`<main><div data-grim-markdown><h1 id="copy-toast">copy-toast</h1></div></main>${COPYABLE}`);
+    const event = new doc.defaultView!.CustomEvent("grimoire:copied", { detail: { name: "x", value: "grim add a" } });
+    doc.dispatchEvent(event);
+
+    expect(doc.querySelector("body > #copy-toast .toast-value")!.textContent).toBe("grim add a");
+    expect(doc.querySelector("h1")!.textContent).toBe("copy-toast");
+  });
+});
+
 describe("the layout stamps the stored density before first paint", () => {
   // Density moves the space scale, so applying it after hydration relayouts
   // the whole page in front of the reader — the same reason the theme is

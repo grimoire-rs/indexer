@@ -88,6 +88,12 @@ Every outbound string on a package page — repository, homepage, documentation,
 support channels — was handed to the index by a registry it does not control.
 Each goes through a scheme allowlist before it becomes an `href`.
 
+A README, changelog or `SKILL.md` is the same kind of input at greater length,
+and is held to GitHub's HTML allow-list when the page is built: scripts, event
+handlers, inline styles, iframes, forms and `target` attributes are removed, and
+every `id` and `name` gets a `user-content-` prefix so a README cannot shadow
+a page global.
+
 ## Known gap
 
 In the combined (`--with-skills`) layout the gate does **not** cover your own
