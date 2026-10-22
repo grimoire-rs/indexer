@@ -707,6 +707,24 @@ describe("scaffolded CI", () => {
     expect(exists(".github/workflows/verify-ci.yml")).toBe(false);
   });
 
+  // `cache-mode` is rendered from the repository and site URLs the scaffold
+  // writes, so the first `ci:check` must read the same host the scaffold did -
+  // else the tree init just wrote is drift on its first push.
+  it("renders the cache scoping the config it wrote asks for, and ci:check agrees", async () => {
+    for (const [sub, args, scoped] of [
+      ["gh", ["--repo-url", "https://github.com/acme/idx"], true],
+      ["ghes", ["--repo-url", "https://github.example.test/acme/idx"], false],
+    ] as const) {
+      const target = path.join(dir, sub);
+      expect(await run(initArgs(target, ...args)), sub).toBe(0);
+
+      const verify = fs.readFileSync(path.join(target, ".github/workflows/verify-ci.yml"), "utf8");
+      expect(verify.includes("cache-mode: none"), sub).toBe(scoped);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await run(["node", "grim-indexer", "ci", target, "--check"]), sub).toBe(0);
+    }
+  });
+
   // A scaffolded index is an npm project, and every command a maintainer or a
   // CI job runs goes through its scripts. `dev` is the one a person reaches
   // for first, and it did not exist when the scaffold told people to use npx.

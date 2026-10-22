@@ -89,6 +89,10 @@ That is the check doing its job: the committed CI no longer matches what the
 block and re-run `npm run ci`, or accept that the repo has forked its pipeline
 and stop running the check.
 
+It also fails right after you bump `@grimoire-rs/indexer` in `package-lock.json`,
+because a newer release can render different CI. Run `npm run ci`, read the
+diff and commit it.
+
 ## `validate` exits non-zero on a PR that looks fine
 
 Non-zero means "manual review", not "malicious". The most common causes are a

@@ -27,6 +27,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # The one job that restores and saves the Actions cache, so a build only
+      # ever restores what an earlier build saved. No other job here caches.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "{{nodeVersion}}"
@@ -57,7 +59,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest{{githubCacheModeJob}}
     permissions:
       pages: write
       id-token: write
