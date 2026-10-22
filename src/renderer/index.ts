@@ -946,6 +946,13 @@ async function resolveInputs(opts: BuildSiteOptions) {
 }
 
 /**
+ * The content store is split into files of at most 20 MiB instead of one
+ * `data-store.json` that grows with the enrich plane and can hit a platform
+ * file-size limit.
+ */
+export const ASTRO_EXPERIMENTAL = { collectionStorage: "chunked" } as const;
+
+/**
  * Everything Astro is told, for one run. Build and dev share it verbatim —
  * a preview rendered from a different config would be a preview of nothing.
  */
@@ -969,6 +976,7 @@ function inlineConfig(
     site: config.site,
     base,
     integrations: [preact()],
+    experimental: ASTRO_EXPERIMENTAL,
     // Shiki is what Astro already ships (and what VS Code renders with), so
     // this configures it rather than adding a highlighter. Dual themes make
     // it follow the page: Shiki emits both colours per token, one as `color`
