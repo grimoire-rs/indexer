@@ -223,6 +223,18 @@ describe("github: the blob-store cache (IX-R26, V-17)", () => {
     }
   });
 
+  it("keeps the probe job off the build state, with or without enrichment", () => {
+    for (const enrich of [true, false]) {
+      const jobs = (github({ enrich }).doc.jobs as Record<string, unknown>);
+      const probe = JSON.stringify(jobs.probe);
+
+      expect(probe, "the probe job is rendered").toContain("grim-indexer probe");
+      for (const forbidden of ["state-key", "actions/cache", BLOB_STORE, KEY_PREFIX, "npm run enrich"]) {
+        expect(probe, `enrich ${enrich}: ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+  });
+
   it("takes fresh and purge as dispatch inputs and hands them over through env only (IX-R10)", () => {
     const { doc, steps } = github();
 
@@ -529,6 +541,17 @@ describe("gitlab: the blob-store cache (IX-R21, V-17)", () => {
       expect(holds, name).toBe(name === "pages");
     }
     expect(doc).toBeDefined();
+  });
+
+  it("keeps the probe job off the build state, with or without enrichment", () => {
+    for (const enrich of [true, false]) {
+      const probe = JSON.stringify(gitlab({ enrich }).doc["grim-indexer:probe"]);
+
+      expect(probe, "the probe job is rendered").toContain("grim-indexer probe");
+      for (const forbidden of [BLOB_STORE, KEY_PREFIX, "GRIM_INDEX_", "npm run enrich"]) {
+        expect(probe, `enrich ${enrich}: ${forbidden}`).not.toContain(forbidden);
+      }
+    }
   });
 
   it("states the two hour timeout once, on default, without a second copy", () => {

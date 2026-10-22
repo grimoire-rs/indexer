@@ -35,6 +35,7 @@ import { CliError, EXIT } from "../../src/cli/exit.js";
 import { run } from "../../src/cli/main.js";
 import { resolveOutDir } from "../../src/cli/out_dir.js";
 import { SiteConfigError } from "../../src/config.js";
+import type { RatingsConfig } from "../../src/ratings/config.js";
 import { MARKETPLACE_FILES } from "../../src/validate/core/marketplace.js";
 
 const PAGES = ".github/workflows/pages.yml";
@@ -850,6 +851,136 @@ describe("generated GitLab CI", () => {
         expect(install, `${jobKey}: ${install}`).toContain("--ignore-scripts");
       }
     }
+  });
+});
+
+// The post-deploy probe (IX-R24). It checks the live site and must never be
+// able to turn a deploy that already happened red, so most of what follows
+// pins what keeps it that way: no write token, no cache, no way to block the
+// next run, and a URL that never becomes part of a script.
+describe("the probe job", () => {
+  interface GithubJob {
+    needs?: string;
+    "continue-on-error"?: boolean;
+    "timeout-minutes"?: number;
+    permissions?: Record<string, string>;
+    outputs?: Record<string, string>;
+    steps?: Array<{ uses?: string; run?: string; with?: Record<string, unknown>; env?: Record<string, string> }>;
+  }
+
+  const STATS: RatingsConfig = { provider: "gitlab", container: "Task", createBudget: 400, lockThreads: true };
+
+  describe("on github", () => {
+    const jobs = () => dig(yaml.load(read(PAGES)), "jobs") as Record<string, GithubJob>;
+
+    beforeEach(async () => {
+      await renderInto({ forge: "github" });
+    });
+
+    it("runs after the deploy on a read-only token, and cannot fail the run", () => {
+      const probe = jobs().probe;
+
+      expect(probe?.needs).toBe("deploy");
+      expect(probe?.["continue-on-error"]).toBe(true);
+      expect(probe?.permissions).toEqual({ contents: "read" });
+      expect(Object.values(jobs()).filter((job) => job.needs === "probe"), "nothing waits on it").toEqual([]);
+    });
+
+    // The workflow's concurrency group is held until every job ends, so a hung
+    // probe would queue the next deploy behind it.
+    it("is bounded in time", () => {
+      expect(jobs().probe?.["timeout-minutes"]).toBeGreaterThan(0);
+    });
+
+    it("takes the URL from the deploy job's output, through env and quoted", () => {
+      const { deploy, probe } = jobs();
+      const step = probe?.steps?.find((candidate) => (candidate.run ?? "").includes("grim-indexer probe"));
+
+      expect(deploy?.outputs?.page_url).toBe("${{ steps.deployment.outputs.page_url }}");
+      expect(step?.env?.SITE_URL).toBe("${{ needs.deploy.outputs.page_url }}");
+      expect(step?.run).toBe('npx --no grim-indexer probe "$SITE_URL"');
+      for (const candidate of probe?.steps ?? []) {
+        expect(candidate.run ?? "", "no expression is spliced into a script").not.toContain("${{");
+      }
+    });
+
+    it("installs the locked renderer without lifecycle scripts, and keeps no credentials", () => {
+      const steps = jobs().probe?.steps ?? [];
+
+      expect(steps.map((step) => step.run).filter(Boolean)).toContain("npm ci --ignore-scripts");
+      const checkout = steps.find((step) => step.uses?.startsWith("actions/checkout@"));
+      expect(checkout?.with?.["persist-credentials"]).toBe(false);
+    });
+
+    it("pins every action to the ref the build job already uses", () => {
+      const build = new Set((jobs().build?.steps ?? []).map((step) => step.uses).filter(Boolean));
+      const used = (jobs().probe?.steps ?? []).map((step) => step.uses).filter((uses): uses is string => !!uses);
+
+      expect(used.length).toBeGreaterThan(0);
+      for (const uses of used) {
+        expect(uses).toMatch(/@[0-9a-f]{40}$/);
+        expect(build.has(uses), `${uses} is a ref the build job pins`).toBe(true);
+      }
+    });
+
+    it("restores and saves no cache, and sets node up without one", () => {
+      const steps = jobs().probe?.steps ?? [];
+
+      expect(JSON.stringify(steps)).not.toContain("actions/cache");
+      for (const step of steps) expect(step.with?.cache, step.uses).toBeUndefined();
+    });
+  });
+
+  describe("on gitlab", () => {
+    const rendered = (stats?: RatingsConfig) => yaml.load(renderCi(resolveCi({ forge: "gitlab" }), stats).get(GITLAB) as string) as Record<string, unknown>;
+
+    it("adds a job to the deploy stage and no stage of its own", () => {
+      const gitlab = rendered();
+
+      expect(dig(gitlab, "stages")).toEqual(["test", "deploy"]);
+      expect(dig(gitlab, "grim-indexer:probe", "stage")).toBe("deploy");
+    });
+
+    it("waits for pages without its artifact, and cannot fail the pipeline", () => {
+      const probe = dig(rendered(), "grim-indexer:probe") as Record<string, unknown>;
+
+      expect(probe.needs).toEqual([{ job: "pages", artifacts: false }]);
+      expect(probe.allow_failure).toBe(true);
+      expect(probe.cache, "the shared npm cache is not restored").toEqual([]);
+    });
+
+    // `needs: pages` fails the pipeline's creation when `pages` is not in it.
+    it.each([[undefined], [STATS]])("runs only in pipelines where pages runs (stats %#)", (stats) => {
+      const gitlab = rendered(stats);
+
+      const pages = dig(gitlab, "pages", "rules") as unknown[];
+      const probe = dig(gitlab, "grim-indexer:probe", "rules") as unknown[];
+      expect(probe.length).toBeGreaterThan(0);
+      for (const rule of probe) expect(pages).toContainEqual(rule);
+    });
+
+    it("installs the locked renderer without scripts and quotes the Pages URL", () => {
+      const lines = jobLines(rendered(), "grim-indexer:probe");
+
+      expect(lines).toContain("npm ci --cache .npm --prefer-offline --ignore-scripts");
+      expect(lines).toContain('npx --no grim-indexer probe "$CI_PAGES_URL"');
+    });
+  });
+
+  it.each([
+    ["github", { forge: "github" }],
+    ["github with everything on", { forge: "github", publish: "tag", autoMerge: true }],
+    ["gitlab", { forge: "gitlab" }],
+    ["gitlab with publish", { forge: "gitlab", publish: "tag" }],
+  ] as const)("renders to the same bytes every time (%s)", async (_label, ci) => {
+    const first = renderCi(resolveCi(ci), STATS);
+    const second = renderCi(resolveCi(ci), STATS);
+
+    expect([...second]).toEqual([...first]);
+    expect([...first.values()].join("\n")).toContain("grim-indexer probe");
+    const root = path.join(dir, `probe-${_label.replaceAll(" ", "-")}`);
+    expect(await renderInto(ci, root)).toBe(0);
+    expect(await check(root)).toBe(0);
   });
 });
 

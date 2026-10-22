@@ -153,4 +153,23 @@ pages:
   artifacts:
     paths:
       - public
+
+# Warns when the live site answers with a content type browsers reject. `probe`
+# exits 0 on anything it finds, and `allow_failure` covers a lock that predates
+# it, so the pipeline stays green. The `pages` artifact is not downloaded: the
+# probe reads the live site, not `public/`.
+grim-indexer:probe:
+  stage: deploy
+  needs:
+    - job: pages
+      artifacts: false
+  allow_failure: true
+  cache: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - npm ci --cache .npm --prefer-offline --ignore-scripts
+  script:
+    # `npx --no` runs the copy package-lock.json pins and never fetches one.
+    - npx --no grim-indexer probe "$CI_PAGES_URL"
 {{gitlabStatsJob}}{{gitlabPublishJob}}

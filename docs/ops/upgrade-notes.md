@@ -2,6 +2,20 @@
 
 What an operator sees when a release changes how the site is built, newest first.
 
+## Site at scale
+
+What changes for an index on the release that serves the site at 20,000
+entries. Nothing in `index.config.json` changes, and `/all.json`,
+`/stats.json` and the `/p/` URLs stay where they are.
+
+### Re-render the CI for the probe {#site-at-scale-probe}
+
+The rendered pages pipeline gains a `probe` job after the deploy. It runs
+[`grim-indexer probe`](../reference/cli.md#grim-indexer-probe) against the
+live site and warns when the host serves a file with the wrong content type.
+It never fails the pipeline. Bump the lock, run `npm run ci` and commit the
+result, as for any CI change.
+
 ## Catalog at scale
 
 What an operator does, and sees, on moving an index to the release that adds the

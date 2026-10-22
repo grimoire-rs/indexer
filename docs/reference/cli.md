@@ -288,6 +288,15 @@ no `cache-mode` line, because GitHub Enterprise Server does not know the key.
 On GitLab, merge request jobs run with `cache: []` and every job times out
 after two hours.
 
+Once the site is live, the generated CI also runs [`probe`](#grim-indexer-probe)
+against it. The probe only warns about a wrong content type, so it cannot fail a
+deploy that already happened. On GitHub it is the `probe` job. It needs `deploy`,
+takes the URL from the deploy job's `page_url` output, and sets
+`continue-on-error`. On GitLab it is the `grim-indexer:probe` job in the
+`deploy` stage, with `allow_failure`, run against `$CI_PAGES_URL`. Neither job
+uses a cache. Both run the locked copy, so a `package-lock.json` that predates
+`probe` fails that job and nothing else.
+
 Unless `ci.enrich` is `false`, the generated deploy also keeps the build state
 between runs. Only the default branch restores or saves it. See [Upgrade
 notes](../ops/upgrade-notes.md#the-build-state-cache) for the keys and for
@@ -394,6 +403,54 @@ a digest that does not match) exits 69. A root or index that is not valid, an
 epoch that is not a non-negative safe integer, and a missing or non-https `site`
 exit 65. None of them prints a key, so the build runs cold and does not save.
 `--next` without a usable hand-off exits 69.
+
+## `grim-indexer probe`
+
+Check that a deployed site answers with the content types browsers need. A
+static host picks them by file extension, and a wrong one breaks the site in the
+browser while every build step still passes.
+
+```sh
+npx --no grim-indexer probe https://acme.github.io/index/
+```
+
+It takes the site URL as its one argument. A path is kept, so a project site
+works as well as a root one. It asks the live site for five things:
+
+- `c/root.json`, as `application/json`;
+- the `c/f` blob the root names under `stats`, else `flat`, as
+  `application/gzip`, `application/x-gzip`, or `application/json` with
+  `Content-Encoding: gzip`;
+- the search file the root names under `search`, as the same gzip types;
+- one package logo, as the image type its extension names;
+- one `/p/<namespace>/<name>/` page, as `text/html`.
+
+The logo and the page are the first ones the search file lists. A
+`; charset=…` parameter is ignored when comparing types. Only headers are read
+for the logo, the blob and the page, so nothing large is downloaded.
+
+Each problem prints one line on stderr, and the command still exits 0:
+
+```
+warn: https://acme.github.io/index/p/acme/tool/: expected text/html, got application/octet-stream
+```
+
+These count as a problem:
+
+- a wrong type, or a non-2xx answer;
+- no answer within 15 seconds;
+- a body over its size cap, or a search file that does not decode;
+- a root with no `search` member.
+
+A redirect is followed only while it stays on the site's origin. A redirect to
+another origin is a problem and is not followed.
+
+A root that names neither `stats` nor `flat` has no blob to check, and a catalog
+with no logo has none to ask for. Both are skipped without a warning.
+
+Only a bad invocation exits non-zero, with 64. That covers a missing or extra
+argument, a URL that is not `http` or `https`, and a URL that carries
+credentials.
 
 ## Exit codes
 
