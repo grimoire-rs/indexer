@@ -39,6 +39,11 @@ see [Reuse shipped components](reuse-components.md).
 `Base` takes `title` and `description`. `image` is optional and defaults to the
 site logo.
 
+Every page carries a hash-based Content-Security-Policy. An inline `<script>`
+or `<style>` block you write runs, but a `style=""` attribute or an `onclick=""`
+handler is blocked: use a class, and `addEventListener` in a script. Scripts and
+stylesheets must come from the site's own origin.
+
 ## Link it
 
 Nothing registers a page automatically — put it in the nav:

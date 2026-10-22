@@ -75,7 +75,7 @@ tasks:
   # `NODE_OPTIONS` preloads the WSL chrome-launcher fix — a no-op on plain
   # Linux, so this command is byte-identical here and in CI. See the script.
   quality:web:
-    desc: Build the fixture and bulk catalog sites and run Lighthouse CI + the cascade probe
+    desc: Build the fixture and bulk catalog sites and run Lighthouse CI + the cascade and CSP probes
     cmds:
       # Report directories are cleared first, and this is not tidiness: lhci
       # writes a fresh manifest but leaves every previous run's report files
@@ -83,7 +83,7 @@ tasks:
       # readable by `lhci assert` and by any script that globs the directory
       # to re-measure a threshold. Ratcheting a floor against a report from
       # a different build is the exact failure that discipline exists to stop.
-      - rm -rf .lhci-site .lhci-bulk .lighthouseci .lighthouseci-bulk
+      - rm -rf .lhci-site .lhci-bulk .lhci-csp .lighthouseci .lighthouseci-bulk
       - npm run build
       # `--out-dir` resolves against the INDEX root, not the cwd (see
       # src/cli/out_dir.ts), so this has to be absolute or the site lands
@@ -100,6 +100,9 @@ tasks:
         ./node_modules/.bin/lhci autorun --config=.lighthouserc.bulk.cjs
       - >-
         node scripts/quality-css-cascade.mjs
+        "${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"
+      - >-
+        node scripts/quality-csp.mjs
         "${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"
 
   # Repo hygiene. Every binary below is pinned in ocx.toml (zizmor comes from

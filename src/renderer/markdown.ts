@@ -173,6 +173,19 @@ function rehypeKnownShikiClasses() {
 }
 
 /**
+ * Marks each top-level element `data-grim-markdown`, the attribute the
+ * build's markdown backstop keys on. Set here rather than by the page, so a
+ * theme that replaces the page component cannot drop it.
+ */
+function rehypeMarkMarkdown() {
+  return (tree: HastNode) => {
+    for (const node of tree.children ?? []) {
+      if (node.type === "element") node.properties = { ...node.properties, dataGrimMarkdown: "" };
+    }
+  };
+}
+
+/**
  * The processor for `markdown.processor`: remark-rehype, Shiki, the plugins
  * below, then Astro's image and heading-id steps and its own raw pass.
  *
@@ -191,6 +204,7 @@ export function markdownProcessor(): ReturnType<typeof unified> {
       [rehypeSanitize, SANITIZE_SCHEMA],
       rehypeKnownShikiClasses,
       rehypeFragmentLinks,
+      rehypeMarkMarkdown,
     ],
   });
 }

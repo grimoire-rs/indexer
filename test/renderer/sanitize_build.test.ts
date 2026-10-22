@@ -13,7 +13,7 @@ import { serializeOuter } from "parse5";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildSite } from "../../src/renderer/index.js";
 import type { SiteConfig } from "../../src/config.js";
-import { attr, classes, elements } from "./html.js";
+import { attr, classes, cspMeta, elements } from "./html.js";
 import { expectInert, HOSTILE } from "./inert.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -42,6 +42,10 @@ const README = [
   '<span class="__shiki_forged">forged</span>',
   ...MUTATION,
 ].join("\n\n");
+
+const MOVED = "<!DOCTYPE html><title>moved</title><p>x</p>";
+// A site-verification token: text only, and whatever checks it may compare its bytes.
+const TOKEN = "google-site-verification: google1234.html";
 
 let root: string;
 let package_: string;
@@ -85,6 +89,9 @@ beforeAll(async () => {
     JSON.stringify({ name: "acme-plugins", plugins: [{ name: "dev", description: "Dev", source: "./claude/dev" }] }),
   );
   await write(`${exported}/claude/dev/README.md`, README);
+  // An operator's page with no <head> and no markdown: shipped, with the policy added.
+  await write("public/moved/index.html", MOVED);
+  await write("public/google1234.html", TOKEN);
   // A member kind is registry data that lands in a class attribute.
   await write(
     "enrich/github.com/acme/starter-pack/contents.json",
@@ -139,6 +146,17 @@ describe("a README image that is not an http(s) URL", () => {
     expect(html).toContain("pct-alt");
     expect(html).toContain("junk-alt");
   });
+});
+
+it("ships a public/ page with no <head> start tag with only the policy added", async () => {
+  const doctype = "<!DOCTYPE html>";
+  expect(await fs.readFile(path.join(root, "dist", "moved", "index.html"), "utf8")).toBe(
+    doctype + cspMeta() + MOVED.slice(doctype.length),
+  );
+});
+
+it("ships a public/ page with no element byte for byte", async () => {
+  expect(await fs.readFile(path.join(root, "dist", "google1234.html"), "utf8")).toBe(TOKEN);
 });
 
 describe("a bundle page built from a hostile member kind", () => {

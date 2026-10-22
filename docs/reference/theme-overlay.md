@@ -216,3 +216,11 @@ PR that changes a path outside `index/**`, so a submitted package cannot add
 or edit one. It does execute at build time in your own CI, like the rest of
 your repository — see
 [Security and trust](../explanation/security-and-trust-model.md).
+
+Pages built from an overlay run under the site's Content-Security-Policy: a
+`style=""` attribute or an `onclick=""` handler in a component you replace is
+blocked, and README images load over `https` only.
+
+The build fails when it emits an SVG under `_astro/`, since an SVG served
+there can run script. To ship an SVG from a theme, put it in `public/` and
+reference it by path.

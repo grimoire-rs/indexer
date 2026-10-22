@@ -12,9 +12,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "parse5";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { buildSite, indexerVersion, RenderInputError } from "../../src/renderer/index.js";
 import type { SiteConfig } from "../../src/config.js";
+import { attr, cspPolicy, elements, type Element } from "./html.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 
@@ -678,5 +680,46 @@ describe("a theme package", () => {
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+// An operator's markdown page without a layout renders as a bare fragment, so
+// the built file has no `<head>` start tag, and the site-wide markdown
+// processor marks it as rendered markdown. It must build, sanitized, and carry
+// the policy like every other page.
+describe("a theme page with no layout", () => {
+  const BARE_HTML = "<!DOCTYPE html><title>bare</title><p>no head tag</p>";
+  let readBare: (rel: string) => Promise<string>;
+
+  beforeAll(async () => {
+    readBare = await render({
+      "pages/about.md":
+        '# About\n\n<div style="color:red" id="sec">raw</div>\n\n[go](#sec) ![local](./shot.png)\n',
+      "pages/bare.html": BARE_HTML,
+    });
+  }, 120_000);
+
+  /** The elements directly inside `<head>`, from one parse. */
+  const headChildren = (html: string): Element[] => {
+    const root = parse(html).childNodes.find((n): n is Element => "tagName" in n && n.tagName === "html");
+    const head = root?.childNodes.find((n): n is Element => "tagName" in n && n.tagName === "head");
+    return (head?.childNodes ?? []).filter((n): n is Element => "tagName" in n);
+  };
+
+  it("builds the markdown page, sanitized, with the policy inside <head>", async () => {
+    const html = await readBare("about/index.html");
+    const found = elements(html);
+    expect(headChildren(html).filter((el) => attr(el, "http-equiv") === "Content-Security-Policy")).toHaveLength(1);
+    expect(found.filter((el) => attr(el, "style") !== undefined)).toEqual([]);
+    expect(attr(found.find((el) => el.tagName === "div" && attr(el, "id") !== undefined)!, "id")).toBe("user-content-sec");
+    expect(html).toContain("local");
+    expect(found.filter((el) => el.tagName === "img")).toEqual([]);
+  });
+
+  it("gives a head-less page with no markdown the policy too", async () => {
+    const html = await readBare("bare/index.html");
+    const meta = headChildren(html).filter((el) => attr(el, "http-equiv") === "Content-Security-Policy");
+    expect(meta.map((el) => attr(el, "content"))).toEqual([cspPolicy()]);
+    expect(html).toContain("<p>no head tag</p>");
   });
 });
