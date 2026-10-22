@@ -4,6 +4,7 @@
 // `grim-indexer ratings` — the verb, its exit codes, and the file it writes.
 //
 // Zero network: every request goes through the stubbed `fetch`.
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,12 +12,15 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { run } from "../../src/cli/main.js";
+import { rootJson } from "../state/loopback.js";
 import { buildMarker } from "../../src/ratings/marker.js";
 import { STATS_FILE } from "../../src/ratings/seed.js";
 import { stubFetch, type Call, type Route } from "../validate/helpers.js";
 
 const SITE = "https://index.example";
 const STATS_URL = `${SITE}/stats.json`;
+const ROOT_URL = `${SITE}/c/root.json`;
+const BLOB_URL = `${SITE}/c/f/sha256/`;
 const API = "https://api.github.com/graphql";
 
 let dir: string;
@@ -75,12 +79,18 @@ function discussion(ref: string, up: number, id = `D_${ref}`): Record<string, un
  */
 function routes(opts: {
   seed?: Route;
+  /** The published root (`c/root.json`); a 404 is a site that never published one. */
+  root?: Route;
+  /** Whatever answers a `c/f/sha256/` blob request. */
+  blob?: Route;
   pages?: Route[];
   create?: Route;
 }): Call[] {
   let page = 0;
   const calls: Call[] = stubFetch((url) => {
     if (url === STATS_URL) return opts.seed ?? { status: 404 };
+    if (url.startsWith(`${ROOT_URL}?`)) return opts.root ?? { status: 404 };
+    if (url.startsWith(BLOB_URL)) return opts.blob ?? { status: 404 };
     const body = calls.at(-1)?.body ?? "";
     if (body.includes("discussionCategories")) return json({ data: { repository: REPO } });
     if (body.includes("createDiscussion")) {
@@ -292,6 +302,83 @@ describe("R-2 — nothing empties a published rating set", () => {
   });
 });
 
+describe("IX-R49 — the seed is read through the published root", () => {
+  /** A published stats document, and the root that names it as a blob. */
+  function anchoredSeed(): { root: Route; blob: Route; text: string } {
+    const text =
+      JSON.stringify(
+        {
+          schema_version: 1,
+          generated_at: "2026-01-01T00:00:00Z",
+          providers: { rating: "github", downloads: "registry" },
+          entries: { "ghcr.io/acme/two": { downloads: { total: 12 } } },
+        },
+        null,
+        2,
+      ) + "\n";
+    const bytes = Buffer.from(text);
+    const ref = { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length };
+    // The blob arrives without the gzip magic, as it does from a CDN that decoded it in transit.
+    return { root: json(JSON.parse(rootJson({ stats: ref })) as unknown), blob: { body: text }, text };
+  }
+
+  const dataPages = [
+    json({
+      data: {
+        repository: {
+          discussions: {
+            pageInfo: { hasNextPage: false },
+            nodes: [discussion("ghcr.io/acme/one", 6)],
+          },
+        },
+      },
+    }),
+  ];
+
+  it("a legacy:false site carries a foreign stat key without serving /stats.json", async () => {
+    scaffold();
+    const { root, blob } = anchoredSeed();
+    const calls = routes({ root, blob, pages: dataPages });
+
+    expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(0);
+
+    const entries = stats().entries as Record<string, Record<string, unknown>>;
+    expect(entries["ghcr.io/acme/two"].downloads).toEqual({ total: 12 });
+    expect(entries["ghcr.io/acme/one"].rating).toMatchObject({ up: 6 });
+    expect(calls.map((call) => call.url)).not.toContain(STATS_URL);
+  });
+
+  it("a root that answers 5xx fails the run (69) before the forge is touched", async () => {
+    scaffold();
+    const calls = routes({ root: { status: 503 }, seed: json({ schema_version: 1, entries: {} }) });
+
+    expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(69);
+
+    expect(fs.existsSync(path.join(dir, STATS_FILE))).toBe(false);
+    expect(calls.map((call) => call.url)).toEqual([expect.stringContaining(ROOT_URL)]);
+  });
+
+  it("a named blob that 404s fails the run (69), never reading /stats.json as an empty seed", async () => {
+    scaffold();
+    const { root } = anchoredSeed();
+    const calls = routes({ root, seed: json({ schema_version: 1, entries: {} }) });
+
+    expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(69);
+
+    expect(fs.existsSync(path.join(dir, STATS_FILE))).toBe(false);
+    expect(calls.map((call) => call.url)).not.toContain(STATS_URL);
+  });
+
+  it("a blob that does not match its digest fails the run (65)", async () => {
+    scaffold();
+    const { root, text } = anchoredSeed();
+    routes({ root, blob: { body: text.replace("12", "21") } });
+
+    expect(await run(["node", "grim-indexer", "ratings", dir])).toBe(65);
+    expect(fs.existsSync(path.join(dir, STATS_FILE))).toBe(false);
+  });
+});
+
 describe("providers.rating_host", () => {
   it("publishes the host of the endpoint the run actually used", async () => {
     // A GHES instance: the CI runner predefines the endpoint, so the host is
@@ -403,7 +490,7 @@ describe("forge failures never become an empty tally", () => {
   it("the new error classes map to an exit code, never to a generic 1", async () => {
     scaffold();
     vi.stubGlobal("fetch", (input: unknown) =>
-      String(input) === STATS_URL
+      String(input) === STATS_URL || String(input).startsWith(`${ROOT_URL}?`)
         ? Promise.resolve(new Response("", { status: 404 }))
         : Promise.reject(new Error("ECONNRESET")),
     );

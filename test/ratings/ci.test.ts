@@ -42,6 +42,9 @@ const SITE = "https://index.example.test/catalog";
 /** The verb this generated job invokes. WP-Hp wires it; the job predates it. */
 const VERB = "grim-indexer ratings";
 
+/** The verb the deploy's seed step runs, in place of any fetch of its own (IX-R49). */
+const SEED_VERB = "grim-indexer stats-seed";
+
 let dir: string;
 
 beforeEach(() => {
@@ -169,7 +172,7 @@ describe("the generated stats job — GitHub", () => {
   it("prefers a fresh tally and falls back to the published sidecar", () => {
     const steps = jobs(load("github", RATINGS)).build.steps ?? [];
     const download = steps.findIndex((step) => (step.uses ?? "").includes("download-artifact"));
-    const seed = steps.findIndex((step) => (step.run ?? "").includes("http_code"));
+    const seed = steps.findIndex((step) => (step.run ?? "").includes(SEED_VERB));
     const build = steps.findIndex((step) => (step.run ?? "").includes("npm run build"));
 
     expect(download, "no artifact download").toBeGreaterThanOrEqual(0);
@@ -237,14 +240,26 @@ describe("the seed step — R-2 in shell (C-010)", () => {
       .join("\n");
   }
 
-  it.each(["github", "gitlab"] as const)("branches on the status code — %s", (forge) => {
+  // A `legacy: false` site serves no `/stats.json`, so a seed step that fetches
+  // it reads 404 as the first run and publishes a site with the ratings gone.
+  // The status branching lives in the CLI (seed.test.ts, stats_seed.test.ts).
+  it.each(["github", "gitlab"] as const)("seeds through the indexer and fetches nothing itself — %s", (forge) => {
     const script = seedScript(forge);
 
-    // 404 is absent-is-first-class; a 2xx is the merge base; anything else is
-    // indistinguishable from a wipe and fails the job.
-    expect(script).toContain("http_code");
-    expect(script).toMatch(/\b404\)/);
-    expect(script).toMatch(/2\?\?\)|\b2xx/);
+    expect(script).toContain(`npx --no ${SEED_VERB}`);
+    const fetchers = script.split("\n").filter((line) => /\b(curl|wget)\b/.test(line));
+    expect(fetchers.join("\n")).not.toContain("stats.json");
+    expect(script).not.toMatch(/\/stats\.json|http_code/);
+  });
+
+  it.each(["github", "gitlab"] as const)("runs the indexer only when no fresh document exists — %s", (forge) => {
+    const script = seedScript(forge);
+
+    // A completed `stats` job already merged itself over the published copy, so
+    // its artifact wins and the seed is never read.
+    const guard = script.search(/-f \.stats\.json/);
+    expect(guard, "no freshness guard").toBeGreaterThanOrEqual(0);
+    expect(guard).toBeLessThan(script.indexOf(SEED_VERB));
   });
 
   // `|| true` cannot tell a genuine 404 from a DNS failure, a TLS error, a 5xx
@@ -254,10 +269,6 @@ describe("the seed step — R-2 in shell (C-010)", () => {
   it.each(["github", "gitlab"] as const)("never swallows a failed fetch — %s", (forge) => {
     expect(seedScript(forge)).not.toContain("|| true");
     expect(seedScript(forge)).not.toMatch(/curl[^\n]*-f\b/);
-  });
-
-  it.each(["github", "gitlab"] as const)("parses what it fetched before trusting it — %s", (forge) => {
-    expect(seedScript(forge)).toMatch(/JSON\.parse/);
   });
 });
 
@@ -277,11 +288,11 @@ function seedShell(forge: "github" | "gitlab"): { script: string; env: Record<st
   >;
   if (forge === "gitlab") {
     // One `script:` entry of several — the rest of the deploy is npm.
-    const block = (jobs(doc).pages.script ?? []).find((entry) => entry.includes("http_code"));
+    const block = (jobs(doc).pages.script ?? []).find((entry) => entry.includes(SEED_VERB));
     return { script: block ?? "", env: {} };
   }
   const step = (jobs(doc).build.steps ?? []).find((entry) =>
-    (entry.run ?? "").includes("http_code"),
+    (entry.run ?? "").includes(SEED_VERB),
   );
   const env = Object.fromEntries(
     Object.entries(step?.env ?? {}).filter(([, value]) => !value.includes("${{")),
@@ -325,34 +336,36 @@ return { code: result.status ?? -1, output: `${result.stdout}${result.stderr}` }
 describe("the seed URL has one source (F-6)", () => {
   // The seed URL is read from the checkout, not baked into the workflow: the
   // tally reads `index.config.json` on every run, so a value frozen at render
-  // time diverges again the moment `site` is edited without a re-render.
-  it.each(["github", "gitlab"] as const)("reads the site from the checkout — %s", (forge) => {
+  // time diverges again the moment `site` is edited without a re-render. GitLab
+  // hands the whole read to the indexer; GitHub also reads it in shell, for the
+  // cross-check below.
+  it.each(["github", "gitlab"] as const)("bakes no site into the file — %s", (forge) => {
+    expect(seedShell(forge).script).not.toContain(SITE);
+  });
+
+  it("reads the site from the checkout — github", () => {
+    expect(seedShell("github").script).toContain("index.config.json");
+  });
+
+  it.each(["github", "gitlab"] as const)("never hands the platform URL to the seed — %s", (forge) => {
     const { script } = seedShell(forge);
+    const seeding = script.split("\n").filter((line) => line.includes(SEED_VERB));
 
-    expect(script).toContain("index.config.json");
-    expect(script).not.toContain(SITE);
+    expect(seeding.join("\n")).not.toMatch(/CI_PAGES_URL|PAGES_URL|base_url/);
   });
 
-  it.each(["github", "gitlab"] as const)("never fetches from the platform URL — %s", (forge) => {
-    const { script } = seedShell(forge);
-    const fetches = script.split("\n").filter((line) => line.includes("stats.json.seed"));
-
-    expect(fetches.join("\n")).not.toMatch(/CI_PAGES_URL|PAGES_URL|base_url/);
+  // The shell short-circuits on a fresh `.stats.json` before the indexer runs,
+  // so these exercise the guard that precedes it. The same policy lives in the
+  // indexer for the run that does seed (stats_seed.test.ts), which is the only
+  // place GitLab applies it.
+  it("refuses an absent site — github", () => {
+    expect(runSeed("github", undefined, SITE).code).toBe(0);
+    expect(runSeed("github", undefined, "").code, "an absent site must not be defaulted").not.toBe(0);
   });
 
-  it.each(["github", "gitlab"] as const)("fetches what the checkout names — %s", (forge) => {
-    // 404 is a legal empty seed, so a wrong URL completes the run: the only
-    // proof the right one is used is the URL the fetch is handed.
-    const { code, output } = runSeed(forge, undefined, "https://from-the-checkout.example.test/x");
-
-    expect(code, output).toBe(0);
-    expect(runSeed(forge, undefined, "").code, "an absent site must not be defaulted").not.toBe(0);
-  });
-
-  it.each(["github", "gitlab"] as const)("refuses a site that is not https — %s", (forge) => {
-    // The seed decides every published rating, and `--proto '=https'` would
-    // refuse it further down anyway — in curl's words, on the runner.
-    const { code, output } = runSeed(forge, undefined, "http://index.example.test/catalog");
+  it("refuses a site that is not https — github", () => {
+    // The seed decides every published rating.
+    const { code, output } = runSeed("github", undefined, "http://index.example.test/catalog");
 
     expect(code, output).not.toBe(0);
     expect(output).toContain("https");
@@ -397,7 +410,7 @@ describe("the seed URL has one source (F-6)", () => {
   it("wires the cross-check to the step that resolves the Pages URL — github", () => {
     const steps = jobs(load("github", RATINGS)).build.steps ?? [];
     const pages = steps.findIndex((step) => step.id === "pages");
-    const seed = steps.findIndex((step) => (step.run ?? "").includes("http_code"));
+    const seed = steps.findIndex((step) => (step.run ?? "").includes(SEED_VERB));
 
     expect(pages, "no step resolves the Pages URL").toBeGreaterThanOrEqual(0);
     expect(steps[seed].env?.PAGES_URL).toBe("${{ steps.pages.outputs.base_url }}");
@@ -486,9 +499,11 @@ describe("`site` is validated once, at load (F-6)", () => {
   });
 
   // The seed step must not be the first thing to notice: on both forges it runs
-  // after the tally has created and locked threads on the forge.
-  it.each(["github", "gitlab"] as const)("is the same rule the seed step keeps — %s", (forge) => {
-    expect(seedShell(forge).script).toContain("https://*)");
+  // after the tally has created and locked threads on the forge. GitHub keeps
+  // the rule in shell, ahead of its Pages cross-check; GitLab's lives in
+  // `stats-seed`, which stats_seed.test.ts holds to it.
+  it("is the same rule the seed step keeps — github", () => {
+    expect(seedShell("github").script).toContain("https://*)");
   });
 });
 

@@ -39,6 +39,8 @@ export async function build(root: string, flags: BuildFlags): Promise<ExitCode> 
     console.warn("warn: no usable hand-off from `enrich` — publishing without an enrich plane");
   }
   publishDist(outDir, config.sync, handoff);
+  const { applyLegacy } = await import("../emit/legacy.js");
+  await applyLegacy(rootDir, outDir, config); // IX-R48: after the root, which names only the surviving blobs
 
   console.log(
     `${count} package(s) across ${namespaces.length} namespace(s) -> ${path.relative(process.cwd(), outDir) || outDir}`,

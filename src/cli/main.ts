@@ -17,6 +17,7 @@ import { CliError, EXIT, type ExitCode } from "./exit.js";
 import { init } from "./init.js";
 import { downloads } from "./downloads.js";
 import { ratings } from "./ratings.js";
+import { statsSeed } from "./stats_seed.js";
 import { validate, type ValidateFlags } from "./validate.js";
 
 interface InitCliOptions {
@@ -225,6 +226,14 @@ export async function run(argv: string[]): Promise<number> {
     .description("count Artifactory's download counters into .stats.json (needs the `downloads` block)")
     .action(async (root: string) => {
       code = await downloads(root);
+    });
+
+  program
+    .command("stats-seed")
+    .argument("[root]", "index repo root", ".")
+    .description("carry the published stats into .stats.json when no collector left one")
+    .action(async (root: string) => {
+      code = await statsSeed(root);
     });
 
   program
