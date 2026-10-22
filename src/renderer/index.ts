@@ -1051,7 +1051,19 @@ async function warnDanglingLinks(
 }
 
 /** Render the catalog site from `<outDir>/all.json` into `outDir`. */
+/**
+ * Outside CI, Astro posts a usage record to telemetry.astro.build on every run
+ * and `dev` asks the npm registry for a newer Astro. `build` and `dev` read the
+ * checkout and the hand-off and make no network request (IX-R35), so both are
+ * switched off for this process.
+ */
+function keepAstroOffline(): void {
+  process.env.ASTRO_TELEMETRY_DISABLED = "1";
+  process.env.ASTRO_DISABLE_UPDATE_CHECK = "true";
+}
+
 export async function buildSite(opts: BuildSiteOptions): Promise<void> {
+  keepAstroOffline();
   const inputs = await resolveInputs(opts);
   // Before `stage`, and that is the whole trick: `outDir` is its last
   // `public/` layer, which is the only reason a file sitting there survives
@@ -1353,6 +1365,7 @@ export function urlHost(address: string): string {
 }
 
 export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
+  keepAstroOffline();
   const inputs = await resolveInputs(opts);
   const staged = await stage(opts.root, opts.outDir, opts.srcDir, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
   const astro = inlineConfig(opts, staged, inputs, true);

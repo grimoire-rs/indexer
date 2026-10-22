@@ -289,6 +289,17 @@ describe("a missing read permission is silent in AQL, so it is caught elsewhere"
     ).rejects.toThrow(/HTTP 403/);
   });
 
+  it("says why an unreachable Artifactory gave no answer, never HTTP 0", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.reject(Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) })),
+    );
+
+    const failure = collectDownloads({ baseUrl: BASE, token: "t", refs: [REF], now: NOW });
+
+    await expect(failure).rejects.toThrow(/ECONNREFUSED/);
+    await expect(failure).rejects.not.toThrow(/HTTP 0/);
+  });
+
   it("fails on an AQL reply that does not parse", async () => {
     serve({ "/api/search/aql": { body: "<html>login</html>" } });
 

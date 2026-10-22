@@ -203,8 +203,10 @@ export async function run(argv: string[]): Promise<number> {
     .argument("[root]", "index repo root", ".")
     .description("refresh enrich/ sidecars (README, logo, versions) from the registry")
     .option("--grim <path>", "grim binary to read the registry with", "grim")
-    .option("--seed", "restore enrich/ from <site>/enrich.json before refreshing")
+    .option("--seed", "start from the state published at <site> (the default whenever site is set)")
     .option("--concurrency <n>", "packages refreshed at once (default 8)")
+    .option("--fresh", "ignore the published state: every package is enriched again, the generation still follows the published root")
+    .option("--purge <ref|sha256>", "drop a blob (64 hex) or a ref's blobs, and enrich every ref that held them again")
     .action(async (root: string, opts: EnrichFlags) => {
       code = await enrich(root, opts);
     });

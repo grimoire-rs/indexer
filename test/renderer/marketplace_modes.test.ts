@@ -95,7 +95,6 @@ async function build(opts: {
   // `marketplace` mode is a marketplace with zero packages.
   if (opts.mode === "marketplace") await fs.writeFile(path.join(outDir, "all.json"), "[]\n");
   else await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
-  await fs.writeFile(path.join(outDir, "enrich.json"), '{"schema_version":1,"packages":{}}\n');
   if (opts.mode !== "packages") await marketplaceTree(root, opts.repository === undefined ? REPO : opts.repository);
 
   await buildSite({ root, outDir, config: { ...config, site: opts.site ?? config.site, nav: opts.nav ?? null } });

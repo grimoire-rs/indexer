@@ -60,18 +60,19 @@ export async function dev(root: string, flags: DevFlags): Promise<ExitCode> {
   const port = resolvePort(flags.port);
   const host = resolveHost(flags.host);
 
-  const [{ loadConfig }, { compileIndex }, { devSite }, { publishDist }] = await Promise.all([
+  const [{ loadConfig }, { compileIndex }, { devSite }, { publishDist }, { stageHandoff }] = await Promise.all([
     import("../config.js"),
     import("../data/index.js"),
     import("../renderer/index.js"),
     import("../emit/root.js"),
+    import("../state/handoff.js"),
   ]);
 
   const config = await loadConfig(rootDir);
   const { count, namespaces } = await compileIndex({ root: rootDir, outDir });
   // Before the server stages `outDir` as its public layer; dev has no stats.json
   // to name, since only the build step writes one.
-  publishDist(outDir, config.sync);
+  publishDist(outDir, config.sync, stageHandoff(rootDir, outDir));
   const server = await devSite({ root: rootDir, outDir, config, port, host });
 
   console.log(`\n  ${server.url}\n`);

@@ -343,6 +343,14 @@ function isLink(file: string): boolean {
 type Read = { bytes: Buffer } | { why: string };
 
 /**
+ * The flags every read of a cached or restored file opens with. `O_NOFOLLOW`
+ * refuses a link; `O_NONBLOCK` makes a FIFO planted in its place open at once
+ * (and fail the `isFile` check) instead of blocking the run until a writer
+ * appears, which is the job timeout.
+ */
+export const READ_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
+
+/**
  * `file`'s bytes when it is a regular file within `max`, else why not. Opened
  * with `O_NOFOLLOW` and checked on the descriptor, so a path swapped for a
  * symlink after validation (a local race) reads nothing instead of the target.
@@ -351,7 +359,7 @@ type Read = { bytes: Buffer } | { why: string };
 export function readRegular(file: string, max: number): Read {
   let fd: number | undefined;
   try {
-    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    fd = fs.openSync(file, READ_FLAGS);
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) return { why: "not a regular file" };
     if (stat.size > max) return { why: `over the ${max}-byte cap` };
