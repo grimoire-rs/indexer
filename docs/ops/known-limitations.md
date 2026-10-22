@@ -10,6 +10,18 @@ Two legs were not:
 - **The cross-repository announce**, which needs a credential beyond the CI
   token.
 
+## Retained files are best-effort
+
+The new deploy carries the previous root's files so a reader holding the old
+root can still fetch them. `enrich` stages those files and `build` copies them.
+A file that cannot be staged, or fails its check, is skipped with a warning.
+That reader gets a 404 and falls back to `all.json`. The cost is a slower read,
+never wrong data.
+
+A build without `enrich`, and `dev`, retain nothing. Neither does an outage run,
+where `enrich` exits 69 because more than half the refs failed. See
+[Retained files](../reference/output-layout.md#retained-files).
+
 ## Require the check named `validate`
 
 Not `validate / validate`. That was the context while the scaffold emitted thin

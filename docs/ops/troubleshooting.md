@@ -82,6 +82,39 @@ spelling, or drop the key if it is left over from an older config
 `banner` is the one an existing index hits: it is now `notice`. See the
 [config schema](../reference/config-schema.md#navigation).
 
+## The build fails naming a file under `c/` or `browse/`
+
+Exit 65, and a message of this form:
+
+```
+public/c/notes.txt: c/ and browse/ are reserved for the catalog in every layout — move this file to another directory
+```
+
+The catalog owns both directories, in every `sync.layout`. Move the named file
+to another directory. A page at `theme/pages/c.astro` counts, because its route
+is `c`. See
+[Output layout](../reference/output-layout.md#c-and-browse-are-reserved).
+
+## `enrich` warns "re-render required"
+
+The CI job runs under a timeout below 120 minutes, which shortens the enrich
+time budget. Run `npm run ci` and commit the result so the job gets its full
+timeout. See [Upgrade notes](upgrade-notes.md#re-render-the-ci).
+
+## Every build is cold
+
+`enrich` re-enriches every package on each run. Two causes cover most cases:
+
+- `site` is unset, or is not an https address. `enrich` warns about it. Set
+  `site` in `index.config.json`.
+- The build-state cache is missing or is replaced on every run. `enrich` does
+  not warn about this one. It finds the files gone from the blob store and
+  enriches those packages in full. On GitLab, check that the default branch is
+  protected and that "Use separate caches for protected branches" is on.
+
+A weekly cold build is expected, because the state epoch renews after 7 days.
+See [Upgrade notes](upgrade-notes.md#the-build-state-cache).
+
 ## `ci:check` fails after I edited a workflow
 
 That is the check doing its job: the committed CI no longer matches what the

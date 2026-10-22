@@ -26,14 +26,18 @@ index that never runs it renders a catalogue of names.
 
 ## What is frozen
 
-Two things are safe to build on: the published URL layout
-(`/p/<namespace>/<name>/` and `/all.json`) and the per-record `schema` field.
-Everything else may still move — including `/enrich.json`, which is this
-package's own checkpoint and not a read contract.
+Three things are safe to build on. The first is the page URL layout
+(`/p/<namespace>/<name>/`). The second is the data files `/all.json` and
+`/stats.json`, with the per-record `schema` field. The third is the root
+`/c/root.json` and the `/c/f/sha256/` blobs it names. `/all.json` and
+`/stats.json` are frozen only while `sync.legacy` is true, which is the default.
+Everything else may still move. See
+[Output layout](reference/output-layout.md#frozen).
 
 The customization surface has its own tiers, listed in
 [Theme overlay](reference/theme-overlay.md#stability): page routes and the
-`@grim/*` specifier are contract; component paths and props are not yet.
+`@grim/*` specifier are contract. Routes under the reserved `c/` and `browse/`
+are the exception. Component paths and props are not yet contract.
 
 ## Status
 

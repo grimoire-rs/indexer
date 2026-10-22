@@ -37,8 +37,9 @@ Full walkthrough: [Quickstart](./docs/how-to/quickstart.md).
 
 ## Subcommands
 
-`init` · `dev` · `enrich` · `build` · `validate` · `ci` · `ratings` — each one
-and its flags in the [CLI reference](./docs/reference/cli.md).
+`init` · `dev` · `enrich` · `build` · `validate` · `ci` · `ratings` ·
+`downloads` · `stats-seed` · `state-key` — each one and its flags in the
+[CLI reference](./docs/reference/cli.md).
 
 An index stores nothing but pointers — a ref and who owns it. Everything a
 reader looks at lives in the registry, so an index that never runs `enrich`
@@ -57,9 +58,11 @@ renders a catalogue of names. See
 ## Status
 
 Pre-1.0. The end-to-end loop was proven against live GitHub repositories on
-2026-07-28. Two things are frozen and safe to build on: the published URL
-layout (`/p/<namespace>/<name>/` and `/all.json`) and the per-record `schema`
-field.
+2026-07-28. Three things are frozen and safe to build on. The first is the page
+URL layout (`/p/<namespace>/<name>/`). The second is the data files `/all.json`
+and `/stats.json`, with the per-record `schema` field. The third is the root
+`/c/root.json` and the `/c/f/sha256/` blobs it names. `/all.json` and
+`/stats.json` are frozen only while `sync.legacy` is true, which is the default.
 
 What is not yet proven, and what is known to be awkward:
 [Known limitations](./docs/ops/known-limitations.md). What moved in each

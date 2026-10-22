@@ -2,6 +2,181 @@
 
 What an operator sees when a release changes how the site is built, newest first.
 
+## Catalog at scale
+
+What an operator does, and sees, on moving an index to the release that adds the
+`sync` block, the root and the build-state cache. The
+[CHANGELOG](https://github.com/grimoire-rs/indexer/blob/main/CHANGELOG.md)
+lists the changes. This section lists their effect on a running index.
+
+Do these in order:
+
+1. [Re-render the CI](#re-render-the-ci).
+2. [Move any file under `c/` or `browse/`](#a-file-under-c-or-browse).
+3. [Set `site`](#set-site), then expect [a cold first build](#the-first-build-is-cold).
+
+Nothing else is required. `sync.layout` defaults to `flat` and `sync.legacy`
+defaults to `true`, so `/all.json` and `/stats.json` stay where they are.
+
+### Re-render the CI
+
+A release reaches the CI of an index only when you bump the lock. Bump
+`@grimoire-rs/indexer` in `package-lock.json`, run `npm run ci` and commit the
+result. Until then `--check` passes and the old pipeline keeps running.
+
+The new CI restores and saves the [build-state cache](#the-build-state-cache),
+and gives the build job 120 minutes. A pipeline left on the old render has
+neither. On GitLab, a job on the 60-minute default gets a 25-minute enrich
+budget, and `enrich` warns "re-render required".
+
+### A file under `c/` or `browse/` {#a-file-under-c-or-browse}
+
+`c/` and `browse/` now belong to the catalog in every `sync.layout`. If your
+`public/` or `theme/pages/` holds a file that would publish under either, the
+build fails with exit 65 and names the file. Move the file to another
+directory.
+
+A site with no such file is unaffected. The rule is recorded as an amendment of
+the
+[theme contract](../reference/theme-overlay.md#amendment-c-and-browse-are-reserved).
+The exact scan is in
+[Output layout](../reference/output-layout.md#c-and-browse-are-reserved).
+
+### Set `site` {#set-site}
+
+The build state is published at `site` and read back from there. Set `site` in
+`index.config.json` to the https address the index is served from.
+
+- An unset `site` makes every build cold. `enrich` warns and re-enriches every
+  package.
+- A `site` that is not https makes every build cold too. Plain http is accepted
+  only for a loopback host.
+- The default `site` names another index, so the indexer ignores it and reads
+  only a `site` your own config sets.
+
+[`enrich`](../reference/cli.md#grim-indexer-enrich) lists the rules.
+
+### The first build is cold {#the-first-build-is-cold}
+
+The first build that writes the enrich plane has nothing to restore. It
+deep-enriches every package once. At the 20,000-entry design point that is
+60,000 `grim` calls, about 38 minutes at 0.3 s a call and 8 at a time. The
+figure is an estimate and has not been measured.
+
+- The enrich time budget stops new work before the job timeout and hands off
+  what it reached. A longer cold build converges over several runs.
+- A package not reached yet shows the fields of its pointer until a later run
+  reaches it.
+- A cold build re-dates `updated` for artifacts that carry no `created`.
+  Readers who sort by `updated` see those artifacts move once.
+
+### The build state cache {#the-build-state-cache}
+
+`enrich` keeps a blob store under `.grim-index-state/b` between runs. At the
+20,000-entry design point it is about 1.7 GB raw and 0.7 GB compressed. The
+generated CI saves and restores it so a build probes digests instead of
+fetching everything again. Only the default branch restores or saves it.
+
+**GitHub.** The key is `grim-index-state-v1-<key>`, where `<key>` comes from
+[`state-key`](../reference/cli.md#grim-indexer-state-key). The job restores
+that exact key with no fallback, and saves under `state-key --next` when no
+entry holds it. A concurrency group serializes the Pages deploys, so one run
+writes at a time.
+
+**GitLab.** The `pages` job uses the fixed key `grim-index-state-v1` with
+`pull-push`. Two settings matter:
+
+- Keep "Use separate caches for protected branches" on, and keep the default
+  branch protected. That setting stops a pipeline on any other ref from reading
+  or writing the key.
+- The cache must have one writer. A runner that mounts one cache volume for
+  every project does not. Use a project-dedicated runner or a distributed
+  cache.
+
+**The epoch renews weekly.** An epoch older than 7 days is replaced, and the
+build after it is cold. Expect a cold build about once a week, with the cost
+described [above](#the-first-build-is-cold). `enrich --fresh` and `--purge`
+start a new epoch the same way.
+
+#### Clear a bad entry {#clear-a-bad-entry}
+
+A cache entry that holds bad data is not retired by waiting. Remove it.
+
+- **GitHub:** `gh cache delete <key>`. The run after it builds cold. The `fresh`
+  and `purge` dispatch inputs also start a new epoch, and with it a new key.
+- **GitLab:** "Clear runner caches" in the project's CI settings. `fresh` and
+  `purge` do not retire the fixed key, because it cannot carry an epoch.
+
+### `enrich.json` is no longer written {#enrich-json}
+
+`enrich` now starts from `c/root.json` and the enrich plane that root names.
+`build` no longer writes `enrich.json`, and nothing reads it, `--seed`
+included. The next deploy stops publishing it. If your index repository
+commits an `enrich.json`, you can delete it after upgrading.
+
+### Search with `legacy: false` {#search-with-legacy-false}
+
+`sync.legacy: false` needs `sync.layout: anchored` and removes `/all.json` and
+`/stats.json` after the build. It is opt-in. Set it only when no reader of the
+index still needs those files.
+
+- `grim` 0.15.0 reads only `/all.json`. It keeps what it cached and finds no new
+  rows. A cold install is empty.
+- `grim` 0.14.3 and older read only `/all.json` and cannot serve a stale cache.
+  They lose the index's rows once their one-hour cache expires.
+- The site's own search falls back to a substring match over the fields on each
+  card, because its default search file is `/all.json`. The marketplace search
+  file is unaffected.
+
+See [`legacy: false`](../reference/config-schema.md#legacy-false).
+
+### The `legacy` default will flip {#legacy-default}
+
+**Deprecated 2026-10-22:** the `true` default of `sync.legacy`. It turns
+`false` in the first indexer release after a `grim` that syncs from
+`c/root.json` becomes the oldest supported `grim`. The switch stays.
+
+With `false`, the build drops `/all.json`, `/stats.json`, `/all.json.gz` and
+`/stats.json.gz`. That breaks every reader of those files:
+
+- `grim` 0.15.0 and older. Version 0.15.0 keeps its cache and finds no new
+  rows. Version 0.14.3 and older lose the index's rows after one hour.
+- Any script or client that fetches `/all.json` or `/stats.json` itself.
+
+To keep serving them after the flip, set `"legacy": true` in the `sync` block.
+
+### Records are bounded {#records-are-bounded}
+
+When `all.json` is written, every text field is cut to a fixed bound, and
+control and invisible code points are removed. A very long `description` is
+shortened. No key is dropped. The full text stays in the package's own
+metadata. The bounds are in
+[Bounded record fields](../reference/output-layout.md#bounded-record-fields).
+
+### A ref that keeps failing {#a-ref-that-keeps-failing}
+
+A ref that fails every attempt for 30 days falls back to the fields of its
+pointer: no title, summary or README. `enrich` warns naming it, and the next
+success restores it. Builds that count as an outage do not run the 30 days.
+
+A package that vanished from its registry is therefore dropped from the rich
+data after 30 days. `enrich --purge <ref>` is the urgent path when it must
+disappear sooner.
+
+### A duplicate `ref` {#a-duplicate-ref}
+
+`validate` sends a pull request that adds a pointer with the `ref` of an
+existing one to manual review. The message names the existing pointer. Case, tag
+and digest are ignored in the comparison. See
+[`validate`](../reference/cli.md#grim-indexer-validate).
+
+### Downgrading
+
+An older indexer seeds from `enrich.json` on the live site, and this release
+publishes none. Rolling back therefore means a cold rebuild, with the cost
+described [above](#the-first-build-is-cold). The `sync` block is unknown to it. It warns that nothing
+reads `sync` and builds flat. Its next deploy publishes no `c/` files.
+
 ## P0 hardening
 
 This release treats everything a package ships, and everything a theme adds,
