@@ -58,13 +58,7 @@ function CardLogo({ pkg }: { pkg: CardPackage }) {
 
   if (!pkg.logo) {
     return (
-      <span
-        class="card-logo card-logo-fallback"
-        aria-hidden="true"
-        style={{
-          background: `var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`,
-        }}
-      >
+      <span class="card-logo card-logo-fallback" aria-hidden="true" data-kind={pkg.kind}>
         {pkg.name[0]?.toUpperCase()}
       </span>
     );

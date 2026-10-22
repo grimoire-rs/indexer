@@ -227,7 +227,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
                 <img src={withBase(pkg.logo)} alt="" />
               </span>
             ) : (
-              <div class="tile letter" style={`background: var(--grim-color-kind-${pkg.kind}, var(--grim-color-muted))`}>
+              <div class="tile letter" data-kind={pkg.kind}>
                 {pkg.name[0]?.toUpperCase()}
               </div>
             )

@@ -38,7 +38,8 @@ import {
 } from "../marketplace/read.js";
 import { navFor } from "./astro/lib/nav.js";
 import type { CatalogPackage } from "./types.js";
-import { SHIKI_THEMES } from "./astro/lib/code.js";
+import { SHIKI_CLASSES, SHIKI_THEMES } from "./astro/lib/code.js";
+import { postProcessSite } from "./postprocess.js";
 
 export interface BuildSiteOptions {
   /** Index repo root. Astro's root; `enrich/` and `public/` resolve here. */
@@ -591,6 +592,8 @@ const RUNTIME_DEPS = [
   "preact-render-to-string",
   "lucide-preact",
   "@mdi/js",
+  // `lib/code.ts` imports it, and Vite bundles that from the staged root.
+  "@shikijs/transformers",
 ];
 
 // Node refuses to create a directory symlink on Windows without elevation;
@@ -883,6 +886,7 @@ function inlineConfig(
   opts: BuildSiteOptions,
   staged: Awaited<ReturnType<typeof stage>>,
   { config, packages, css, marketplace, siteMode, builtAt, base }: Awaited<ReturnType<typeof resolveInputs>>,
+  dev: boolean,
 ) {
   return {
     // The staged dir, never the index repo — see `stage`.
@@ -898,16 +902,18 @@ function inlineConfig(
     integrations: [preact()],
     // Shiki is what Astro already ships (and what VS Code renders with), so
     // this configures it rather than adding a highlighter. Dual themes make
-    // it follow the page: Shiki emits both colours per token, one as an
-    // inline style and one as `--shiki-dark`, and Base.astro's stylesheet
-    // picks between them. A single theme was dark on a light page.
+    // it follow the page: Shiki emits both colours per token, one as `color`
+    // and one as `--shiki-dark`, and Base.astro's stylesheet picks between
+    // them. A single theme was dark on a light page. The transformer moves
+    // those colours out of `style=""` into classes; see `SHIKI_CLASSES`.
     markdown: {
-      shikiConfig: { themes: SHIKI_THEMES, wrap: false },
+      shikiConfig: { themes: SHIKI_THEMES, wrap: false, transformers: [SHIKI_CLASSES] },
     },
     vite: {
       define: {
         __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, marketplace, siteMode, builtAt }),
         __GRIMOIRE_BASE__: JSON.stringify(base),
+        __GRIMOIRE_DEV__: JSON.stringify(dev),
       },
       // What a page under `theme/pages/` imports the shipped components and
       // helpers by. A relative specifier would work and would encode how
@@ -999,7 +1005,10 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
   }
   // Same route as `stats.json`: `outDir` is `stage`'s last `public/` layer.
   const staged = await stage(opts.root, opts.outDir, undefined, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
-  const astro = inlineConfig(opts, staged, inputs);
+  const astro = inlineConfig(opts, staged, inputs, false);
+  // The registry is per process: without this, a second build in the same
+  // process ships the first one's rules and a different sheet hash.
+  SHIKI_CLASSES.clearRegistry();
 
   // Astro routes its server build through `<cwd>/.astro/` whenever `outDir`
   // is not under `process.cwd()` (`getOutDirWithinCwd`). That fallback is
@@ -1019,6 +1028,7 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
   if (inputs.siteMode === "marketplace") {
     await fs.rm(path.join(opts.outDir, "marketplace", "index.html"), { force: true });
   }
+  await postProcessSite(opts.outDir, inputs.base);
   // After the build, and outside the `finally`: there is nothing to check
   // against until the routes exist, and a build that threw has a real error
   // to report rather than a list of links that were never emitted.
@@ -1284,7 +1294,7 @@ export function urlHost(address: string): string {
 export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
   const inputs = await resolveInputs(opts);
   const staged = await stage(opts.root, opts.outDir, opts.srcDir, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
-  const astro = inlineConfig(opts, staged, inputs);
+  const astro = inlineConfig(opts, staged, inputs, true);
   const cwd = process.cwd();
   process.chdir(staged.dir);
   try {

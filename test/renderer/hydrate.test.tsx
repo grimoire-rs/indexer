@@ -1242,3 +1242,68 @@ describe("the index-updated stamp", () => {
     spy.mockRestore();
   });
 });
+
+/**
+ * A kind's colour reaches the tile and the row's mark through a `data-kind`
+ * attribute and the stylesheet, never a `style` attribute: a hash-based style
+ * CSP blocks the attribute in the server markup the island hydrates over.
+ */
+describe("the kind colour", () => {
+  const UNLOGOED = [
+    { namespace: "acme", name: "alpha", kind: "skill", ref: "r.test/acme/alpha" },
+    // A kind this renderer has no colour for keeps its attribute, so the
+    // stylesheet's muted default is what paints it.
+    { namespace: "acme", name: "bravo", kind: "widget", ref: "r.test/acme/bravo" },
+    { namespace: "acme", name: "charlie", kind: "rule", ref: "r.test/acme/charlie", deprecated: "gone" },
+  ] as unknown as CatalogPackage[];
+
+  const island = <Catalog packages={UNLOGOED} vscodeExtension={null} builtAt={BUILT_AT} />;
+  const kinds = (host: HTMLElement, selector: string) =>
+    [...host.querySelectorAll<HTMLElement>(selector)].map((el) => el.dataset.kind);
+
+  afterEach(() => {
+    unmountAll();
+    document.body.innerHTML = "";
+    history.replaceState({}, "", "/");
+    localStorage.clear();
+  });
+
+  it("paints the fallback tile by attribute, and hydration leaves it as the server wrote it", async () => {
+    const server = document.createElement("div");
+    render(island, server);
+    expect(server.querySelectorAll("[style]")).toHaveLength(0);
+    // The deprecated package is hidden until asked for, on the server too.
+    expect(kinds(server, ".card-logo-fallback")).toEqual(["skill", "widget"]);
+    const tiles = (el: HTMLElement) =>
+      [...el.querySelectorAll(".card-logo-fallback")].map((tile) => tile.outerHTML);
+    const markup = server.innerHTML;
+    const served = tiles(server);
+    render(null, server);
+
+    const host = document.createElement("div");
+    host.innerHTML = markup;
+    document.body.append(host);
+    mounted.push(host);
+    hydrate(island, host);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(tiles(host)).toEqual(served);
+  });
+
+  it("paints the table row's kind mark by attribute, and flags only the deprecated one", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(island, host);
+    host.querySelector<HTMLElement>(`button[aria-label="Show packages as a list"]`)!.click();
+    host.querySelector<HTMLElement>("button.deprecated-toggle")!.click();
+    await vi.waitFor(() => expect(host.querySelectorAll(".t-kind")).toHaveLength(3));
+
+    expect(host.querySelectorAll("[style]")).toHaveLength(0);
+    expect(kinds(host, ".t-kind")).toEqual(["skill", "widget", "rule"]);
+    expect(kinds(host, ".card-logo-fallback")).toEqual(["skill", "widget", "rule"]);
+    expect(
+      [...host.querySelectorAll<HTMLElement>(".t-kind")].map((el) => el.classList.contains("deprecated")),
+    ).toEqual([false, false, true]);
+  });
+});

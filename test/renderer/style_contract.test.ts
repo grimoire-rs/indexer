@@ -135,8 +135,9 @@ describe("the cascade layer", () => {
 
   it("layers no !important beyond the Shiki declarations that need one", () => {
     // Layer order REVERSES for !important, so a layered !important beats an
-    // unlayered one and locks the consumer out permanently. These six reach
-    // Shiki's inline `style=""` attributes, which no layered rule can.
+    // unlayered one and locks the consumer out permanently. These five date
+    // from when Shiki wrote inline `style=""` attributes, which no layered
+    // rule can reach; they stay so the code colours remain a contract choice.
     const found = BLOCKS.flatMap(([, css]) =>
       [...stripComments(css).matchAll(/(?:^|[;{])\s*([a-z-]+\s*:[^;{}]*!important)/gm)].map((m) =>
         m[1].replace(/\s+/g, " ").trim(),
@@ -144,7 +145,6 @@ describe("the cascade layer", () => {
     ).sort();
     expect(found).toEqual(
       [
-        "background-color: transparent !important",
         "background-color: var(--grim-color-chip-bg) !important",
         "color: var(--shiki-dark) !important",
         "font-style: var(--shiki-dark-font-style) !important",

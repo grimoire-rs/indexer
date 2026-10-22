@@ -16,6 +16,7 @@ import { buildSite, RenderInputError, stageMarketplace } from "../../src/rendere
 import type { SiteConfig } from "../../src/config.js";
 import { KIND_MARKS } from "../../src/renderer/astro/components/KindMark.tsx";
 import { KINDS } from "../../src/validate/core/metadata.js";
+import { attr, classes, elements } from "./html.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 
@@ -904,7 +905,7 @@ describe("config reaches the rendered HTML", () => {
     const mcp = panel(await readOut("p/registry.example/team/bare/index.html"));
     expect(mcp).toMatch(/<pre class="astro-code[^"]*"/);
     expect(mcp).toContain("The fixture MCP server.");
-    expect(mcp).toMatch(/<span style="[^"]*">/); // tokens, not a plain block
+    expect(mcp).toMatch(/<span class="__shiki_[a-z0-9]+">/); // tokens, not a plain block
 
     // Nothing to show renders no panel at all — the tab is greyed instead.
     const none = await readOut("p/github.com/acme/test-writer/index.html");
@@ -989,10 +990,12 @@ describe("config reaches the rendered HTML", () => {
   it("themes code blocks for both schemes and makes them copyable", async () => {
     // A fence inside rendered markdown…
     const fenced = await readOut("p/github.com/acme/starter-pack/index.html");
-    expect(fenced).toMatch(/<pre class="astro-code[^"]*"[^>]*style="[^"]*--shiki-dark:/);
+    expect(fenced).toMatch(/<pre class="astro-code[^"]*__shiki_[a-z0-9]+[^"]*"/);
     // …and the JSON the `<Code>` component renders, on the same pair.
     const mcp = await readOut("p/registry.example/team/bare/index.html");
-    expect(mcp).toMatch(/<pre class="astro-code[^"]*"[^>]*style="[^"]*--shiki-dark:/);
+    expect(mcp).toMatch(/<pre class="astro-code[^"]*__shiki_[a-z0-9]+[^"]*"/);
+    // Both colours of the pair are in the linked sheet, one per token class.
+    expect(bundledCss).toMatch(/\.__shiki_[a-z0-9]+\{[^}]*color:#[0-9a-f]+;--shiki-dark:#[0-9a-f]+/i);
 
     expect(bundledCss).toMatch(/\.astro-code\{[^}]*border-radius:var\(--grim-radius-control\)/);
     expect(bundledCss).toMatch(/:root\[data-theme=dark\][^{]*\.astro-code[^{]*\{[^}]*--shiki-dark/);
@@ -1151,7 +1154,14 @@ describe("config reaches the rendered HTML", () => {
     // ground IS the mark, and the letter on it would be invisible without one.
     // `test-writer` is the fixture package carrying no logo at all.
     const lettered = await readOut("p/github.com/acme/test-writer/index.html");
-    expect(lettered).toMatch(/class="tile letter"[^>]*background:\s*var\(--grim-color-kind-/);
+    // The ground is a rule on the kind attribute, not an inline style.
+    const kind = /class="tile letter" data-kind="([a-z]+)"/.exec(lettered)?.[1];
+    expect(kind).toBeDefined();
+    expect(bundledCss).toMatch(
+      new RegExp(
+        `\\.tile\\.letter\\)\\[data-kind=("?)${kind}\\1\\]\\{[^}]*background:var\\(--grim-color-kind-${kind}\\)`,
+      ),
+    );
   });
 
   it("attributes the renderer in the footer, and lets an index turn it off", async () => {
@@ -1348,6 +1358,75 @@ describe("theming", () => {
       indexHtml.indexOf('rel="stylesheet"'),
     );
     expect(indexHtml.indexOf("rgb(1 2 3)")).toBeGreaterThan(indexHtml.indexOf("@layer grimoire"));
+  });
+});
+
+// A hash-based style CSP admits no `style=""` attribute, so every colour that
+// used to be inline is a class rule in a stylesheet the page links.
+describe("no inline styles", () => {
+  const SHIKI_LINK = /^(.*)\/_astro\/shiki\.[0-9a-f]{8}\.css$/;
+  const FENCE_PAGE = "p/github.com/acme/starter-pack/index.html";
+  const COMMAND_PAGE = "p/registry.example/team/bare/index.html";
+
+  async function pages(built: Built): Promise<string[]> {
+    const files = await fs.readdir(built.outDir, { recursive: true });
+    return files.filter((f) => f.endsWith(".html")).sort();
+  }
+
+  const shikiClasses = (html: string) => [
+    ...new Set(elements(html).flatMap((el) => classes(el).filter((c) => c.startsWith("__shiki_")))),
+  ];
+
+  it("emits no style attribute on any page", async () => {
+    for (const built of [site, sub]) {
+      const found = await pages(built);
+      expect(found.length).toBeGreaterThan(1);
+      for (const rel of found) {
+        const offenders = elements(await built.read(rel))
+          .filter((el) => attr(el, "style") !== undefined)
+          .map((el) => `<${el.tagName} class="${attr(el, "class") ?? ""}">`);
+        expect(offenders, rel).toEqual([]);
+      }
+    }
+  });
+
+  it("highlights a markdown fence and a CodeBlock with classes", async () => {
+    for (const rel of [FENCE_PAGE, COMMAND_PAGE]) {
+      const html = await readOut(rel);
+      const pre = elements(html).find((el) => el.tagName === "pre" && classes(el).includes("astro-code"));
+      expect(pre, rel).toBeDefined();
+      expect(classes(pre!).some((c) => c.startsWith("__shiki_")), rel).toBe(true);
+      const tokens = elements(html).filter(
+        (el) => el.tagName === "span" && classes(el).some((c) => c.startsWith("__shiki_")),
+      );
+      expect(tokens.length, rel).toBeGreaterThan(0);
+      // The colours live in the stylesheet only.
+      expect(html, rel).not.toContain("--shiki-dark:");
+    }
+  });
+
+  it("links a rule for every Shiki class, on exactly the pages that use one", async () => {
+    for (const [built, base] of [[site, ""], [sub, SUB_BASE]] as const) {
+      const using: string[] = [];
+      for (const rel of await pages(built)) {
+        const html = await built.read(rel);
+        const used = shikiClasses(html);
+        const hrefs = elements(html)
+          .filter((el) => el.tagName === "link" && attr(el, "rel") === "stylesheet")
+          .map((el) => attr(el, "href")!)
+          .filter((href) => SHIKI_LINK.test(href));
+        if (used.length === 0) {
+          expect(hrefs, rel).toEqual([]);
+          continue;
+        }
+        using.push(rel);
+        expect(hrefs, rel).toHaveLength(1);
+        expect(SHIKI_LINK.exec(hrefs[0]!)?.[1], rel).toBe(base);
+        const css = await built.read(hrefs[0]!.slice(base.length + 1));
+        for (const cls of used) expect(css, `${rel} ${cls}`).toContain(`.${cls}{`);
+      }
+      expect(using).toEqual(expect.arrayContaining([FENCE_PAGE, COMMAND_PAGE]));
+    }
   });
 });
 

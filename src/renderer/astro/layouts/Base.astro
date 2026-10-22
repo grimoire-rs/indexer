@@ -1879,9 +1879,11 @@ const builtIndex = derivedIndex(config);
         }
         /* One glyph wide, and the same width whatever the kind is — so every
            name beside it starts on one line down the whole list. The colour
-           is set inline, from the kind's own token or the deprecation one. */
+           is the kind's own (see the `data-kind` rules), or the deprecation
+           one. */
         .t-kind {
           justify-content: center;
+          color: var(--grim-color-muted);
         }
         /* The card's tile at a row's height. Geometry, not a scale step, and
            measured against the text line beside it rather than against the
@@ -2057,6 +2059,61 @@ const builtIndex = derivedIndex(config);
           color: var(--grim-color-kind-plugin);
         }
         .badge.deprecated {
+          color: var(--grim-color-deprecated);
+        }
+        /* A kind's colour on the elements that carry `data-kind`: the letter
+           tile of a package with no logo, and the table row's mark. They are
+           attributes rather than inline styles so the page needs no
+           `style-src` exception. A kind with no rule here, including one
+           this renderer has never heard of, keeps the muted default. */
+        :is(.card-logo-fallback, .tile.letter) {
+          background: var(--grim-color-muted);
+        }
+        :is(.card-logo-fallback, .tile.letter)[data-kind="skill"] {
+          background: var(--grim-color-kind-skill);
+        }
+        :is(.card-logo-fallback, .tile.letter)[data-kind="rule"] {
+          background: var(--grim-color-kind-rule);
+        }
+        :is(.card-logo-fallback, .tile.letter)[data-kind="agent"] {
+          background: var(--grim-color-kind-agent);
+        }
+        :is(.card-logo-fallback, .tile.letter)[data-kind="mcp"] {
+          background: var(--grim-color-kind-mcp);
+        }
+        :is(.card-logo-fallback, .tile.letter)[data-kind="bundle"] {
+          background: var(--grim-color-kind-bundle);
+        }
+        :is(.card-logo-fallback, .tile.letter)[data-kind="hook"] {
+          background: var(--grim-color-kind-hook);
+        }
+        :is(.card-logo-fallback, .tile.letter)[data-kind="plugin"] {
+          background: var(--grim-color-kind-plugin);
+        }
+        .t-kind[data-kind="skill"] {
+          color: var(--grim-color-kind-skill);
+        }
+        .t-kind[data-kind="rule"] {
+          color: var(--grim-color-kind-rule);
+        }
+        .t-kind[data-kind="agent"] {
+          color: var(--grim-color-kind-agent);
+        }
+        .t-kind[data-kind="mcp"] {
+          color: var(--grim-color-kind-mcp);
+        }
+        .t-kind[data-kind="bundle"] {
+          color: var(--grim-color-kind-bundle);
+        }
+        .t-kind[data-kind="hook"] {
+          color: var(--grim-color-kind-hook);
+        }
+        .t-kind[data-kind="plugin"] {
+          color: var(--grim-color-kind-plugin);
+        }
+        /* After the kinds, at the same weight: a retired package shows the
+           deprecation colour instead of its kind's. */
+        .t-kind.deprecated {
           color: var(--grim-color-deprecated);
         }
         .chip[class*="kind-"] {
@@ -2408,23 +2465,21 @@ const builtIndex = derivedIndex(config);
           /* Shiki colours tokens; the surface is ours. Its own background is
              the theme's editor chrome — GitHub's blue-grey `#24292e` — which
              next to this page's purple-tinted card reads as a green cast.
-             `!important` because Shiki writes it as an inline style. */
+             `!important` so the order of this sheet and Shiki's, which holds
+             the same property at the same weight, cannot decide it. */
           background-color: var(--grim-color-chip-bg) !important;
         }
-        /* The dark half of the pair. Shiki writes the light colour inline and
-           the dark one as a custom property on the same token, so switching
-           themes is this rule rather than a second render. `!important` for
-           the same reason: the light value is inline. */
+        /* The dark half of the pair: Shiki's class rules (linked by
+           `postProcessSite`, same layer) set the light colour and a
+           `--shiki-dark` property per token; these selectors outweigh them
+           and swap the two. Keep the `!important`s: without them an
+           unlayered `customCss` rule would recolour dark tokens. */
         :root[data-theme="dark"] .astro-code,
         :root[data-theme="dark"] .astro-code span {
           color: var(--shiki-dark) !important;
           font-style: var(--shiki-dark-font-style) !important;
           font-weight: var(--shiki-dark-font-weight) !important;
           text-decoration: var(--shiki-dark-text-decoration) !important;
-        }
-        /* A token can carry its own highlight background; nothing else may. */
-        .astro-code span:not([style*="background"]) {
-          background-color: transparent !important;
         }
         /* The corner the block's buttons sit in. It is a row rather than one
            positioned button because `CodeBlock.astro` can add a second one —
