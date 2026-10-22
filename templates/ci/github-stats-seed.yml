@@ -13,12 +13,12 @@
         with:
           name: grim-stats
 
-      # `|| true` is forbidden here. It cannot tell a genuine 404 from a DNS
-      # failure, a TLS error, a 5xx or a truncated body - and if the `stats` job
-      # also failed, the deploy would then publish a site with no sidecar at all,
-      # the exact wipe R-2 exists to prevent. So the status code is captured
-      # and branched on: 404 is an empty seed, a 2xx that parses is the merge
-      # base, anything else fails the job.
+      # The indexer reads the published sidecar, through the root the live site
+      # publishes. Fetching `stats.json` here would read a 404 on a site that no
+      # longer serves one (`sync.legacy: false`) as the first run, and deploy with
+      # every rating gone. An unreadable root, a missing or mismatching blob and
+      # a document that does not parse all fail the job: `|| true` is forbidden,
+      # since it cannot tell a genuine first run from a wipe.
       - name: Seed from the published sidecar
         env:
           PAGES_URL: ${{ steps.pages.outputs.base_url }}
@@ -39,9 +39,8 @@
             # Not defaulted: the built-in default names the first-party index,
             # and seeding from someone else's published stats would merge
             # their stats into this one's sidecar. TLS because the fetched
-            # document decides every published stat - `--proto '=https'`
-            # below would refuse it anyway, in curl's words instead of these.
-            *) echo "::error::index.config.json needs an explicit https \`site\` - the seed is read from <site>/stats.json (got '$SITE_URL')"; exit 1 ;;
+            # document decides every published stat.
+            *) echo "::error::index.config.json needs an explicit https \`site\` - the seed is read from the stats <site> publishes (got '$SITE_URL')"; exit 1 ;;
           esac
 
           # The Pages URL is a cross-check, never a second source: while it was
@@ -65,24 +64,4 @@
             echo "using the stats document this run produced"
             exit 0
           fi
-          code=$(curl -sS --proto '=https' --tlsv1.2 --max-time 30 \
-            -o .stats.json.seed -w '%{http_code}' "$SITE_URL/stats.json") || {
-            echo "::error::could not read the published stats.json - refusing to deploy a site that would empty every published stat"
-            exit 1
-          }
-          case "$code" in
-            404)
-              echo "no stats.json published yet - starting from an empty seed"
-              ;;
-            2??)
-              node -e 'JSON.parse(require("fs").readFileSync(".stats.json.seed","utf8"))' || {
-                echo "::error::the published stats.json did not parse - refusing to treat an unreadable seed as an empty one"
-                exit 1
-              }
-              mv -f .stats.json.seed .stats.json
-              ;;
-            *)
-              echo "::error::the published stats.json returned HTTP $code"
-              exit 1
-              ;;
-          esac
+          npx --no grim-indexer stats-seed

@@ -8,7 +8,7 @@
 import { linkAttrs, withBase } from "../lib/base";
 import { data } from "../lib/data";
 
-const { config } = data;
+const { config, legacy } = data;
 // Shown as well as linked: on a subpath deployment the bare path is not where
 // the file is, so the label has to carry the prefix too.
 const allJson = withBase("/all.json");
@@ -16,11 +16,17 @@ const allJson = withBase("/all.json");
 
 <footer data-slot="site-footer">
   <div class="shell">
-    <p>
-      Raw data: <a href={allJson}><code>{allJson}</code></a>{
-        config.footerNote ? ` · ${config.footerNote}` : ""
-      }
-    </p>
+    {
+      legacy ? (
+        <p>
+          Raw data: <a href={allJson}><code>{allJson}</code></a>{
+            config.footerNote ? ` · ${config.footerNote}` : ""
+          }
+        </p>
+      ) : (
+        config.footerNote && <p>{config.footerNote}</p>
+      )
+    }
     {/* Whatever this index has to link — a privacy notice, an imprint, a code
         of conduct, a page it added under `theme/pages/`. Absent by default, so
         a footer without them looks exactly as it did before.
