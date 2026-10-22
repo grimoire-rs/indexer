@@ -1,0 +1,57 @@
+---
+// `/browse/<n>/`: every package as a plain list of links, 200 to a page, with
+// no script and no island. It is what the home page's `<noscript>` points at
+// and what a crawler follows, so it must work with nothing but HTML. `browse/`
+// is reserved in every layout (see `assertReservedPaths`).
+import Base from "../../layouts/Base.astro";
+import { withBase } from "../../lib/base";
+import { browsePages } from "../../lib/browse";
+import type { CatalogPackage } from "../../lib/catalog";
+import { data } from "../../lib/data";
+
+export function getStaticPaths() {
+  // With no packages `/` is the marketplace, and there is nothing to list.
+  if (data.siteMode === "marketplace") return [];
+  const pages = browsePages(data.packages);
+  return pages.map((packages, i) => ({
+    params: { n: String(i + 1) },
+    props: { packages, n: i + 1, pageCount: pages.length, total: data.packages.length },
+  }));
+}
+
+const { packages, n, pageCount, total } = Astro.props as {
+  packages: CatalogPackage[];
+  n: number;
+  pageCount: number;
+  total: number;
+};
+const { brand } = data.config;
+const heading = `All ${total} ${total === 1 ? "package" : "packages"}, page ${n} of ${pageCount}`;
+---
+
+<Base title={`${heading} · ${brand}`} description={`Every package in ${brand}, by name.`}>
+  <h1>{heading}</h1>
+  <ul>
+    {
+      packages.map((p) => (
+        <li>
+          <a href={withBase(`/p/${p.namespace}/${p.name}/`)}>
+            {p.namespace}/{p.name}
+          </a>
+          {p.deprecated && (
+            <Fragment>
+              {" "}
+              <span class="badge deprecated">deprecated</span>
+            </Fragment>
+          )}
+          {p.description && <Fragment> — {p.description}</Fragment>}
+        </li>
+      ))
+    }
+  </ul>
+  <nav aria-label="Browse pages">
+    {n > 1 && <a rel="prev" href={withBase(`/browse/${n - 1}/`)}>Previous page</a>}
+    {n > 1 && n < pageCount && " · "}
+    {n < pageCount && <a rel="next" href={withBase(`/browse/${n + 1}/`)}>Next page</a>}
+  </nav>
+</Base>

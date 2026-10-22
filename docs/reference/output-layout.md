@@ -6,6 +6,8 @@ What `grim-indexer build` writes into `dist/`.
 dist/
   index.html                                   the catalog
   p/<namespace>/<name>/index.html              one per package
+  browse/<n>/index.html                        every package by name, 200 to a page
+  sitemap.xml                                  every page, or an index of sitemap-<n>.xml
   all.json                                     every record (while sync.legacy is true)
   all.json.gz                                  the same bytes, gzipped (while sync.legacy is true)
   stats.json                                   ratings + updated dates (while sync.legacy is true)
@@ -149,6 +151,20 @@ The scan does not cover this package's own files, and it does not cover the
 output the build writes. Pointer data lives under `index/`, so a package cannot
 collide with either name. See [Theme overlay](theme-overlay.md#stability) for
 the stability tier this amends.
+
+## Browse pages and the sitemap {#browse}
+
+`browse/1/`, `browse/2/` and so on list every package, deprecated ones
+included, by name and 200 to a page. Each page links the previous and the next
+one. They carry no script of their own, so a reader without JavaScript and a
+crawler both reach every `/p/` page. The home page's `<noscript>` block links
+`browse/1/`. A site that serves only a marketplace has no browse pages.
+
+`sitemap.xml` lists the home page, the marketplace page when there is one,
+every browse page, every package page and every plugin page. It never lists a
+file under `c/`. Past 50,000 URLs it becomes a sitemap index that names
+`sitemap-1.xml`, `sitemap-2.xml` and so on, each with at most 50,000 URLs.
+`robots.txt` names `sitemap.xml` either way.
 
 ## Bounded record fields
 

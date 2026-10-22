@@ -16,6 +16,14 @@ live site and warns when the host serves a file with the wrong content type.
 It never fails the pipeline. Bump the lock, run `npm run ci` and commit the
 result, as for any CI change.
 
+### Browse pages and the sitemap {#site-at-scale-browse}
+
+The site gains `browse/1/`, `browse/2/` and so on: every package as a plain
+list of links, 200 to a page, with no script. `sitemap.xml` lists them too.
+Past 50,000 URLs it becomes a sitemap index over `sitemap-1.xml`,
+`sitemap-2.xml` and so on. `browse/` was already reserved, so no theme file can
+collide with it.
+
 ## Catalog at scale
 
 What an operator does, and sees, on moving an index to the release that adds the
