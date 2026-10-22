@@ -135,7 +135,8 @@ async function render(
 
   await prepare?.(root);
 
-  await buildSite({ root, outDir, config: { ...config, site, ...overrides } });
+  // The cap has its own tests (pagecap.test.ts); these look at full content.
+  await buildSite({ root, outDir, config: { ...config, site, ...overrides }, pageCap: Number.MAX_SAFE_INTEGER });
 
   const cssDir = path.join(outDir, "_astro");
   const cssFiles = (await fs.readdir(cssDir)).filter((f) => f.endsWith(".css"));
@@ -975,7 +976,9 @@ describe("config reaches the rendered HTML", () => {
   // so links shared before the change keep working.
   it("routes a keyword back to the catalog, prefiltered", async () => {
     expect(detailHtml).toContain('href="/?kw=review"');
-    expect(detailHtml).toContain('title="Find packages tagged review"');
+    // No `title`: it repeated the chip's own text on every chip (page cap).
+    expect(detailHtml).toMatch(/<a href="\/\?kw=review"[^>]*>review<\/a>/);
+    expect(detailHtml).not.toContain('title="Find packages tagged');
     const chunks = (await fs.readdir(path.join(site.outDir, "_astro"))).filter((f) =>
       f.endsWith(".js"),
     );
@@ -1033,10 +1036,17 @@ describe("config reaches the rendered HTML", () => {
     // Injected, because the blocks come out of Shiki inside rendered
     // markdown — there is no authored markup to hang a button on. It joins
     // the one clipboard path by carrying `data-copy`, like every other.
-    expect(detailHtml).toContain('btn.className = "code-copy"');
+    // The body script is a bundled module, not inline text on every page.
+    const layoutModule = (await fs.readdir(path.join(site.outDir, "_astro"))).find((f) =>
+      /^Base\.astro_astro_type_script_index_0_lang\..*\.js$/.test(f),
+    )!;
+    const layoutJs = await fs.readFile(path.join(site.outDir, "_astro", layoutModule), "utf8");
+    expect(detailHtml).toContain(`src="/_astro/${layoutModule}"`);
+    // Minified by the bundler: quotes become backticks and `btn` is renamed.
+    expect(layoutJs).toMatch(/className=`code-copy`/);
     // A block `CodeBlock.astro` rendered names itself; a markdown fence,
     // which has no markup to name itself with, falls back.
-    expect(detailHtml).toContain('wrapper.dataset.copyName || "code block"');
+    expect(layoutJs).toMatch(/copyName\|\|`code block`/);
   });
 
   // `CodeBlock.astro` is the reusable half of the above: an index's own page

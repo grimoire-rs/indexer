@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// The layout's inline scripts, executed.
+// The layout's scripts, executed.
 //
-// `is:inline` means Astro ships these byte-for-byte where they are authored,
-// so running the text straight out of `Base.astro` in a real DOM is running
-// what the browser runs — and it is the only way to catch a script block
-// that parses fine and dies on its first statement. `build.test.ts` proves
-// the same text reaches the page; nothing there executes it.
+// The head script is `is:inline`: Astro ships it byte-for-byte, before first
+// paint. The body script is a plain `<script>`, which Astro bundles into one
+// module shared by every page instead of repeating it in each (a package page
+// is byte-capped). It is plain JavaScript with no imports, so the bundler
+// leaves its statements as authored and running the text out of `Base.astro`
+// in a real DOM is still running what the browser runs — and it is the only
+// way to catch a script block that parses fine and dies on its first
+// statement. `build.test.ts` proves the module reaches the page; nothing
+// there executes it.
 //
 // jsdom is driven directly rather than through vitest's environment: these
 // need `runScripts`, a fresh window per case, and no DOM at all in the rest
@@ -23,14 +27,15 @@ const BASE = path.join(
   "../../src/renderer/astro/layouts/Base.astro",
 );
 
-/** The layout's `is:inline` scripts, in document order: head, then body. */
+/** The layout's inline head script and its bundled body script, in document order. */
 function layoutScripts(): [string, string] {
   const src = fs.readFileSync(BASE, "utf8");
-  const found = [...src.matchAll(/<script is:inline>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
-  if (found.length !== 2) {
-    throw new Error(`expected the layout's head and body script, found ${found.length}`);
+  const head = [...src.matchAll(/<script is:inline>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+  const body = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+  if (head.length !== 1 || body.length !== 1) {
+    throw new Error(`expected one head and one body script, found ${head.length} and ${body.length}`);
   }
-  return [found[0]!, found[1]!];
+  return [head[0]!, body[0]!];
 }
 
 /**

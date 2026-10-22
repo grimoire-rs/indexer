@@ -39,8 +39,9 @@ describe("buildSite facts", () => {
     expect(facts.astroDirBytes).toBeGreaterThan(0);
   });
 
-  it("reports no page cut while the cap is a stub", () => {
-    expect(facts.pages).toEqual({ cut: 0, hardCut: 0, overCap: [] });
+  it("reports the page cap's outcome: no page left over it, none needing the hard cut", () => {
+    expect(facts.pages.overCap).toEqual([]);
+    expect(facts.pages.hardCut).toBe(0);
   });
 
   it("IX-R15 names the search file it wrote, by the digest and size of its inflated bytes", async () => {

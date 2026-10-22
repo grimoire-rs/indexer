@@ -41,7 +41,8 @@ beforeAll(async () => {
   await fs.mkdir(outDir, { recursive: true });
   await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
   const config = JSON.parse(await fs.readFile(path.join(root, "index.config.json"), "utf8"));
-  await buildSite({ root, outDir, config: { ...config, nav: null } });
+  // The golden pins markup, not the cap (pagecap.test.ts), so no page is cut.
+  await buildSite({ root, outDir, config: { ...config, nav: null }, pageCap: Number.MAX_SAFE_INTEGER });
 }, 600_000);
 
 afterAll(async () => {

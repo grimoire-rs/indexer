@@ -1,0 +1,210 @@
+{
+  "repository": "https://github.com/acme/plugins",
+  "clients": [
+    "claude"
+  ],
+  "members": {
+    "bigplug": [
+      {
+        "kind": "skill",
+        "name": "plug-00",
+        "ref": "ghcr.io/other/plug-00"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-01",
+        "ref": "ghcr.io/other/plug-01"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-02",
+        "ref": "ghcr.io/other/plug-02"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-03",
+        "ref": "ghcr.io/other/plug-03"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-04",
+        "ref": "ghcr.io/other/plug-04"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-05",
+        "ref": "ghcr.io/other/plug-05"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-06",
+        "ref": "ghcr.io/other/plug-06"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-07",
+        "ref": "ghcr.io/other/plug-07"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-08",
+        "ref": "ghcr.io/other/plug-08"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-09",
+        "ref": "ghcr.io/other/plug-09"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-10",
+        "ref": "ghcr.io/other/plug-10"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-11",
+        "ref": "ghcr.io/other/plug-11"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-12",
+        "ref": "ghcr.io/other/plug-12"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-13",
+        "ref": "ghcr.io/other/plug-13"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-14",
+        "ref": "ghcr.io/other/plug-14"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-15",
+        "ref": "ghcr.io/other/plug-15"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-16",
+        "ref": "ghcr.io/other/plug-16"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-17",
+        "ref": "ghcr.io/other/plug-17"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-18",
+        "ref": "ghcr.io/other/plug-18"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-19",
+        "ref": "ghcr.io/other/plug-19"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-20",
+        "ref": "ghcr.io/other/plug-20"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-21",
+        "ref": "ghcr.io/other/plug-21"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-22",
+        "ref": "ghcr.io/other/plug-22"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-23",
+        "ref": "ghcr.io/other/plug-23"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-24",
+        "ref": "ghcr.io/other/plug-24"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-25",
+        "ref": "ghcr.io/other/plug-25"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-26",
+        "ref": "ghcr.io/other/plug-26"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-27",
+        "ref": "ghcr.io/other/plug-27"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-28",
+        "ref": "ghcr.io/other/plug-28"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-29",
+        "ref": "ghcr.io/other/plug-29"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-30",
+        "ref": "ghcr.io/other/plug-30"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-31",
+        "ref": "ghcr.io/other/plug-31"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-32",
+        "ref": "ghcr.io/other/plug-32"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-33",
+        "ref": "ghcr.io/other/plug-33"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-34",
+        "ref": "ghcr.io/other/plug-34"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-35",
+        "ref": "ghcr.io/other/plug-35"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-36",
+        "ref": "ghcr.io/other/plug-36"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-37",
+        "ref": "ghcr.io/other/plug-37"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-38",
+        "ref": "ghcr.io/other/plug-38"
+      },
+      {
+        "kind": "skill",
+        "name": "plug-39",
+        "ref": "ghcr.io/other/plug-39"
+      }
+    ]
+  }
+}
