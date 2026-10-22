@@ -17,7 +17,14 @@ import { MARKETPLACE_GRIM_VERSION, MINIMUM_GRIM_VERSION } from "../../src/grim.j
 
 vi.mock("../../src/enrich/index.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../src/enrich/index.js")>()),
-  enrichIndex: vi.fn(async () => ({ total: 0, enriched: 0, failures: [] })),
+  enrichIndex: vi.fn(async () => ({
+    total: 0,
+    enriched: 0,
+    failures: [],
+    entries: new Map(),
+    stamps: {},
+    counters: { probed: 0, deep: 0, calls: 0, probe_ms_p50: 0, deep_ms_p50: 0, budget_min: 85, throttled: 0, backoff_refs: 0, enrich: "complete" as const },
+  })),
   grimVersion: vi.fn(async (): Promise<string | undefined> => MARKETPLACE_GRIM_VERSION),
 }));
 
@@ -30,6 +37,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.mocked(enrichIndex).mockClear();
   vi.mocked(grimVersion).mockReset().mockResolvedValue(MARKETPLACE_GRIM_VERSION);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -100,5 +108,67 @@ describe("enrich grim version gate", () => {
   it("maps a failing --version probe to unavailable", async () => {
     vi.mocked(grimVersion).mockRejectedValue(new Error("timed out"));
     await expect(enrich(dir, {})).rejects.toMatchObject({ code: EXIT.unavailable, message: expect.stringContaining("timed out") });
+  });
+});
+
+describe("enrich time budget and window (IX-R43)", () => {
+  const options = (): { jobTimeoutSeconds?: number; revalidateMs?: number } => vi.mocked(enrichIndex).mock.calls[0]![0];
+
+  it("passes CI_JOB_TIMEOUT through in seconds", async () => {
+    vi.stubEnv("CI_JOB_TIMEOUT", "3600");
+    expect(await enrich(dir, {})).toBe(EXIT.ok);
+    expect(options().jobTimeoutSeconds).toBe(3600);
+  });
+
+  it.each(["", "0", "-1", "soon", "1e3"])("treats CI_JOB_TIMEOUT=%j as no timeout", async (value) => {
+    vi.stubEnv("CI_JOB_TIMEOUT", value);
+    await enrich(dir, {});
+    expect(options().jobTimeoutSeconds).toBeUndefined();
+  });
+
+  it("passes sync.revalidate through in milliseconds, one hour by default", async () => {
+    await enrich(dir, {});
+    expect(options().revalidateMs).toBe(3_600_000);
+
+    fs.writeFileSync(path.join(dir, "index.config.json"), JSON.stringify({ sync: { revalidate: "6h" } }));
+    vi.mocked(enrichIndex).mockClear();
+    await enrich(dir, {});
+    expect(options().revalidateMs).toBe(6 * 3_600_000);
+  });
+});
+
+describe("enrich exit 69 (IX-R40)", () => {
+  const counters = { probed: 0, deep: 0, calls: 0, probe_ms_p50: 0, deep_ms_p50: 0, budget_min: 85, throttled: 0, backoff_refs: 0, enrich: "complete" as const };
+  const ran = (total: number, failed: number) =>
+    vi.mocked(enrichIndex).mockResolvedValueOnce({
+      total,
+      enriched: total - failed,
+      failures: Array.from({ length: failed }, (_, i) => `ghcr.io/acme/p${i}: registry 503`),
+      entries: new Map(),
+      stamps: {},
+      counters,
+    });
+
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  it("counts every package in the walk, so half of them failing is still exit 0", async () => {
+    ran(100, 50);
+    expect(await enrich(dir, {})).toBe(EXIT.ok);
+  });
+
+  it("fails the run past half of the walk, with its message", async () => {
+    ran(100, 51);
+    await expect(enrich(dir, {})).rejects.toMatchObject({
+      code: EXIT.unavailable,
+      message: expect.stringContaining("51/100 package(s) failed"),
+    });
+  });
+
+  it("does not fail an incremental run that attempted few refs and lost most of them: 60 failed of the 100 it tried, 300 in the walk", async () => {
+    ran(300, 60);
+    expect(await enrich(dir, {})).toBe(EXIT.ok);
   });
 });

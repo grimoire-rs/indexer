@@ -40,7 +40,6 @@ beforeAll(async () => {
   await fs.cp(FIXTURE, root, { recursive: true });
   await fs.mkdir(outDir, { recursive: true });
   await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
-  await fs.writeFile(path.join(outDir, "enrich.json"), '{"schema_version":1,"packages":{}}\n');
   const config = JSON.parse(await fs.readFile(path.join(root, "index.config.json"), "utf8"));
   await buildSite({ root, outDir, config: { ...config, nav: null } });
 }, 600_000);

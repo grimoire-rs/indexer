@@ -70,7 +70,6 @@ beforeAll(async () => {
   await fs.cp(FIXTURE, root, { recursive: true });
   await fs.mkdir(outDir, { recursive: true });
   await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
-  await fs.writeFile(path.join(outDir, "enrich.json"), '{"schema_version":1,"packages":{}}\n');
 
   for (const file of ["readme.md", "changelog.md", "contents.md"]) await write(`${PACKAGE}/${file}`, README);
   // A stale sidecar, a file outside `enrich/` reached by `..`, and a file that is not there.

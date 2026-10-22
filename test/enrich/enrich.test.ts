@@ -12,6 +12,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { enrichIndex, type GrimRunner } from "../../src/enrich/index.js";
+import { pipeline } from "./pipeline.js";
 
 let dir: string;
 
@@ -85,7 +86,7 @@ function fakeGrim(opts: FakeOptions = {}): { run: GrimRunner; calls: string[][] 
     if (!args.includes("--description")) {
       return Promise.resolve({ content: opts.content ?? "# Entry\n" });
     }
-    return Promise.resolve({ files: opts.files ?? COMPANION });
+    return Promise.resolve({ digest: opts.digest ?? "sha256:aaa", files: opts.files ?? COMPANION });
   };
   return { run, calls };
 }
@@ -106,12 +107,78 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+describe("a ref two pointers share (IX-R04)", () => {
+  const REF = "ghcr.io/acme/skills/shared";
+
+  it("warns naming both paths, and the plane keeps the last in sorted path order", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    addPackage("github.com/acme", "dup-first", REF);
+    addPackage("github.com/acme", "dup-second", REF);
+    const { run, calls } = fakeGrim();
+
+    const { result } = await pipeline(dir, () => Date.UTC(2026, 9, 22)).pass(run);
+
+    const text = warn.mock.calls.flat().join("\n");
+    expect(text).toContain("github.com/acme/dup-first/metadata.json");
+    expect(text).toContain("github.com/acme/dup-second/metadata.json");
+    expect(text).toMatch(/dup-first.*repeats the ref .*dup-second/);
+    expect(calls.filter((c) => c[0] === "describe")).toHaveLength(1);
+    expect(fs.existsSync(path.join(dir, "enrich", "github.com/acme", "dup-second", "data.json"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, "enrich", "github.com/acme", "dup-first", "data.json"))).toBe(false);
+    expect(result.entries.size).toBe(1);
+  });
+});
+
 describe("enrichIndex", () => {
+  it("never writes a sidecar outside enrich/ for a pointer whose name is a path", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const pointer = path.join(dir, "index/github.com/acme/foo/metadata.json");
+    fs.writeFileSync(pointer, fs.readFileSync(pointer, "utf8").replace('"name":"foo"', '"name":"../../../escaped"'));
+    const { run } = fakeGrim();
+
+    const result = await enrichIndex({ root: dir, run });
+
+    expect(fs.existsSync(path.join(dir, "escaped"))).toBe(false);
+    expect(result.failures).toHaveLength(1);
+    expect(result.enriched).toBe(0);
+  });
+
+  it("drops a JSON contents file over the blob cap rather than truncating it", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const content = JSON.stringify({ members: ["x".repeat(1024 * 1024 + 10)] });
+    const { run } = fakeGrim({ describe: { kind: "bundle" }, content });
+
+    await enrichIndex({ root: dir, run });
+
+    expect(fs.existsSync(path.join(dir, "enrich/github.com/acme/foo/contents.json"))).toBe(false);
+    expect(sidecar("github.com/acme", "foo").hasContents).toBe(false);
+  });
+
+  it("caps a markdown contents file at the blob cap", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const { run } = fakeGrim({ content: "y".repeat(1024 * 1024 + 10) });
+
+    await enrichIndex({ root: dir, run });
+
+    expect(fs.statSync(path.join(dir, "enrich/github.com/acme/foo/contents.md")).size).toBe(1024 * 1024);
+  });
+
+  it("skips a logo over the blob cap (pinned: logoOk already refuses it)", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const huge = Buffer.concat([PNG, Buffer.alloc(1024 * 1024)]);
+    const { run } = fakeGrim({ files: [{ path: "README.md", content: "# Foo\n" }, member("logo.png", huge)] });
+
+    await enrichIndex({ root: dir, run });
+
+    expect(fs.existsSync(path.join(dir, "enrich/github.com/acme/foo/logo.png"))).toBe(false);
+    expect(sidecar("github.com/acme", "foo").logo).toBeUndefined();
+  });
+
   it("writes the sidecar and every companion the site renders", async () => {
     addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo:1.2.3");
     const { run } = fakeGrim();
 
-    expect(await enrichIndex({ root: dir, run })).toEqual({
+    expect(await enrichIndex({ root: dir, run })).toMatchObject({
       total: 1,
       enriched: 1,
       failures: [],
@@ -126,7 +193,6 @@ describe("enrichIndex", () => {
       keywords: ["a"],
       tags: ["1.2.3", "latest"],
       deprecated: null,
-      descDigest: "sha256:aaa",
       hasReadme: true,
       hasChangelog: true,
       logo: "/logos/github.com/acme/foo.png",
@@ -134,7 +200,6 @@ describe("enrichIndex", () => {
       hasContents: true,
       // An artifact with a `created` is dated by it, never by the clock.
       updated: "2026-07-01T00:00:00+02:00",
-      describedAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/),
     });
 
     const out = path.join(dir, "enrich/github.com/acme/foo");
@@ -232,47 +297,25 @@ describe("enrichIndex", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-08-01T09:00:00Z"));
     addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
-
+    const p = pipeline(dir, () => Date.now());
     // Published outside a repository, or with `--no-git`: no commit date to
     // date it by, so the index dates it by when it first saw this digest.
-    await enrichIndex({ root: dir, run: fakeGrim({ describe: { created: null } }).run });
+    const undated = (digest = "sha256:art"): GrimRunner => fakeGrim({ describe: { created: null, digest } }).run;
+
+    await p.pass(undated());
     expect(sidecar("github.com/acme", "foo").updated).toBe("2026-08-01T09:00:00Z");
 
-    // A month later, same artifact. A fresh stamp here would date every
-    // undated package in the index to the last enrich run and churn a
-    // committed file on every pass.
+    // A month later, a rotation re-describes the same artifact. A fresh stamp
+    // here would date every undated package in the index to the last enrich
+    // run and churn a committed file on every pass.
     vi.setSystemTime(new Date("2026-09-01T09:00:00Z"));
-    await enrichIndex({ root: dir, run: fakeGrim({ describe: { created: null } }).run });
+    await p.pass(undated());
     expect(sidecar("github.com/acme", "foo").updated).toBe("2026-08-01T09:00:00Z");
 
     // The artifact actually moved. That is the one thing that re-dates it.
-    await enrichIndex({
-      root: dir,
-      run: fakeGrim({ describe: { created: null, digest: "sha256:two" } }).run,
-    });
-    expect(sidecar("github.com/acme", "foo").updated).toBe("2026-09-01T09:00:00Z");
-  });
-
-  it("skips the download when the companion digest has not moved", async () => {
-    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
-    const first = fakeGrim();
-    await enrichIndex({ root: dir, run: first.run });
-    expect(first.calls.map((c) => c[0])).toEqual(["describe", "fetch", "fetch", "fetch"]);
-
-    const second = fakeGrim();
-    await enrichIndex({ root: dir, run: second.run });
-
-    // describe (cheap, always) + the digest probe. No second full fetch.
-    expect(second.calls).toHaveLength(2);
-    expect(second.calls[1]).toContain("--digest-only");
-    // …and the cached companion state survives, rather than resetting to false.
-    expect(sidecar("github.com/acme", "foo")).toMatchObject({
-      hasReadme: true,
-      hasChangelog: true,
-      logo: "/logos/github.com/acme/foo.png",
-      contentDigest: "sha256:art",
-      hasContents: true,
-    });
+    vi.setSystemTime(new Date("2026-10-01T09:00:00Z"));
+    await p.pass(undated("sha256:two"));
+    expect(sidecar("github.com/acme", "foo").updated).toBe("2026-10-01T09:00:00Z");
   });
 
   it("drops a companion file the registry no longer serves", async () => {
@@ -306,7 +349,7 @@ describe("enrichIndex", () => {
     // The contents sidecar is the artifact itself, not part of the
     // description companion — withdrawing one does not withdraw the other.
     expect(fs.readdirSync(out).sort()).toEqual(["contents.md", "data.json"]);
-    expect(calls).toHaveLength(1); // nothing to probe
+    expect(calls.map((c) => c[0])).toEqual(["describe", "fetch"]); // no companion to fetch
     expect(sidecar("github.com/acme", "foo")).toMatchObject({
       hasReadme: false,
       hasChangelog: false,
@@ -363,232 +406,34 @@ describe("enrichIndex", () => {
 
     const run: GrimRunner = (args) => {
       if (args[1] === "ghcr.io/acme/skills/foo") return Promise.reject(new Error("registry 503"));
-      return fakeGrim({ digest: "sha256:ccc" }).run(args);
+      return fakeGrim({ describe: { title: "Bar, renamed" } }).run(args);
     };
     const result = await enrichIndex({ root: dir, run });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       total: 2,
       enriched: 1,
       failures: ["ghcr.io/acme/skills/foo: registry 503"],
     });
     // Stale beats empty: foo keeps what the last good run wrote.
-    expect(sidecar("github.com/acme", "foo").descDigest).toBe("sha256:aaa");
-    expect(sidecar("github.com/acme", "bar").descDigest).toBe("sha256:ccc");
+    expect(sidecar("github.com/acme", "foo").title).toBe("Foo");
+    expect(sidecar("github.com/acme", "bar").title).toBe("Bar, renamed");
   });
 
   it("is a no-op on a repo with no packages yet", async () => {
-    expect(await enrichIndex({ root: dir, run: fakeGrim().run })).toEqual({
+    expect(await enrichIndex({ root: dir, run: fakeGrim().run })).toMatchObject({
       total: 0,
       enriched: 0,
       failures: [],
     });
   });
 
-  describe("probe-first (C-029, S-026)", () => {
+  describe("the pool", () => {
     const REFS = Array.from({ length: 14 }, (_, i) => `ghcr.io/acme/skills/p${String(i).padStart(2, "0")}`);
-    const kind = (c: string[]): string =>
-      c[0] === "describe"
-        ? "describe"
-        : c.includes("--digest-only")
-          ? c.includes("--description")
-            ? "companion-probe"
-            : "artifact-probe"
-          : c.includes("--description")
-            ? "companion-fetch"
-            : "contents-fetch";
-    const tally = (calls: string[][]): Record<string, number> => {
-      const t: Record<string, number> = {};
-      for (const c of calls) t[kind(c)] = (t[kind(c)] ?? 0) + 1;
-      return t;
-    };
 
     function addAll(): void {
-      // One frozen second for every package's first stamp: the slice is
-      // ordered by `describedAt`, and a run straddling a real second boundary
-      // would otherwise make "who is in the slice" depend on the wall clock.
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date("2026-08-01T00:00:00Z"));
       for (const ref of REFS) addPackage("github.com/acme", ref.split("/").pop()!, ref);
     }
-
-    it("re-describes only the slice on an unchanged index, and rotates through every package", async () => {
-      // A tick between runs: describedAt is to the second, and the slice is
-      // ordered by it.
-      const at = (second: number): void => {
-        vi.useFakeTimers({ toFake: ["Date"] });
-        vi.setSystemTime(new Date(Date.UTC(2026, 8, 1, 9, 0, second)));
-      };
-      addAll();
-      at(0);
-      await enrichIndex({ root: dir, run: fakeGrim().run });
-
-      const seen = new Set<string>();
-      for (let round = 0; round < 7; round++) {
-        at(round + 1);
-        const { run, calls } = fakeGrim();
-        await enrichIndex({ root: dir, run });
-        vi.useRealTimers();
-
-        // 14 packages -> ceil(14/7) = 2 described; the other 12 are probes only.
-        const t = tally(calls);
-        expect(t.describe).toBe(2);
-        expect(t["artifact-probe"]).toBe(12);
-        expect(t["companion-probe"]).toBe(14); // 12 carried + the 2 described
-        expect(t["companion-fetch"]).toBeUndefined();
-        expect(t["contents-fetch"]).toBeUndefined();
-        for (const c of calls.filter((c) => c[0] === "describe")) seen.add(c[1]!);
-      }
-      // Every package was re-described within seven runs.
-      expect(seen.size).toBe(REFS.length);
-    });
-
-    it("carries an unchanged sidecar forward without rewriting it", async () => {
-      addAll();
-      await enrichIndex({ root: dir, run: fakeGrim().run });
-      const target = REFS[13]!.split("/").pop()!;
-      const file = path.join(dir, "enrich/github.com/acme", target, "data.json");
-      const before = fs.readFileSync(file);
-      fs.utimesSync(file, new Date(1000), new Date(1000));
-
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date("2026-09-01T09:00:00Z"));
-      const { run, calls } = fakeGrim();
-      await enrichIndex({ root: dir, run });
-
-      // p13 sorts last on the all-equal stamps, so it is not in the slice.
-      expect(calls.some((c) => c[0] === "describe" && c[1] === REFS[13])).toBe(false);
-      expect(fs.readFileSync(file)).toEqual(before);
-      expect(fs.statSync(file).mtimeMs).toBe(1000);
-    });
-
-    /** `fakeGrim` with per-call overrides, every call — overridden or not — logged. */
-    function overriding(
-      ref: string,
-      override: (args: string[]) => unknown,
-    ): { run: GrimRunner; calls: string[][] } {
-      const base = fakeGrim();
-      const calls: string[][] = [];
-      const run: GrimRunner = (args) => {
-        calls.push(args);
-        const hit = args[1] === ref ? override(args) : undefined;
-        return hit !== undefined ? Promise.resolve(hit) : base.run(args);
-      };
-      return { run, calls };
-    }
-
-    it("re-describes and re-fetches a package whose artifact digest moved", async () => {
-      addAll();
-      await enrichIndex({ root: dir, run: fakeGrim().run });
-      const moved = REFS[13]!; // never in the slice while the stamps tie
-
-      const { run, calls } = overriding(moved, (args) => {
-        if (args[0] === "describe") return { ...DESCRIBE, digest: "sha256:new" };
-        if (kind(args) === "artifact-probe") return { digest: "sha256:new" };
-        return undefined;
-      });
-      await enrichIndex({ root: dir, run });
-
-      expect(calls.filter((c) => c[1] === moved).map(kind)).toEqual([
-        "artifact-probe",
-        "describe",
-        "companion-probe",
-        "contents-fetch",
-      ]);
-      expect(sidecar("github.com/acme", "p13")).toMatchObject({
-        contentDigest: "sha256:new",
-        hasContents: true,
-      });
-    });
-
-    it("re-describes a package whose companion digest moved, without re-fetching the artifact", async () => {
-      addAll();
-      await enrichIndex({ root: dir, run: fakeGrim().run });
-      const moved = REFS[13]!;
-
-      const { run, calls } = overriding(moved, (args) =>
-        kind(args) === "companion-probe" ? { digest: "sha256:bbb" } : undefined,
-      );
-      await enrichIndex({ root: dir, run });
-
-      expect(calls.filter((c) => c[1] === moved).map(kind)).toEqual([
-        "artifact-probe",
-        "companion-probe",
-        "describe",
-        "companion-probe",
-        "companion-fetch",
-      ]);
-      expect(sidecar("github.com/acme", "p13").descDigest).toBe("sha256:bbb");
-    });
-
-    it("breaks a describedAt tie by byte order, not by locale", async () => {
-      // Locale order puts "aaa" first; byte order puts "Bar" first. The pick must
-      // not depend on the host's ICU data, or two indexers would rotate differently.
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date("2026-08-01T00:00:00Z"));
-      addPackage("github.com/acme", "aaa", "ghcr.io/acme/skills/aaa");
-      addPackage("github.com/acme", "Bar", "ghcr.io/acme/skills/Bar");
-      await enrichIndex({ root: dir, run: fakeGrim().run });
-
-      const { run, calls } = fakeGrim();
-      await enrichIndex({ root: dir, run });
-
-      // Two packages -> a slice of one, and the stamps tie.
-      expect(calls.filter((c) => c[0] === "describe").map((c) => c[1])).toEqual([
-        "ghcr.io/acme/skills/Bar",
-      ]);
-    });
-
-    it("probes the companion every run, even when the stored sidecar has no descDigest", async () => {
-      addAll();
-      const bare = REFS[13]!; // never in the slice while the stamps tie
-      // First run: the package has no companion, so its sidecar stores no descDigest.
-      const first = overriding(bare, (args) =>
-        args[0] === "describe" ? { ...DESCRIBE, has_description: false } : undefined,
-      );
-      await enrichIndex({ root: dir, run: first.run });
-      expect(sidecar("github.com/acme", "p13")).not.toHaveProperty("descDigest");
-
-      // A companion published since: the probe must see it now, not at its slice turn.
-      const { run, calls } = fakeGrim();
-      await enrichIndex({ root: dir, run });
-
-      expect(calls.filter((c) => c[1] === bare).map(kind)).toEqual([
-        "artifact-probe",
-        "companion-probe",
-        "describe",
-        "companion-probe",
-        "companion-fetch",
-      ]);
-      expect(sidecar("github.com/acme", "p13").descDigest).toBe("sha256:aaa");
-    });
-
-    it("carries a companion-less package forward: two probes, no describe", async () => {
-      addAll();
-      const bare = REFS[13]!; // never in the slice while the stamps tie
-      // What grim does for a repository with no companion: describe says so,
-      // and the companion probe is a not-found (79), which the runner throws.
-      const bareGrim = (): { run: GrimRunner; calls: string[][] } => {
-        const base = overriding(bare, (args) =>
-          args[0] === "describe" ? { ...DESCRIBE, has_description: false } : undefined,
-        );
-        const run: GrimRunner = (args) =>
-          args[1] === bare && kind(args) === "companion-probe"
-            ? (base.calls.push(args), Promise.reject(new Error("not found")))
-            : base.run(args);
-        return { run, calls: base.calls };
-      };
-      await enrichIndex({ root: dir, run: bareGrim().run });
-      expect(sidecar("github.com/acme", "p13")).not.toHaveProperty("descDigest");
-
-      const { run, calls } = bareGrim();
-      await enrichIndex({ root: dir, run });
-
-      expect(calls.filter((c) => c[1] === bare).map(kind)).toEqual([
-        "artifact-probe",
-        "companion-probe",
-      ]);
-    });
 
     it("never runs more packages at once than --concurrency", async () => {
       addAll();

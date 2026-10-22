@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MAX_RESPONSE_BYTES, request, USER_AGENT } from "../../src/validate/adapters/http.js";
+import { MAX_RESPONSE_BYTES, TIMEOUT_MS, describeStatus, request, USER_AGENT } from "../../src/validate/adapters/http.js";
 import { stubFetch } from "./helpers.js";
 
 afterEach(() => {
@@ -41,9 +41,8 @@ describe("request", () => {
     expect(calls[0].redirect).toBe("manual");
   });
 
-  // `{status: 0}` means "no usable response", and deliberately does not
-  // distinguish these two. A caller cannot tell an oversized body from a dead
-  // socket; both tests exist so that stops being true only on purpose.
+  // `{status: 0}` means "no usable response" for both of these. Only `reason`
+  // tells a caller an oversized body from a dead socket.
   it("reports an over-cap body as status 0", async () => {
     stubFetch(() => ({ body: "x".repeat(MAX_RESPONSE_BYTES + 1) }));
 
@@ -54,6 +53,49 @@ describe("request", () => {
     vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
 
     expect(await request(URL)).toMatchObject({ status: 0, body: "" });
+  });
+
+  // `status: 0` stays the one "no usable response" value, but it now says why, so
+  // a warning built from it never has to print "HTTP 0".
+  describe("says why a request got no answer", () => {
+    const refused = (): Promise<never> =>
+      Promise.reject(Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9"), { code: "ECONNREFUSED" }) }));
+
+    it("names the error code of a transport failure", async () => {
+      vi.stubGlobal("fetch", refused);
+
+      const res = await request(URL);
+
+      expect(res.status).toBe(0);
+      expect(describeStatus(res)).toBe("no answer (ECONNREFUSED)");
+    });
+
+    it("names a timeout", async () => {
+      vi.stubGlobal("fetch", () => Promise.reject(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" })));
+
+      expect(describeStatus(await request(URL))).toBe(`no answer (timed out after ${TIMEOUT_MS} ms)`);
+    });
+
+    it("names the cap an over-cap body passed", async () => {
+      stubFetch(() => ({ body: "x".repeat(MAX_RESPONSE_BYTES + 1) }));
+
+      expect(describeStatus(await request(URL))).toBe(`no answer (body over the ${MAX_RESPONSE_BYTES} byte cap)`);
+    });
+
+    it("names the cap the caller set, not the default", async () => {
+      stubFetch(() => ({ body: "x".repeat(11) }));
+
+      expect(describeStatus(await request(URL, {}, { maxBytes: 10 }))).toBe("no answer (body over the 10 byte cap)");
+    });
+
+    it("leaves a real status as it was", async () => {
+      stubFetch(() => ({ status: 503 }));
+
+      const res = await request(URL);
+
+      expect(res.reason).toBeUndefined();
+      expect(describeStatus(res)).toBe("HTTP 503");
+    });
   });
 
   // Two callers legitimately read more than a small JSON document: the

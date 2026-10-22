@@ -55,6 +55,14 @@ describe("nextGeneration", () => {
     expect(nextGeneration(now, s + 2 * 86_400)).toBe(s);
     expect(nextGeneration(now, s + 86_400)).toBe(s + 86_401);
     expect(nextGeneration(now, s + 86_401)).toBe(s);
+    expect(nextGeneration(now, Number.MAX_SAFE_INTEGER)).toBe(s);
+  });
+
+  it("IX-R06 clamps at 2^53 - 1", () => {
+    // A real `Date` stops near 8.6e12 seconds, so only a clock-shaped stand-in can reach the clamp.
+    const end = { getTime: () => 2 ** 53 * 1000 } as Date;
+    expect(nextGeneration(end)).toBe(Number.MAX_SAFE_INTEGER);
+    expect(nextGeneration(end, 2 ** 53 - 2)).toBe(Number.MAX_SAFE_INTEGER);
   });
 });
 
@@ -185,7 +193,7 @@ describe("publishDist", () => {
     fs.writeFileSync(path.join(dist, "stats.json"), statsJson);
     const before = { all: read("all.json"), stats: read("stats.json") };
 
-    const root = publishDist(dist, sync("anchored"), new Date(1_792_000_000_999));
+    const root = publishDist(dist, sync("anchored"), null, new Date(1_792_000_000_999));
 
     expect(root.generation).toBe(1_792_000_000);
     expect(root.generated_at).toBe(new Date(1_792_000_000_000).toISOString().replace(".000Z", "Z"));

@@ -94,9 +94,24 @@ async function writeTheme(root: string, rel: string, body: string): Promise<void
 // chdir for the rest of the run, and vitest reports neither.
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   for (const server of servers.splice(0)) await server.stop().catch(() => {});
   process.chdir(cwd);
   await Promise.all(roots.splice(0).map((r) => fs.rm(r, { recursive: true, force: true })));
+});
+
+describe("DevServer boot", () => {
+  // Outside CI, Astro posts a usage record and checks npm for a newer release;
+  // `dev` is offline (IX-R35, V-29).
+  it("makes no network request", async () => {
+    const fetchSpy = vi.fn(() => Promise.reject(new Error("network denied")));
+    vi.stubGlobal("fetch", fetchSpy);
+    const { root, outDir } = await indexRepo();
+
+    await start({ root, outDir, config, srcDir: LIVE_SRC, port: 4346 });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("DevServer.stop()", () => {
