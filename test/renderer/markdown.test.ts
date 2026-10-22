@@ -6,6 +6,7 @@
 // processor the build installs and read the result back with a parser: whether
 // an attribute exists is a question for parse5, not for a regex over markup.
 import { markdownConfigDefaults } from "@astrojs/markdown-remark";
+import { parseFragment } from "parse5";
 import { beforeAll, describe, expect, it } from "vitest";
 import { SHIKI_CLASSES, SHIKI_THEMES } from "../../src/renderer/astro/lib/code.js";
 import { markdownProcessor } from "../../src/renderer/markdown.js";
@@ -53,6 +54,15 @@ describe("a hostile README", () => {
     expect(html).toContain("before");
     expect(html).toContain("after");
   });
+});
+
+// The build's backstop and the policy both key on this marker, so it comes
+// from the pipeline: a theme that replaces the page component keeps both.
+it("marks every top-level element as rendered markdown", async () => {
+  const html = await render("# h\n\npara\n\n- li\n\n<div>raw</div>\n\n```js\nconst a = 1;\n```\n\n---\n");
+  const top = parseFragment(html).childNodes.filter((n) => "tagName" in n);
+  expect(top.map((el) => el.tagName)).toEqual(["h1", "p", "ul", "div", "pre", "hr"]);
+  expect(top.filter((el) => attr(el, "data-grim-markdown") === undefined)).toEqual([]);
 });
 
 describe("a README that is not hostile", () => {

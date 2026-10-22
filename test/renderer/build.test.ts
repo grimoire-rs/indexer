@@ -16,7 +16,7 @@ import { buildSite, RenderInputError, stageMarketplace } from "../../src/rendere
 import type { SiteConfig } from "../../src/config.js";
 import { KIND_MARKS } from "../../src/renderer/astro/components/KindMark.tsx";
 import { KINDS } from "../../src/validate/core/metadata.js";
-import { attr, classes, elements } from "./html.js";
+import { attr, classes, cspHash, cspPolicy, elements, type Element } from "./html.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 
@@ -156,6 +156,47 @@ async function render(
       await Promise.all(cssFiles.map((f) => fs.readFile(path.join(cssDir, f), "utf8")))
     ).join("\n"),
   };
+}
+
+/** Every `.html` file a build wrote, relative to its output. */
+async function htmlPages(built: Built): Promise<string[]> {
+  const files = await fs.readdir(built.outDir, { recursive: true });
+  return files.filter((f) => f.endsWith(".html")).sort();
+}
+
+const textOf = (el: Element) => el.childNodes.map((n) => ("value" in n ? n.value : "")).join("");
+
+/** The `content` of the page's Content-Security-Policy meta. */
+const policyOf = (html: string) =>
+  attr(elements(html).find((el) => attr(el, "http-equiv")?.toLowerCase() === "content-security-policy")!, "content");
+
+/**
+ * Asserts the page's policy is the one meta, first in `<head>` (or right
+ * after a leading charset declaration), with the full directive list and a
+ * hash for every inline script and style — recomputed here from the page.
+ * Returns how many inline blocks it covered.
+ */
+function expectPolicy(rel: string, html: string): number {
+  const all = elements(html);
+  const head = all.find((el) => el.tagName === "head")!;
+  const isPolicy = (el: Element) => attr(el, "http-equiv")?.toLowerCase() === "content-security-policy";
+  const children = head.childNodes.filter((n): n is Element => "tagName" in n);
+  const meta = children.find(isPolicy)!;
+  expect(meta, `${rel}: no policy meta in <head>`).toBeDefined();
+  // Everything else keeps its order, so a leading charset stays first and the
+  // policy is the first element otherwise.
+  const rest = children.filter((el) => !isPolicy(el));
+  const charset = rest[0]?.tagName === "meta" && attr(rest[0], "charset") !== undefined;
+  expect(children.indexOf(meta), rel).toBe(charset ? 1 : 0);
+  expect(all.filter(isPolicy), rel).toHaveLength(1);
+
+  const inline = all.filter(
+    (el) => el.tagName === "style" || (el.tagName === "script" && attr(el, "src") === undefined),
+  );
+  const hashes = (tag: string) =>
+    [...new Set(inline.filter((el) => el.tagName === tag).map((el) => cspHash(textOf(el))))].sort();
+  expect(attr(meta, "content"), rel).toBe(cspPolicy(hashes("script"), hashes("style")));
+  return inline.length;
 }
 
 /** Where the frozen URLs and the data tree have to land, base or no base. */
@@ -1443,6 +1484,39 @@ describe("no inline styles", () => {
 // Header and footer both, every time: the footer is the half that changes,
 // so checking the header alone would gate nothing.
 // ---------------------------------------------------------------------------
+describe("content security policy", () => {
+  it("leads every page's head with exactly the directive list and a hash for each inline block", async () => {
+    let inline = 0;
+    for (const built of [site, sub]) {
+      const found = await htmlPages(built);
+      expect(found.length).toBeGreaterThan(1);
+      for (const rel of found) inline += expectPolicy(rel, await built.read(rel));
+    }
+    // Over a site with nothing inline the loop above would pass vacuously.
+    expect(inline).toBeGreaterThan(0);
+  });
+
+  it("covers the <noscript> style, which a browser without script applies", () => {
+    const style = /<noscript>\s*<style[^>]*>([\s\S]*?)<\/style>/.exec(indexHtml)?.[1];
+    expect(style).toBeDefined();
+    expect(policyOf(indexHtml)).toContain(cspHash(style!));
+  });
+
+  it("marks the three tabs where rendered markdown enters a package page", async () => {
+    const seen = new Map<string, number>();
+    for (const rel of await htmlPages(site)) {
+      for (const el of elements(await site.read(rel))) {
+        const id = attr(el, "id");
+        if (id === "tab-readme" || id === "tab-contents" || id === "tab-changelog") {
+          expect(attr(el, "data-grim-markdown"), `${rel}#${id}`).toBeDefined();
+          seen.set(id, (seen.get(id) ?? 0) + 1);
+        }
+      }
+    }
+    expect([...seen.keys()].sort()).toEqual(["tab-changelog", "tab-contents", "tab-readme"]);
+  });
+});
+
 describe("in-tab or new-tab links", () => {
   // Case 1 and case 2. The header keeps exactly the behaviour it had; the
   // footer — which applied no such treatment at all — now matches it.
@@ -1836,6 +1910,13 @@ describe("an index with packages and a marketplace (mode both)", () => {
     const page = await built.read("marketplace/hex/index.html");
     expect(page).toContain(`<img src="${SUB_BASE}/marketplace/logos/hex.png" alt="hex">`);
     expect(page).not.toContain("assets/logo.png");
+  });
+
+  it("gives every page, plugin pages included, its policy, and marks the plugin's markdown", async () => {
+    for (const rel of await htmlPages(built)) expectPolicy(rel, await built.read(rel));
+    const hex = elements(await built.read("marketplace/hex/index.html"));
+    const readme = hex.find((el) => attr(el, "id") === "tab-readme");
+    expect(attr(readme!, "data-grim-markdown")).toBeDefined();
   });
 
   // Needs the marketplace pages (I3): the record file is built from the data.

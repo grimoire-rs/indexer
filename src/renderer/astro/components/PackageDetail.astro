@@ -83,6 +83,9 @@ const {
 } = Astro.props;
 const id = `${pkg.namespace}/${pkg.name}`;
 
+// The three tab panels below carry `data-grim-markdown`, as does each element
+// the markdown pipeline renders: the build fails on a script, style or event
+// handler inside one, because rendered markdown carrying any was not sanitised.
 const Readme = readmeEntry ? (await render(readmeEntry)).Content : null;
 const Changelog = changelogEntry ? (await render(changelogEntry)).Content : null;
 
@@ -369,13 +372,13 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
             }
           </div>
           {filled.readme && (
-            <div class="prose tab-panel" id="tab-readme">
+            <div class="prose tab-panel" id="tab-readme" data-grim-markdown>
               <Readme />
             </div>
           )}
           {
             filled.contents && (
-              <div class="prose tab-panel" id="tab-contents">
+              <div class="prose tab-panel" id="tab-contents" data-grim-markdown>
                 {pluginMembers.length > 0 ? (
                   <ul class="plugin-members">
                     {pluginMembers.map((member) => (
@@ -421,7 +424,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
             )
           }
           {filled.changelog && (
-            <div class="prose tab-panel" id="tab-changelog">
+            <div class="prose tab-panel" id="tab-changelog" data-grim-markdown>
               <Changelog />
             </div>
           )}

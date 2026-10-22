@@ -94,6 +94,17 @@ handlers, inline styles, iframes, forms and `target` attributes are removed, and
 every `id` and `name` gets a `user-content-` prefix so a README cannot shadow
 a page global.
 
+## Content security policy
+
+Every page the build writes carries a hash-based `Content-Security-Policy` in a
+`<meta>` tag at the top of `<head>`, after only the charset declaration, so no
+theme layout can drop it. Scripts, stylesheets, fonts and fetches load from the
+site's own origin; images load from it or over `https`. The only inline code that runs is the `<script>` and
+`<style>` blocks present when the site was built. A `style=""` attribute or an
+`onclick=""` handler is blocked, and a README that still carries a script,
+style or handler fails the build. A `<meta>` cannot carry `frame-ancestors`, so
+framing is for your host's response headers.
+
 ## Known gap
 
 In the combined (`--with-skills`) layout the gate does **not** cover your own

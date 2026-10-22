@@ -109,6 +109,10 @@ injected its bundle.
 
 The full list is in [Theme tokens](../reference/theme-tokens.md).
 
+Stylesheets, fonts and scripts load from the site's own origin only, so an
+`@import` of a remote font in `customCss` is blocked. Put the font file in
+`public/` and declare it with `@font-face`.
+
 ## One component, not the whole site
 
 Target its [data slot](../reference/data-slots.md):
