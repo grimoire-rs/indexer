@@ -926,6 +926,28 @@ describe("the keyword overflow menu", () => {
     ).toBe(true);
   });
 
+  // The panel is a popover, so its content is not painted while it is closed,
+  // but it would still be built: one button per keyword the catalog holds.
+  it("builds its items only while it is open", async () => {
+    const host = mount();
+    const panel = host.querySelector<HTMLElement>(".kw-menu-panel")!;
+    const items = () => host.querySelectorAll(".kw-menu-item").length;
+    const toggle = (newState: "open" | "closed") =>
+      panel.dispatchEvent(Object.assign(new Event("toggle"), { newState }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(items()).toBe(0);
+    expect(host.querySelector(".kw-menu-empty")).toBeNull();
+
+    toggle("open");
+    await vi.waitFor(() => expect(items()).toBeGreaterThan(0));
+    // One per keyword the trigger counts, however many the rail took.
+    expect(`+${items()} more`).toBe(host.querySelector(".kw-menu > button.chip")!.textContent!.trim());
+
+    toggle("closed");
+    await vi.waitFor(() => expect(items()).toBe(0));
+  });
+
   it("is no longer a details element", () => {
     const host = mount();
     // `<details>` is what clipped: it can only position its panel inside the
