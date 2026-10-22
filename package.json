@@ -32,6 +32,8 @@
     "dev:smoke": "npm run build && node scripts/dev.mjs --smoke",
     "dev:smoke:marketplace": "npm run build && node scripts/dev.mjs --smoke --marketplace-only",
     "bench:scale": "node scripts/bench-scale.mjs",
+    "conformance:gen": "npm run build && node scripts/gen-conformance.mjs",
+    "conformance:check": "npm run build && node scripts/gen-conformance.mjs --pinned test/conformance/GRIM_REF",
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
