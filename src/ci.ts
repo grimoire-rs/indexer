@@ -20,6 +20,8 @@ import { CONFIG_FILE, SiteConfigError } from "./config.js";
 import type { DownloadsConfig } from "./downloads/config.js";
 import { MINIMUM_GRIM_VERSION, grimTooOld } from "./grim.js";
 import type { RatingsConfig } from "./ratings/config.js";
+import { STATE_DIR } from "./state/handoff.js";
+import { STATE_KEY_RE } from "./state/statekey.js";
 import { fromTemplate } from "./templates.js";
 
 /**
@@ -334,6 +336,25 @@ function jfrogPlatformUrl(baseUrl: string): string {
 }
 
 /**
+ * How long the build job may run. `enrich` budgets itself from
+ * `CI_JOB_TIMEOUT`, which GitLab sets from the job and GitHub never does, so
+ * the GitHub step is handed this same figure in seconds, and GitLab's own
+ * `timeout` is rendered from it too: one number, so the budget cannot drift
+ * from the limit it is measured against.
+ */
+const BUILD_JOB_MINUTES = 120;
+
+/** GitLab's `timeout` spelling of `BUILD_JOB_MINUTES`: `2h`, or `1h 30m` off the hour. */
+function gitlabTimeout(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return [hours > 0 ? `${hours}h` : "", rest > 0 ? `${rest}m` : ""].filter(Boolean).join(" ");
+}
+
+/** The only directory the build-state cache may carry: the blob store, never the state around it. */
+const STATE_BLOB_PATH = `${STATE_DIR}/b`;
+
+/**
  * Render the complete CI file set. Nothing touches disk — the caller writes
  * it or diffs it against what is committed.
  *
@@ -362,6 +383,13 @@ export function renderCi(
         "cache-mode: none"
       : "",
     githubCacheModeJob: githubCom ? "\n    # The Actions cache is for `build` alone.\n    cache-mode: none" : "",
+    buildJobMinutes: String(BUILD_JOB_MINUTES),
+    buildJobSeconds: String(BUILD_JOB_MINUTES * 60),
+    buildJobTimeout: gitlabTimeout(BUILD_JOB_MINUTES),
+    stateBlobPath: STATE_BLOB_PATH,
+    // Rendered from the one definition of the key grammar, so the shell that
+    // guards `GITHUB_OUTPUT` cannot admit more than `state-key` may print.
+    stateKeyRegex: STATE_KEY_RE.source,
   };
   // Rendered first: `render` is single-pass, so a block handed in as a value
   // must already have its own placeholders resolved. The trailing newline is
@@ -419,6 +447,12 @@ export function renderCi(
     header: fromTemplate("ci/header.txt", base),
     githubEnrichSteps: ci.enrich ? block("ci/github-enrich.yml") : "",
     gitlabEnrichScript: ci.enrich ? block("ci/gitlab-enrich.sh") : "",
+    // The blob-store cache and the dispatch inputs that drive `enrich` exist
+    // only where `enrich` does: without it there is nothing to cache or purge.
+    githubDispatchInputs: ci.enrich ? block("ci/github-dispatch-inputs.yml") : "",
+    githubStateSave: ci.enrich ? block("ci/github-state-save.yml") : "",
+    gitlabStateCache: ci.enrich ? block("ci/gitlab-state-cache.yml") : "",
+    gitlabRunVariables: ci.enrich ? block("ci/gitlab-run-variables.yml") : "",
     verifyPaths: VERIFY_PATHS.map((entry) => `      - ${entry}`).join("\n"),
     gitlabVerifyJob: ci.allowManualEdits ? "" : block("ci/gitlab-verify.yml"),
     // The stats sidecar, on both forges: one collection job, a schedule to
@@ -447,7 +481,12 @@ export function renderCi(
     // `pages` already receives its artifact, and adding `needs:` would move
     // `pages` off stage ordering and let it deploy past a failed `verify-ci`.
     // `allow_failure` on the stats job is what lets a failed one through.
-    gitlabStatsPagesRule: stats ? '\n    - if: $CI_PIPELINE_SOURCE == "schedule"' : "",
+    //
+    // Bound to the default branch: `pages` saves the build-state cache
+    // `pull-push`, so a schedule on any other ref must not reach it.
+    gitlabStatsPagesRule: stats
+      ? '\n    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      : "",
     // GitHub only — `validateCi` refuses the GitLab combination outright, so
     // there is no silently-inert case to render around here.
     githubAutoMergeJob: ci.autoMerge ? block("ci/github-automerge.yml") : "",

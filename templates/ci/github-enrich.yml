@@ -1,4 +1,44 @@
 
+      # What the last deploy learned about each artifact lives in a blob store,
+      # restored here so a run does not start cold. Only the default branch
+      # touches it, here and at the save. The restore asks for exactly
+      # the key `state-key` prints for the plane that deploy published, with no
+      # fallback key. `npx --no` because `package.json` is the repository's own
+      # file and may predate the command.
+      #
+      # The key must match the grammar as one whole string before it reaches
+      # `GITHUB_OUTPUT`. A line-oriented grep would admit `1-<digest>` plus a
+      # second line, and that line would become a second output. Anything
+      # else leaves the output unset: a cold build, nothing restored or saved.
+      - name: Read the build-state key
+        id: state-key
+        if: github.ref == 'refs/heads/{{defaultBranch}}'
+        run: |
+          re='{{stateKeyRegex}}'
+          if key=$(npx --no grim-indexer state-key) && [[ "$key" =~ $re ]]; then
+            echo "key=$key" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no usable build-state key - building cold, nothing restored or saved"
+          fi
+
+      # The cache service matches the key by prefix, so a restore can fill the
+      # blob store from an entry nobody named and report `cache-hit: false`.
+      # The next step empties it unless the hit was exact, so only the entry
+      # `state-key` named is ever read. A bad entry is retired with
+      # `gh cache delete <key>`; the run after it builds cold.
+      - name: Restore the build state
+        id: state-restore
+        if: github.ref == 'refs/heads/{{defaultBranch}}' && steps.state-key.outputs.key != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: {{stateBlobPath}}
+          key: grim-index-state-v1-${{ steps.state-key.outputs.key }}
+
+      - name: Drop a restored state that was not asked for
+        id: state-restore-clean
+        if: github.ref == 'refs/heads/{{defaultBranch}}' && steps.state-key.outputs.key != '' && steps.state-restore.outputs.cache-hit != 'true'
+        run: rm -rf -- {{stateBlobPath}}
+
       # The index stores pointers; everything a reader looks at - README,
       # changelog, logo, version list - lives in the registry, and grim is
       # what reads a registry. `ci.grimVersion` pins the binary.
@@ -20,16 +60,59 @@
       # Enrichment is best-effort by design: a registry outage must degrade
       # the site to pointers-only, never block a deploy that is otherwise
       # ready. `enrich` itself keeps any sidecar it fails to refresh. Set
-      # `"enrich": false` in the `ci` block to drop these two steps entirely.
+      # `"enrich": false` in the `ci` block to drop these steps entirely.
       #
-      # `--seed` restores enrich/ from `<site>/enrich.json` - the checkpoint the
-      # last deploy published - before refreshing. Nothing is committed here, so
-      # without it this job starts from an empty tree every run: every digest
-      # probe compares against nothing, every README and payload is downloaded
-      # again, and every artifact without a `created` of its own is re-dated to
-      # this build. A checkpoint that cannot be read is a warning, not a
-      # failure; the run just does the full download it used to do.
+      # `--seed` starts from the state the last deploy published: it reads
+      # `<site>/c/root.json` and the enrich plane that root names. Nothing is
+      # committed here, so without it this job starts from an empty tree every
+      # run: every digest probe compares against nothing, every README and
+      # payload is downloaded again, and every artifact without a `created` of
+      # its own is re-dated to this build. A root that cannot be read is a
+      # warning, not a failure; the run just does the full download it used to
+      # do.
       - name: Refresh package metadata
+        env:
+          # The ceiling of this job in seconds, in the variable GitLab sets for
+          # its own jobs: the refresh budgets its time against it.
+          CI_JOB_TIMEOUT: {{buildJobSeconds}}
+          # Dispatch inputs reach the script through the environment only. An
+          # input spliced into `run:` would be shell the dispatcher writes.
+          GRIM_INDEX_FRESH: ${{ inputs.fresh }}
+          GRIM_INDEX_PURGE: ${{ inputs.purge }}
         run: |
-          npm run enrich -- --seed ||
-            echo "::warning::enrich failed - building without READMEs, logos and version lists"
+          set -- --seed
+          strict=
+          if [ -n "${GRIM_INDEX_PURGE:-}" ]; then set -- "$@" "--purge=$GRIM_INDEX_PURGE"; strict=1; fi
+          if [ "${GRIM_INDEX_FRESH:-}" = true ]; then set -- "$@" --fresh; strict=1; fi
+          rc=0
+          npm run enrich -- "$@" || rc=$?
+          if [ "$rc" -eq 65 ] && [ -n "$strict" ]; then
+            echo "enrich rejected --purge or --fresh (exit 65)" >&2
+            exit 65
+          fi
+          [ "$rc" -eq 0 ] || echo "::warning::enrich exited $rc - building from the carried-forward state"
+
+      # The key of the state that run handed off, read on the default branch
+      # only because only that branch saves. Same admission rule as above.
+      - name: Read the key of the handed-off state
+        id: state-next
+        if: steps.state-key.outputs.key != '' && github.ref == 'refs/heads/{{defaultBranch}}'
+        run: |
+          re='{{stateKeyRegex}}'
+          if key=$(npx --no grim-indexer state-key --next) && [[ "$key" =~ $re ]]; then
+            echo "key=$key" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no usable key for the handed-off state - it will not be saved"
+          fi
+
+      # Saving is skipped when an entry already exists under that key, which
+      # is the common case once a deploy has published the state it saved.
+      - name: Look for a saved entry
+        id: state-lookup
+        if: github.ref == 'refs/heads/{{defaultBranch}}' && steps.state-next.outputs.key != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: {{stateBlobPath}}
+          key: grim-index-state-v1-${{ steps.state-next.outputs.key }}
+          lookup-only: true
+

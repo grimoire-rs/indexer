@@ -3,17 +3,17 @@
 
 stages:
   - test
-  - deploy
+  - deploy{{gitlabRunVariables}}
 
 # `npm ci` installs exactly package-lock.json, so which renderer runs is a
 # reviewed fact in this repository rather than a resolution on the runner.
 #
 # `timeout` is the ceiling for every job, so a hung install or a wedged
-# collector ends in two hours rather than whatever the project allows.
+# collector ends at this limit rather than whatever the project allows.
 default:
   image: node:{{nodeVersion}}-alpine
-  timeout: 2h
-  cache:
+  timeout: {{buildJobTimeout}}
+  cache: &npm_cache
     key:
       files:
         - package-lock.json
@@ -134,7 +134,7 @@ grim-indexer:validate:
 {{gitlabVerifyJob}}
 # GitLab Pages serves whatever the `pages` job leaves in `public/`.
 pages:
-  stage: deploy
+  stage: deploy{{gitlabStateCache}}
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH{{gitlabStatsPagesRule}}
   before_script:

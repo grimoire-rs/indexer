@@ -785,7 +785,8 @@ describe("scaffolded CI", () => {
         const text = fs.readFileSync(path.join(target, file), "utf8");
         expect(text, file).not.toMatch(/uses:\s*grimoire-rs\/indexer/);
         expect(text, file).not.toMatch(/raw\.githubusercontent\.com\/grimoire-rs/);
-        expect(text, `${file} must not fetch a floating release`).not.toContain("npx");
+        // `npx --no` runs what the lock installed and refuses to fetch anything else.
+        expect(text, `${file} must not fetch a floating release`).not.toMatch(/\bnpx\b(?!\s+--no\b)/);
         expect(text, `${file} installs the lock`).toContain("npm ci");
         expect(yaml.load(text), `${file} parses`).toBeTruthy();
       }
