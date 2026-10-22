@@ -545,6 +545,9 @@ async function readCustomCss(root: string, customCss: string | null): Promise<st
   }
 }
 
+/** `name` or `@scope/name`; each part starts alphanumeric, so `.`, `..` and a path never match. */
+const NPM_PACKAGE_NAME = /^(?:@[A-Za-z0-9][\w.~-]*\/)?[A-Za-z0-9][\w.~-]*$/;
+
 /**
  * Locate the `theme` package's directory, as Node would from the index root.
  *
@@ -554,6 +557,10 @@ async function readCustomCss(root: string, customCss: string | null): Promise<st
  */
 async function resolveThemePackage(root: string, name: string | null): Promise<ThemePackage | null> {
   if (!name) return null;
+  // The name is joined onto each lookup directory, so it must not carry a path.
+  if (!NPM_PACKAGE_NAME.test(name) || name.length > 214) {
+    throw new RenderInputError(`theme: ${name} is not an npm package name (\`name\` or \`@scope/name\`)`);
+  }
   const dirs = createRequire(path.join(root, "package.json")).resolve.paths(name) ?? [];
   for (const dir of dirs) {
     const pkg = path.join(dir, name);
