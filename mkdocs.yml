@@ -123,3 +123,4 @@ nav:
       - ops/index.md
       - Known limitations: ops/known-limitations.md
       - Troubleshooting: ops/troubleshooting.md
+      - Upgrade notes: ops/upgrade-notes.md

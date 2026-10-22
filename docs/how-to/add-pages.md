@@ -100,6 +100,12 @@ description: How to publish a skill into the Acme index.
 # Publish a skill
 ```
 
+!!! note "A markdown page is sanitized like a README"
+    Raw HTML in a `.md` page is cut to the same allow-list, so `style=""`,
+    iframes and forms are removed, and an image whose URL is not `/`-rooted or
+    `http(s)` renders as its alt text: put images under `public/` and write
+    `![shot](/shot.png)`. See [Upgrade notes](../ops/upgrade-notes.md#p0-hardening).
+
 ## Editor support
 
 `init` scaffolds a `tsconfig.json` mapping `@grim/*` at the installed package,
