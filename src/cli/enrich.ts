@@ -10,12 +10,13 @@ import { restorePlane } from "../emit/publish-plane.js";
 import type { Root } from "../emit/root.js";
 import type { GrimRunner, PurgeTarget } from "../enrich/index.js";
 import { MARKETPLACE_GRIM_VERSION, grimTooOld, supportsMarketplaceExport, tooOldMessage } from "../grim.js";
-import { anchorRoot, anchorSite } from "../state/anchor.js";
+import { anchorSite, readRoot } from "../state/anchor.js";
 import { BlobStore } from "../state/blobstore.js";
 import { handOff } from "../state/collect.js";
-import { parseJobTimeout } from "../state/detect.js";
+import { budgetFor, parseJobTimeout } from "../state/detect.js";
 import { STATE_DIR, prepareState } from "../state/handoff.js";
 import { hydrate, type LoadedPlane } from "../state/restore.js";
+import { STAGE_SLOT_MS, stagePreviousClosure } from "../state/retention.js";
 import { parseRef } from "../validate/core/metadata.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 
@@ -69,24 +70,25 @@ async function restoreState(
   rootDir: string,
   store: BlobStore,
   fresh: boolean,
-): Promise<{ published: Root | null; restored: LoadedPlane | null; revalidateMs: number }> {
+): Promise<{ site: string | undefined; published: Root | null; restored: LoadedPlane | null; revalidateMs: number }> {
   // `loadConfig`, never `resolveConfig`: the built-in default for `site` names
   // the first-party index, and anchoring on it would restore somebody else's
   // READMEs into this one.
   const { loadConfig } = await import("../config.js");
   const config = await loadConfig(rootDir);
   const revalidateMs = config.sync.revalidateMs;
-  const published = await anchorRoot(config.site);
+  const site = anchorSite(config.site);
+  const published = site === undefined ? null : await readRoot(site);
   // `--fresh`: no entries and an empty store, but the generation still comes from `published` (the floor, IX-R06).
   const ref = fresh ? undefined : published?.planes.enrich;
-  if (!ref) return { published, restored: null, revalidateMs };
+  if (!ref) return { site, published, restored: null, revalidateMs };
 
-  const restored = await restorePlane(store, anchorSite(config.site), ref);
+  const restored = await restorePlane(store, site, ref);
   if (restored) {
     const seeded = hydrate(rootDir, store, restored);
     if (seeded > 0) console.log(`restored ${seeded} sidecar(s) from the enrich plane`);
   }
-  return { published, restored, revalidateMs };
+  return { site, published, restored, revalidateMs };
 }
 
 /**
@@ -140,7 +142,8 @@ export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode
   // `--seed` is accepted and means what it always did, "start from the published site" (IX-R36); the restore below runs whenever `site` qualifies.
   const store = new BlobStore(path.join(rootDir, STATE_DIR));
   if (fresh) store.clear();
-  const { published, restored, revalidateMs } = await restoreState(rootDir, store, fresh);
+  const { site, published, restored, revalidateMs } = await restoreState(rootDir, store, fresh);
+  const jobTimeoutSeconds = parseJobTimeout(process.env.CI_JOB_TIMEOUT);
 
   let result;
   try {
@@ -152,7 +155,7 @@ export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode
       store,
       purge,
       revalidateMs,
-      jobTimeoutSeconds: parseJobTimeout(process.env.CI_JOB_TIMEOUT),
+      jobTimeoutSeconds,
       startedAt: now.getTime(),
       fresh,
     });
@@ -165,8 +168,14 @@ export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode
 
   await enrichMarketplaceExport(rootDir, spawnGrim(bin));
 
+  // A majority failing is an outage, not one bad package: it hands off but stages no closure, and exits 69 below.
+  const outage = result.failures.length * 2 > result.total;
   // Before the failure rule below: an outage run (exit 69) still hands off what it carried, so `build` deploys it.
-  handOff(rootDir, store, { now, published, restored, run: result, renew: fresh || purge !== undefined });
+  handOff(rootDir, store, {
+    now, published, restored, run: result, renew: fresh || purge !== undefined,
+    // IX-R22: the previous closure, until the budget's end plus the stage slot; the whole of retention is this statement.
+    retained: await stagePreviousClosure(site, store, outage ? null : published, budgetFor(now.getTime(), jobTimeoutSeconds).endMs + STAGE_SLOT_MS, purge && "digest" in purge ? purge.digest : undefined),
+  });
 
   for (const failure of result.failures) console.error(`warn: ${failure}`);
   console.log(`enriched ${result.enriched}/${result.total} package(s)`);
@@ -175,7 +184,7 @@ export async function enrich(root: string, flags: EnrichFlags): Promise<ExitCode
   }
 
   if (result.total === 0) return EXIT.ok;
-  if (result.failures.length * 2 > result.total) {
+  if (outage) {
     // A majority failing is a registry outage or a missing `grim`, not one bad
     // package. Fail loudly; the sidecars already on disk are left alone.
     throw new CliError(

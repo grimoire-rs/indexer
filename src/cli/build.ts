@@ -11,6 +11,7 @@
 // plane comes from the hand-off and nothing here touches the network.
 import path from "node:path";
 
+import { retainPrevious } from "../state/retention.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { resolveOutDir } from "./out_dir.js";
 
@@ -22,12 +23,13 @@ export async function build(root: string, flags: BuildFlags): Promise<ExitCode> 
   const rootDir = path.resolve(root);
   const outDir = resolveOutDir(rootDir, flags.outDir);
 
-  const [{ loadConfig }, { compileIndex }, { buildSite }, { publishDist }, { stageHandoff }] = await Promise.all([
+  const [{ loadConfig }, { compileIndex }, { buildSite }, { publishDist }, { stageHandoff }, { reportBuild }] = await Promise.all([
     import("../config.js"),
     import("../data/index.js"),
     import("../renderer/index.js"),
     import("../emit/root.js"),
     import("../state/handoff.js"),
+    import("../emit/logline.js"),
   ]);
 
   const config = await loadConfig(rootDir);
@@ -38,9 +40,11 @@ export async function build(root: string, flags: BuildFlags): Promise<ExitCode> 
   if (handoff === null) {
     console.warn("warn: no usable hand-off from `enrich` — publishing without an enrich plane");
   }
-  publishDist(outDir, config.sync, handoff);
+  const published = publishDist(outDir, config.sync, handoff);
   const { applyLegacy } = await import("../emit/legacy.js");
   await applyLegacy(rootDir, outDir, config); // IX-R48: after the root, which names only the surviving blobs
+  if (handoff !== null) retainPrevious(rootDir, outDir, published); // IX-R22: offline, after the root and the legacy cut
+  reportBuild({ root: rootDir, dist: outDir, sync: config.sync, published, entries: count }); // IX-R23: last, so dist/ is final
 
   console.log(
     `${count} package(s) across ${namespaces.length} namespace(s) -> ${path.relative(process.cwd(), outDir) || outDir}`,

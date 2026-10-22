@@ -12,11 +12,12 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { run } from "../../src/cli/main.js";
+import { gzipDeterministic } from "../../src/emit/gzip.js";
 import type { Root } from "../../src/emit/root.js";
 import { BlobStore } from "../../src/state/blobstore.js";
 import { handOff } from "../../src/state/collect.js";
@@ -296,6 +297,45 @@ describe("build", () => {
       const shards = fs.readdirSync(path.join(dir, "dist", "c/s/sha256"));
       expect(shards).toHaveLength(1);
       expect(sha256(dist(`c/s/sha256/${shards[0]}`))).toBe(shards[0]?.replace(/\.json$/, ""));
+    }, 120_000);
+
+    it("IX-R22 copies the staged previous closure into dist/c, drops a staged file that does not verify, and asks the network for nothing", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      enriched();
+      const flat = Buffer.from("[]");
+      const gz = gzipSync(flat); // not canonical on purpose: build writes the deterministic form
+      const retained = path.join(dir, STATE_DIR, "out/retained/c");
+      fs.mkdirSync(path.join(retained, "f/sha256"), { recursive: true });
+      fs.mkdirSync(path.join(retained, "s/sha256"), { recursive: true });
+      fs.writeFileSync(path.join(retained, `f/sha256/${sha256(flat)}.json.gz`), gz);
+      fs.writeFileSync(path.join(retained, `s/sha256/${sha256(Buffer.from("real"))}.json`), "swapped");
+      const fetchSpy = denyNetwork();
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(dist(`c/f/sha256/${sha256(flat)}.json.gz`)).toEqual(gzipDeterministic(flat));
+      expect(fs.existsSync(path.join(dir, "dist", `c/s/sha256/${sha256(Buffer.from("real"))}.json`))).toBe(false);
+      expect(warn.mock.calls.flat().join("\n")).toMatch(/not a regular file that verifies/);
+      expect(readRoot().planes.enrich).not.toBeNull();
+    }, 120_000);
+
+    it("IX-R28 NFR-7 a retention fs failure warns and the new closure is still published", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      enriched();
+      const retained = path.join(dir, STATE_DIR, "out/retained/c");
+      fs.mkdirSync(path.join(retained, "s/sha256"), { recursive: true });
+      const real = fs.readdirSync;
+      vi.spyOn(fs, "readdirSync").mockImplementation(((p: fs.PathLike, ...rest: unknown[]) => {
+        if (String(p).endsWith(path.join("retained", "c", "s", "sha256"))) throw Object.assign(new Error("EIO: injected"), { code: "EIO" });
+        return (real as (...a: unknown[]) => unknown)(p, ...rest);
+      }) as typeof fs.readdirSync);
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(warn.mock.calls.flat().join("\n")).toMatch(/retaining the previous closure stopped \(EIO: injected\)/);
+      expect(readRoot().planes.enrich).not.toBeNull();
+      expect(fs.existsSync(path.join(dir, "dist", "index.html"))).toBe(true);
     }, 120_000);
 
     it("publishes no plane, and warns, when a plane file named by the hand-off is damaged", async () => {

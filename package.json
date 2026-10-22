@@ -31,6 +31,7 @@
     "dev": "npm run build && node scripts/dev.mjs",
     "dev:smoke": "npm run build && node scripts/dev.mjs --smoke",
     "dev:smoke:marketplace": "npm run build && node scripts/dev.mjs --smoke --marketplace-only",
+    "bench:scale": "node scripts/bench-scale.mjs",
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

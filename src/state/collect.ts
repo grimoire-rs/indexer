@@ -28,6 +28,8 @@ export interface HandOffContext {
   renew?: boolean;
   /** What the refresh decided: the entries, bucket stamps, counters. Absent for a hand-off with no refresh behind it, which reads the tree. */
   run?: Pick<EnrichResult, "entries" | "stamps" | "counters">;
+  /** What the previous-closure stage kept and skipped; absent counts as 0. */
+  retained?: { files: number; skipped: number };
 }
 
 /** The marketplace export as one deterministic blob, or `null` when there is none or it would not fit. */
@@ -73,9 +75,8 @@ export function handOff(root: string, store: BlobStore, ctx: HandOffContext): Ha
     planes: { enrich: plane.ref },
     state_epoch: stateEpoch,
     next_key: formatKey(stateEpoch, blobs),
-    // ponytail: the retention counters read 0 until the closure staging lands (I5), which also prints the build log line.
     counters: {
-      retained_files: 0, retained_skipped: 0, failed_buckets: plane.oversize.length,
+      retained_files: ctx.retained?.files ?? 0, retained_skipped: ctx.retained?.skipped ?? 0, failed_buckets: plane.oversize.length,
       probed: 0, deep: 0, calls: 0, probe_ms_p50: 0, deep_ms_p50: 0, budget_min: 0, throttled: 0, backoff_refs: 0, enrich: "complete",
       ...ctx.run?.counters,
     },
