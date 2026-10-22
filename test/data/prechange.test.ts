@@ -25,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { loadConfig } from "../../src/config.js";
 import { compileIndex } from "../../src/data/index.js";
+import { publishDist } from "../../src/emit/root.js";
 import { buildSite } from "../../src/renderer/index.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -98,7 +99,11 @@ async function build(patch: Record<string, unknown> = {}): Promise<Built> {
   await fs.mkdir(dist);
   await fs.rename(path.join(root, "all.json"), path.join(dist, "all.json"));
   await fs.writeFile(path.join(dist, "enrich.json"), '{"schema_version":1,"packages":{}}\n');
-  await buildSite({ root, outDir: dist, config: await loadConfig(root) });
+  const config = await loadConfig(root);
+  await buildSite({ root, outDir: dist, config });
+  // The step `grim-indexer build` runs after the site, so the additive-set
+  // assertion below binds to what the CLI publishes.
+  publishDist(dist, config.sync);
   return { compiled, dist };
 }
 
@@ -160,9 +165,7 @@ describe("the default build against the pre-change build", () => {
     await expectGolden(explicit, inventory);
   }, 600_000);
 
-  // Un-skip when the compact catalog and the gzip siblings are emitted: until
-  // then the build adds nothing, so there is nothing for this to bind.
-  it.skip("contract:I1 the default build adds only c/**, all.json.gz and stats.json.gz to dist/", async () => {
+  it("contract:I1 the default build adds only c/**, all.json.gz and stats.json.gz to dist/", async () => {
     const added: string[] = [];
     for (const e of await fs.readdir(standard.dist, { recursive: true, withFileTypes: true })) {
       if (!e.isFile()) continue;
@@ -172,5 +175,10 @@ describe("the default build against the pre-change build", () => {
     }
     const allowed = (rel: string) => rel.startsWith("c/") || rel === "all.json.gz" || rel === "stats.json.gz";
     expect(added.filter((rel) => !allowed(rel))).toEqual([]);
+    // An empty `added` would satisfy the filter above, so name what must be there.
+    expect(added).toContain("c/root.json");
+    expect(added).toContain("all.json.gz");
+    expect(added).toContain("stats.json.gz");
+    expect(added.filter((rel) => rel.startsWith("c/f/sha256/"))).toHaveLength(1);
   });
 });

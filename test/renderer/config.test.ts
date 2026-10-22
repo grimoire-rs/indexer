@@ -9,6 +9,7 @@ import {
   CONFIG_FILE,
   DEFAULT_CONFIG,
   loadConfig,
+  parseSync,
   resolveConfig,
   SiteConfigError,
 } from "../../src/config.js";
@@ -57,8 +58,9 @@ function captureStreams(): { err: () => string; out: () => string } {
 }
 
 describe("loadConfig", () => {
+  // `sync` is the one key `loadConfig` always carries: resolved, not as declared.
   it("treats a missing file as an empty config", async () => {
-    await expect(loadConfig(await rootWith(null))).resolves.toEqual({});
+    await expect(loadConfig(await rootWith(null))).resolves.toEqual({ sync: parseSync(undefined) });
   });
 
   it("returns what the file declares", async () => {
@@ -66,6 +68,7 @@ describe("loadConfig", () => {
     await expect(loadConfig(root)).resolves.toEqual({
       brand: "acme index",
       docsUrl: "https://acme.test",
+      sync: parseSync(undefined),
     });
   });
 
@@ -271,7 +274,7 @@ describe("notice", () => {
   // record; the row above is what makes `notice` the name that works.
   it("silently ignores the pre-release `banner` key", async () => {
     const config = await loadConfig(await rootWith('{"banner":"read-only mirror"}'));
-    expect(config).toEqual({ banner: "read-only mirror" });
+    expect(config).toEqual({ banner: "read-only mirror", sync: parseSync(undefined) });
     expect(resolveConfig(config).notice).toBeNull();
   });
 });
