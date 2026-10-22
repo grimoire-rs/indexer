@@ -311,6 +311,83 @@ describe("runValidate — registry truth", () => {
   });
 });
 
+describe("runValidate — duplicate ref", () => {
+  const OTHER = "index/github.com/acme/other/metadata.json";
+  const THIRD = "index/github.com/acme/third/metadata.json";
+  const other = (over: Record<string, unknown> = {}) => metadata({ name: "other", ...over });
+
+  it("sends a new pointer whose ref an existing pointer already holds to manual review", async () => {
+    const { result, calls } = await run({ baseFiles: { [OTHER]: other() }, prFiles: { [FILE]: metadata() } });
+    // `FILE` is new here: the base tree holds only `OTHER`, under the same ref.
+    expect(result.eligible).toBe(false);
+    expect(said(result.reasons)).toContain(OTHER);
+    expect(said(result.reasons)).toContain("manual review");
+    expect(registryCalls(calls)).toEqual([]);
+  });
+
+  it("names the existing pointer, not the new one, as the holder", async () => {
+    const { result } = await run({ baseFiles: { [OTHER]: other() } });
+    expect(result.reasons).toHaveLength(1);
+    expect(result.reasons[0]?.startsWith(`${FILE}: `)).toBe(true);
+    expect(result.reasons[0]?.slice(FILE.length)).toContain(OTHER);
+  });
+
+  it("holds an update that moves a pointer onto another pointer's ref", async () => {
+    const { result } = await run({
+      baseFiles: { [FILE]: metadata({ ref: "reg.example.com/acme/old" }), [OTHER]: other() },
+    });
+    expect(said(result.reasons)).toContain(OTHER);
+  });
+
+  it("holds the same ref reached through a different case", async () => {
+    const { result } = await run({
+      baseFiles: { [OTHER]: other({ ref: "Reg.Example.com/acme/tool" }) },
+    });
+    expect(said(result.reasons)).toContain(OTHER);
+  });
+
+  it("waves through a new pointer whose ref nobody holds", async () => {
+    const { result } = await run({
+      baseFiles: { [OTHER]: other({ ref: "reg.example.com/acme/other" }) },
+    });
+    expect(result).toEqual({ eligible: true, reasons: [] });
+  });
+
+  it("does not hold an update of the pointer that already holds the ref", async () => {
+    const { result } = await run({
+      baseFiles: { [FILE]: metadata(), [OTHER]: other({ ref: "reg.example.com/acme/other" }) },
+    });
+    expect(result.eligible).toBe(true);
+  });
+
+  // The base already carries the duplicate; touching one side is not adding one.
+  it("does not hold an update of a pointer that already shared its ref", async () => {
+    const { result } = await run({
+      baseFiles: { [FILE]: metadata(), [OTHER]: other() },
+      prFiles: { [FILE]: metadata({ description: "changed" }) },
+    });
+    expect(result.eligible).toBe(true);
+  });
+
+  it("holds the second of two new pointers in one change that share a ref", async () => {
+    const { result } = await run({
+      prFiles: { [FILE]: metadata(), [THIRD]: metadata({ name: "third" }) },
+      options: { changedFiles: [FILE, THIRD] },
+    });
+    expect(result.eligible).toBe(false);
+    expect(said(result.reasons)).toContain(`${THIRD}: `);
+    expect(said(result.reasons)).toContain(FILE);
+  });
+
+  it("does not hold a deletion of a pointer that shares its ref", async () => {
+    const { result } = await run({
+      baseFiles: { [FILE]: metadata(), [OTHER]: other() },
+      prFiles: { "index/.keep": "" },
+    });
+    expect(result.eligible).toBe(true);
+  });
+});
+
 describe("runValidate — gitlab", () => {
   const gitlabRoutes = (over: Record<string, Route> = {}) => (url: string): Route | null => {
     if (url in over) return over[url] ?? null;

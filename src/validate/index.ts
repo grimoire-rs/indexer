@@ -211,8 +211,9 @@ async function collectReasons(options: ValidateOptions): Promise<string[]> {
 
   // 3. Per-file content checks.
   const reasons: string[] = [];
+  const holders = paths.length > 0 ? await indexRefs(options.root, options.forge, host) : new Map<string, string[]>();
   for (const path of paths) {
-    const reason = await checkFile(path, identities, options);
+    const reason = await checkFile(path, identities, options, holders);
     if (reason !== null) reasons.push(`${path.file}: ${reason}`);
   }
 
@@ -224,6 +225,25 @@ async function collectReasons(options: ValidateOptions): Promise<string[]> {
     reasons.push(...(await marketplaceReasons(options.prTree, options.forge, host)));
   }
   return reasons;
+}
+
+/** Every pointer under `tree`, grouped by the `ref` it declares (lowercased, tag and digest stripped). */
+async function indexRefs(
+  tree: string,
+  forge: ValidateOptions["forge"],
+  host: string,
+): Promise<Map<string, string[]>> {
+  const holders = new Map<string, string[]>();
+  for (const file of await listIndexMetadata(tree, forge, host)) {
+    const read = await readIndexFile(tree, file);
+    if (read.kind !== "text") continue;
+    const parsed = parseMetadataJson(read.text);
+    const ref = parsed.ok ? (parsed.value as { ref?: unknown }).ref : undefined;
+    if (typeof ref !== "string") continue;
+    const key = stripRef(ref);
+    holders.set(key, [...(holders.get(key) ?? []), file]);
+  }
+  return holders;
 }
 
 /**
@@ -238,14 +258,7 @@ async function marketplaceReasons(
   forge: ValidateOptions["forge"],
   host: string,
 ): Promise<string[]> {
-  const indexed = new Set<string>();
-  for (const file of await listIndexMetadata(prTree, forge, host)) {
-    const read = await readIndexFile(prTree, file);
-    if (read.kind !== "text") continue;
-    const parsed = parseMetadataJson(read.text);
-    const ref = parsed.ok ? (parsed.value as { ref?: unknown }).ref : undefined;
-    if (typeof ref === "string") indexed.add(stripRef(ref));
-  }
+  const indexed = new Set((await indexRefs(prTree, forge, host)).keys());
 
   const reasons: string[] = [];
   const parsers: Record<string, (text: string) => Member[]> = {
@@ -273,6 +286,7 @@ async function checkFile(
   path: IndexPath,
   identities: Map<string, NamespaceIdentity>,
   options: ValidateOptions,
+  holders: Map<string, string[]>,
 ): Promise<string | null> {
   const read = await readIndexFile(options.prTree, path.file);
   // A path with no file in the PR tree is a deletion by the namespace owner,
@@ -321,6 +335,18 @@ async function checkFile(
   // Host policy before the request — the ref is attacker-chosen input.
   const hostReason = registryHostReason(ref.value.host, options.registryHosts);
   if (hostReason !== null) return hostReason;
+
+  // A ref another pointer already holds is a decision for a maintainer: both
+  // pointers would publish, and the enrich plane keeps only the later one.
+  const key = stripRef(meta.ref);
+  const held = holders.get(key) ?? [];
+  if (!held.includes(path.file)) {
+    if (held[0] !== undefined) {
+      return `ref ${JSON.stringify(meta.ref)} is already held by the pointer ${held[0]} — manual review`;
+    }
+    // A second new pointer in the same change collides with this one.
+    holders.set(key, [path.file]);
+  }
 
   const reachable = await refReachable(ref.value.host, ref.value.repository, {
     auth: options.registryAuth ?? env("GRIM_INDEX_REGISTRY_AUTH"),
