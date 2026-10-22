@@ -20,6 +20,7 @@ Your stylesheet is unlayered and everything the renderer ships is inside
 | `catalog` | The whole catalog island |
 | `catalog-toolbar` | Its control row |
 | `catalog-search` | The search field |
+| `catalog-notice` | The notice shown when search covers only the cards on the page |
 | `filter-chip` | A kind, keyword, sort or view chip |
 | `package-card` | One card in the grid view |
 | `package-table` | The table view |

@@ -196,6 +196,7 @@ describe("build", () => {
     expect(fs.readdirSync(path.join(dir, "dist", "c/f/sha256"))).toEqual([`${root.stats?.sha256}.json.gz`]);
     expect(gunzipSync(dist("all.json.gz")).equals(dist("all.json"))).toBe(true);
     expect(dist("stats.json.gz").equals(dist(`c/f/sha256/${root.stats?.sha256}.json.gz`))).toBe(true);
+    expect(dist("index.html").toString("utf8")).toContain(`data-grim-stats="${root.stats?.sha256}"`);
     expect(root.planes).toEqual({ catalog: null, enrich: null });
     expect(root.search).not.toBeNull(); // the site serves packages: IX-R15
     expect(root.generation).toBeGreaterThanOrEqual(Math.floor(before / 1000));
@@ -222,6 +223,9 @@ describe("build", () => {
     expect(file.rows).toHaveLength(1);
     // gzip-only: no raw copy and no sibling beside it.
     expect(fs.readdirSync(path.join(dir, "dist", "c/q/sha256"))).toEqual([`${ref?.sha256}.json.gz`]);
+    // The home page fetches by the hashes it carries: one the root does not name is a 404.
+    const home = dist("index.html").toString("utf8");
+    expect(home).toContain(`data-grim-search="${ref?.sha256}"`);
   }, 120_000);
 
   it("IX-R15 P-9 holds under layout anchored with legacy false, where the legacy copies are cut after the root", async () => {

@@ -239,6 +239,7 @@ describe("the data-slot contract", () => {
   const SLOTS = [
     "brand",
     "catalog",
+    "catalog-notice",
     "catalog-search",
     "catalog-toolbar",
     "code-block",

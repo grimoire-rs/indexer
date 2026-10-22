@@ -1643,24 +1643,32 @@ describe("discovery", () => {
    * covered 48 of them, and without the two fallbacks below that would have
    * been the whole of the landing page's link graph.
    */
-  it("links every package from the landing page, windowed or not", () => {
-    const hrefs = new Set(
-      [...site.indexHtml.matchAll(/href="([^"]*\/p\/[^"]+\/)"/g)].map((m) => m[1]),
-    );
+  it("links every package from the landing page or the browse page it points to", async () => {
+    // IX-R14: the landing page holds the first screenful of cards; `browse/`
+    // (IX-R16) links every package, deprecated ones included.
+    const pageHrefs = async (html: string) =>
+      [...html.matchAll(/href="([^"]*\/p\/[^"]+\/)"/g)].map((m) => m[1]);
+    const hrefs = new Set([
+      ...(await pageHrefs(site.indexHtml)),
+      ...(await pageHrefs(await site.read("browse/1/index.html"))),
+    ]);
     const missing = FIXTURE_PACKAGES.filter(
       (p) => !hrefs.has(`/p/${p.namespace}/${p.name}/`),
     );
     expect(missing.map((p) => `${p.namespace}/${p.name}`)).toEqual([]);
   });
 
-  it("retires the partial catalog for a reader with no JavaScript", () => {
+  it("retires the partial catalog for a reader with no JavaScript, and points at browse/", async () => {
     const noscript = /<noscript>[\s\S]*?<\/noscript>/.exec(site.indexHtml)?.[0];
     expect(noscript, "no <noscript> fallback on the landing page").toBeDefined();
     // Without this the reader gets the first slice of cards and a toolbar
-    // that does nothing, on top of the complete list below it.
+    // that does nothing, on top of the link below it.
     expect(noscript).toMatch(/\.catalog\s*\{\s*display:\s*none/);
-    const linked = [...(noscript ?? "").matchAll(/href="([^"]*\/p\/[^"]+\/)"/g)].length;
-    expect(linked).toBe(FIXTURE_PACKAGES.length);
+    expect(noscript).toContain('href="/browse/1/"');
+    // The list itself: the configured notice and nav can link a package too.
+    const browse = /<h1[\s\S]*?<\/ul>/.exec(await site.read("browse/1/index.html"))?.[0] ?? "";
+    const linked = [...browse.matchAll(/href="([^"]*\/p\/[^"]+\/)"/g)].map((m) => m[1]);
+    expect(linked.sort()).toEqual(FIXTURE_PACKAGES.map((p) => `/p/${p.namespace}/${p.name}/`).sort());
   });
 
   it("writes a sitemap and a robots.txt naming it", async () => {

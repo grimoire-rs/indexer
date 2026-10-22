@@ -1,11 +1,12 @@
 ---
 import Base from "../layouts/Base.astro";
 import MarketplaceView from "../components/MarketplaceView.astro";
-import Catalog from "../components/Catalog.tsx";
+import Catalog, { type CatalogFlags, type KindCount } from "../components/Catalog.tsx";
 import CommandBar from "../components/CommandBar.astro";
 import { BrandMark } from "../components/BrandMark.tsx";
 import { addRegistryUrl, cardPackage } from "../lib/catalog";
 import { withBase } from "../lib/base";
+import { compare } from "../lib/order";
 import { installChoices, registryAddCommand, registryScopeChoices, resolveRegistry } from "../lib/commands";
 import { data } from "../lib/data";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
@@ -38,6 +39,47 @@ const marketplace = config.vscodeExtension
 const install = installChoices(config);
 const addCommand = registryAddCommand(config);
 const scopeChoices = registryScopeChoices(config);
+
+// What the catalog island is handed. Inline mode (a theme replaced the shipped
+// catalog or home page) gets every card. Otherwise it gets one window of cards
+// and the whole catalog's size, counts and flags, so the page stays the same
+// size however many packages there are. Projected, not passed whole: see the
+// island below.
+const catalogProps: Record<string, unknown> = {};
+if (data.inlineCatalog) {
+  catalogProps.packages = packages.map(cardPackage);
+} else {
+  // Imported here, not above: a theme's own Catalog.tsx need not export
+  // `WINDOW`, and a static import of a missing export fails the bundle.
+  const { WINDOW } = await import("../components/Catalog.tsx");
+  const kindCounts = new Map<string, KindCount>();
+  let deprecated = 0;
+  for (const p of packages) {
+    const count = kindCounts.get(p.kind) ?? { total: 0, deprecated: 0 };
+    count.total += 1;
+    if (p.deprecated) {
+      count.deprecated += 1;
+      deprecated += 1;
+    }
+    kindCounts.set(p.kind, count);
+  }
+  const flags: CatalogFlags = {
+    hasDeprecated: deprecated > 0,
+    hasRatings: packages.some((p) => p.rating),
+    hasDownloads: packages.some((p) => p.downloads),
+    deprecated,
+  };
+  catalogProps.packages = packages
+    .filter((p) => !p.deprecated)
+    .map(cardPackage)
+    .sort((a, b) => compare(a, b, "name"))
+    .slice(0, WINDOW);
+  catalogProps.total = packages.length;
+  catalogProps.kindCounts = Object.fromEntries(kindCounts);
+  catalogProps.flags = flags;
+  catalogProps.searchDigest = data.digests.search;
+  catalogProps.statsDigest = data.digests.stats;
+}
 ---
 
 {marketplaceOnly ? <MarketplaceView title={config.brand} description={config.description} /> : (
@@ -139,8 +181,9 @@ const scopeChoices = registryScopeChoices(config);
 
   {/* Without JavaScript the island never hydrates, so the catalog stops at
       the viewport's worth of cards the server rendered and the toolbar above
-      it does nothing. This is the whole list instead: the inline rule below
-      retires the partial catalog, and the list under it names every package.
+      it does nothing. The inline rule below retires the partial catalog, and
+      what follows it names every package: a list in inline mode, in scale
+      mode a link to the browse pages that do.
 
       Inside `<noscript>`, so a reader with JavaScript never parses it and
       pays nothing for it. Crawlers execute JavaScript and therefore ignore
@@ -153,21 +196,29 @@ const scopeChoices = registryScopeChoices(config);
         .nojs-catalog { margin-block: var(--grim-space-7); }
       }
     </style>
-    <section class="nojs-catalog">
-      <h2>All packages</h2>
-      <ul>
-        {
-          packages.map((p) => (
-            <li>
-              <a href={withBase(`/p/${p.namespace}/${p.name}/`)}>
-                {p.namespace}/{p.name}
-              </a>
-              {p.description && <> — {p.description}</>}
-            </li>
-          ))
-        }
-      </ul>
-    </section>
+    {
+      data.inlineCatalog ? (
+        <section class="nojs-catalog">
+          <h2>All packages</h2>
+          <ul>
+            {
+              packages.map((p) => (
+                <li>
+                  <a href={withBase(`/p/${p.namespace}/${p.name}/`)}>
+                    {p.namespace}/{p.name}
+                  </a>
+                  {p.description && <> — {p.description}</>}
+                </li>
+              ))
+            }
+          </ul>
+        </section>
+      ) : (
+        <p class="nojs-catalog">
+          <a href={withBase("/browse/1/")}>Browse all {packages.length} packages</a>
+        </p>
+      )
+    }
   </noscript>
 
   {/* Projected, not passed whole. Astro serializes island props into an
@@ -177,9 +228,17 @@ const scopeChoices = registryScopeChoices(config);
       makes it enforceable; see `lib/catalog.ts`. */}
   <Catalog
     client:load
-    packages={packages.map(cardPackage)}
+    {...catalogProps}
     vscodeExtension={config.vscodeExtension}
     builtAt={data.builtAt}
   />
+  {/* Where the island finds the digest-named files it fetches. Its own
+      element: the island's props are not readable before it hydrates. An
+      absent digest is an absent attribute. */}
+  {
+    !data.inlineCatalog && (
+      <div id="grim-digests" hidden data-grim-search={data.digests.search} data-grim-stats={data.digests.stats}></div>
+    )
+  }
 </Base>
 )}

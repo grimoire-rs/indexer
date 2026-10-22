@@ -16,6 +16,17 @@ live site and warns when the host serves a file with the wrong content type.
 It never fails the pipeline. Bump the lock, run `npm run ci` and commit the
 result, as for any CI change.
 
+### The home page and the search file {#site-at-scale-home}
+
+The home page now carries the first 48 cards and the catalog's counts, so its
+size no longer grows with the index. The rest of the catalog is a new file,
+`c/q/sha256/<hex>.json.gz`, which the page fetches on the first search, filter,
+sort or scroll. `c/root.json` names it under `search`. The
+[output layout](../reference/output-layout.md) describes the file.
+
+A theme that replaces `components/Catalog.tsx` or `pages/index.astro` keeps
+the old page, with every card inlined. The build says so on stderr.
+
 ### Browse pages and the sitemap {#site-at-scale-browse}
 
 The site gains `browse/1/`, `browse/2/` and so on: every package as a plain

@@ -21,8 +21,14 @@ import {
 import { PackageCard } from "./PackageCard.js";
 import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
-import { PACKAGE_HREF, indexAgo, type CardPackage } from "../lib/catalog.js";
+import {
+  PACKAGE_HREF,
+  cardPackage,
+  indexAgo,
+  type CardPackage,
+} from "../lib/catalog.js";
 import { withBase } from "../lib/base.js";
+import type { CatalogPackage } from "../../types.js";
 // TYPE-ONLY, and it has to stay that way: `../lib/search.js` (the matcher,
 // and the `/all.json` fetch behind it) is loaded with `await import()` below
 // so neither reaches a reader who never types. A value import here would
@@ -56,8 +62,9 @@ const KEYWORD_CHIP_LIMIT = 8;
 
 /**
  * How many packages the catalog builds at a time. See `limit` in `Catalog`.
+ * Exported because the home page serves exactly one window of cards.
  */
-const WINDOW = 48;
+export const WINDOW = 48;
 
 /**
  * `popovertarget` needs an id, and the catalog is a singleton on its page —
@@ -231,6 +238,7 @@ function PackageTable({
   hasRatings,
   hasDownloads,
   href,
+  busy,
   onKeyDown,
   rootRef,
 }: {
@@ -238,6 +246,7 @@ function PackageTable({
   hasRatings: boolean;
   hasDownloads: boolean;
   href: string;
+  busy: boolean;
   onKeyDown: (event: KeyboardEvent) => void;
   rootRef: { current: HTMLElement | null };
 }) {
@@ -247,6 +256,7 @@ function PackageTable({
         .filter(Boolean)
         .join(" ")}
       data-slot="package-table"
+      aria-busy={busy || undefined}
       ref={(el) => {
         rootRef.current = el;
       }}
@@ -265,6 +275,64 @@ function PackageTable({
   );
 }
 
+// One `import()` shared by both loads, which can start in the same tick.
+let digestfetchModule: Promise<typeof import("../lib/digestfetch.js")> | undefined;
+const digestfetch = () => (digestfetchModule ??= import("../lib/digestfetch.js"));
+
+/** Inflated bytes. A stats blob past this is not loaded and the cards show no figures from it. */
+const STATS_CAP = 128 * 1024 * 1024;
+
+/** The two stats a card draws, as the stats blob carries them per ref. */
+interface StatEntry {
+  rating?: { up?: unknown; url?: unknown };
+  downloads?: { total?: unknown };
+}
+
+/**
+ * The stats blob's `entries`, as a `Map`: refs come off the wire, and a plain
+ * object keyed by them would let `__proto__` or `constructor` read the wrong
+ * thing.
+ */
+function decodeStats(value: unknown): ReadonlyMap<string, StatEntry> {
+  const entries = (value as { entries?: unknown } | null)?.entries;
+  if (typeof entries !== "object" || entries === null || Array.isArray(entries)) {
+    throw new Error("stats blob has no entries");
+  }
+  return new Map(Object.entries(entries as Record<string, StatEntry>));
+}
+
+/**
+ * Join the stats blob onto a package: the same two figures the build joins
+ * into `all.json`. A figure the blob lacks, or carries as something other than
+ * a number, leaves what the package already had.
+ */
+export function withStats(p: CardPackage, stats: ReadonlyMap<string, StatEntry>): CardPackage {
+  const entry = stats.get(p.ref);
+  const up = entry?.rating?.up;
+  const total = entry?.downloads?.total;
+  if (typeof up !== "number" && typeof total !== "number") return p;
+  const url = entry?.rating?.url;
+  return {
+    ...p,
+    ...(typeof up === "number" && { rating: typeof url === "string" ? { up, url } : { up } }),
+    ...(typeof total === "number" && { downloads: { total } }),
+  };
+}
+
+/** One kind's size in the whole catalog; `deprecated` of `total` are retired. */
+export interface KindCount {
+  total: number;
+  deprecated: number;
+}
+
+/** Which controls the whole catalog earns, and how many of it is retired. */
+export interface CatalogFlags {
+  hasDeprecated: boolean;
+  hasRatings: boolean;
+  hasDownloads: boolean;
+  deprecated: number;
+}
+
 // `vscodeExtension` arrives as a prop, not from lib/data: this island
 // hydrates in the browser, so importing the build-time payload here would
 // ship the whole catalog twice.
@@ -272,11 +340,26 @@ export default function Catalog({
   packages,
   vscodeExtension,
   builtAt,
+  total,
+  kindCounts,
+  flags,
+  searchDigest,
+  statsDigest,
   searchUrl = "/all.json",
   href = PACKAGE_HREF,
 }: {
   packages: CardPackage[];
   vscodeExtension: string | null;
+  /** The catalog's size when `packages` is only its first screenful. Absent: `packages` is all of it. */
+  total?: number;
+  /** Per kind, over the whole catalog. Replaces counting `packages` for the kind chips. */
+  kindCounts?: Record<string, KindCount>;
+  /** Over the whole catalog. Replaces scanning `packages` for the toggle and the rating and download sorts. */
+  flags?: CatalogFlags;
+  /** SHA-256 of the published search file; `null` when the build published none. */
+  searchDigest?: string | null;
+  /** SHA-256 of the published stats blob; `null` when the build published none. */
+  statsDigest?: string | null;
   /** Site-root URL of the record array the search matcher loads; the marketplace serves its own. */
   searchUrl?: string;
   /** Card and row link template, see `packageHref`. */
@@ -339,6 +422,17 @@ export default function Catalog({
   // rather than a boolean so the next query starts cut again, with no effect
   // to reset it.
   const [weakFor, setWeakFor] = useState<string | null>(null);
+  // Scale mode: `packages` is one window of a larger catalog and
+  // `searchDigest` names the file holding the rest. `null` is a build that
+  // published no file, which is still scale mode — the page is still a window.
+  const scale = searchDigest !== undefined;
+  // The whole catalog, once the search file is in.
+  const [rows, setRows] = useState<CardPackage[] | null>(null);
+  const [load, setLoad] = useState<"idle" | "loading" | "failed">("idle");
+  // The stats blob, once it is in; `null` until then and for good if it fails.
+  const [stats, setStats] = useState<ReadonlyMap<string, StatEntry> | null>(null);
+  // The keywords the loaded rows carry; `null` until then.
+  const vocabulary = useRef<ReadonlySet<string> | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLElement>(null);
@@ -670,10 +764,15 @@ export default function Catalog({
     const v = readPref("view");
     const field: Sort =
       s === "updated" || s === "rating" || s === "downloads" ? s : "name";
-    const published = new Set(packages.flatMap((p) => p.keywords ?? []));
+    // In scale mode the rendered cards are not the vocabulary: a keyword
+    // outside them is kept as asked until the rows land and decide, and for
+    // good when none do (no search file, or its load failed).
+    const published = scale
+      ? vocabulary.current
+      : new Set(packages.flatMap((p) => p.keywords ?? []));
     setQuery(params.get("q") ?? "");
     setKinds(list(params.get("kind")).filter((k) => KNOWN_KINDS.includes(k)));
-    setKeywords(list(params.get("kw")).filter((k) => published.has(k)));
+    setKeywords(list(params.get("kw")).filter((k) => !published || published.has(k)));
     setSort(field);
     setDir(d === "asc" || d === "desc" ? d : NATURAL[field]);
     // A flag: stored at all means on.
@@ -992,12 +1091,18 @@ export default function Catalog({
     }
   };
 
+  // The rendered window, until the search file brings in the whole catalog.
+  const base = rows ?? packages;
+  const pool = useMemo(
+    () => (stats ? base.map((p) => withStats(p, stats)) : base),
+    [base, stats],
+  );
   // The catalog as the kind chips and the search placeholder count it —
   // deprecated entries drop out of those totals too while they are hidden,
   // so no count ever promises more than the grid shows.
   const counted = useMemo(
-    () => (showDeprecated ? packages : packages.filter((p) => !p.deprecated)),
-    [packages, showDeprecated],
+    () => (showDeprecated ? pool : pool.filter((p) => !p.deprecated)),
+    [pool, showDeprecated],
   );
 
   // Which kinds this catalog publishes, in chip order. No counts on the
@@ -1006,12 +1111,20 @@ export default function Catalog({
   // many packages the filters left. A per-chip count is also the harder one
   // to read honestly — kinds are an OR group, so a count taken after the
   // filter says "3" about a chip that is about to reveal thirty.
+  //
+  // Read off `kindCounts` when the page sent them: `packages` is then one
+  // screenful, and a kind it happens not to hold still has a chip.
   const kindNames = useMemo(() => {
-    const seen = new Set(counted.map((p) => p.kind));
-    return [...seen].sort(
+    const names = kindCounts
+      ? Object.keys(kindCounts).filter((k) => {
+          const c = kindCounts[k]!;
+          return c.total - (showDeprecated ? 0 : c.deprecated) > 0;
+        })
+      : counted.map((p) => p.kind);
+    return [...new Set(names)].sort(
       (a, b) => kindOrder(a) - kindOrder(b) || a.localeCompare(b),
     );
-  }, [counted]);
+  }, [counted, kindCounts, showDeprecated]);
 
   const q = query.trim().toLowerCase();
 
@@ -1031,7 +1144,8 @@ export default function Catalog({
    */
   const tried = useRef(false);
   useEffect(() => {
-    if (!q || tried.current) return;
+    // Scale mode builds its matcher from the search file, never from `/all.json`.
+    if (scale || !q || tried.current) return;
     tried.current = true;
     // Self-catching, so the `void` attaches nothing it needs to: every await
     // on the path is inside the try.
@@ -1045,6 +1159,71 @@ export default function Catalog({
       }
     })();
   }, [q]);
+
+  /**
+   * Scale mode: the page holds one window of cards, and everything else is
+   * the search file, fetched once per page view by whichever interaction
+   * first needs rows the window lacks.
+   *
+   * The latch is the promise itself, so triggers that arrive while the load
+   * is in flight share it and a failed load is not retried on the next
+   * keystroke. Everything it pulls in is `await import()`ed for the same
+   * reason as the matcher above: a reader who never asks costs the page none
+   * of it.
+   */
+  const rowsLoad = useRef<Promise<void> | null>(null);
+  const ensureRows = () => {
+    if (typeof searchDigest !== "string") return;
+    const digest = searchDigest;
+    rowsLoad.current ??= (async () => {
+      setLoad("loading");
+      try {
+        const [{ loadDigest }, file, search] = await Promise.all([
+          digestfetch(),
+          import("../lib/searchfile.js"),
+          import("../lib/search.js"),
+        ]);
+        const decoded = await loadDigest("q", digest, {
+          cap: file.SEARCH_CAP,
+          decode: file.decodeSearchFile,
+          attr: "search",
+        });
+        // The file carries no stats, so the window's badges move across by ref.
+        const onPage = new Map(packages.map((p) => [p.ref, p] as const));
+        const cards = decoded.map((row) => {
+          const card = cardPackage(row as CatalogPackage);
+          const { rating, downloads } = onPage.get(card.ref) ?? {};
+          return { ...card, ...(rating && { rating }), ...(downloads && { downloads }) };
+        });
+        const words = new Set(cards.flatMap((p) => p.keywords ?? []));
+        vocabulary.current = words;
+        // One synchronous run, so the rows and the matcher over them land in one render.
+        setKeywords((was) => {
+          const kept = was.filter((k) => words.has(k));
+          return kept.length === was.length ? was : kept;
+        });
+        setCutoff(() => search.applyCutoff);
+        setIndex(search.createSearchIndex(decoded));
+        setRows(cards);
+      } catch (err) {
+        console.error("catalog: search file unavailable, using the rendered cards", err);
+        setLoad("failed");
+      }
+    })();
+  };
+  // Asking for anything the window cannot answer: text, a chip, a sort, the
+  // deprecated toggle. Read off state rather than wired into each handler, so
+  // a view restored from the URL or storage is a request like any other.
+  const asked =
+    query !== "" ||
+    kinds.length > 0 ||
+    keywords.length > 0 ||
+    sort !== "name" ||
+    dir !== NATURAL[sort] ||
+    showDeprecated;
+  useEffect(() => {
+    if (scale && asked) ensureRows();
+  }, [scale, asked]);
 
   /**
    * What the current query scored against every package, or `null` when
@@ -1070,7 +1249,7 @@ export default function Catalog({
   // identity is stable exactly when the answer is.
   const matching = useMemo(
     () =>
-      packages.filter((p) => {
+      pool.filter((p) => {
         if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
         if (!keywords.every((kw) => p.keywords?.includes(kw))) return false;
         if (!q) return true;
@@ -1092,10 +1271,10 @@ export default function Catalog({
           (p.keywords ?? []).join(" "),
         ].some((field) => field.toLowerCase().includes(q));
       }),
-    [packages, kinds, keywords, q, scores],
+    [pool, kinds, keywords, q, scores],
   );
   const showWeak = weakFor === q;
-  const [shown, weaker] = useMemo(() => {
+  const [filtered, filteredWeak] = useMemo(() => {
     // `.filter()` already returns a fresh array, so sorting in place here
     // mutates nothing the memo above holds — except in the `showDeprecated`
     // branch, where `matching` IS that array. Copy before sorting.
@@ -1124,6 +1303,26 @@ export default function Catalog({
     return [list, weak] as const;
   }, [matching, showDeprecated, showWeak, sort, dir, scores, cutoff]);
 
+  // The window is all the page holds. `partial` while the rest has not
+  // arrived, and `awaiting` once something has asked for it: the filters and
+  // the sort are held back until the rows are in, so the cards stay as
+  // rendered rather than being filtered or reordered as if the window were
+  // the catalog.
+  const searchable = typeof searchDigest === "string";
+  // The rest never came, or the build published none: the window is all there
+  // is to search, and the page says so rather than counting a catalog it
+  // cannot search. With no file the notice needs no interaction to be true,
+  // so it is up from mount whenever the window is not the whole catalog.
+  const degraded = scale && rows === null && (load === "failed" || (!searchable && asked));
+  const unsearchable = scale && !searchable && (total ?? packages.length) > packages.length;
+  const partial = scale && rows === null && !degraded;
+  const awaiting = partial && searchable && (load === "loading" || asked);
+  const shown = awaiting ? packages : filtered;
+  const weaker = awaiting ? 0 : filteredWeak;
+  // What the count calls the catalog: all of it, though only a window is built.
+  const size = partial
+    ? (total ?? packages.length) - (showDeprecated ? 0 : (flags?.deprecated ?? 0))
+    : counted.length;
 
   /**
    * How many of `shown` are actually built.
@@ -1147,15 +1346,52 @@ export default function Catalog({
    * and the card grid is three or four across at 19rem minimum.
    */
   const [limit, setLimit] = useState(WINDOW);
-  // A new result set starts a new window — otherwise narrowing to 3 matches
-  // and clearing the filter again would leave the whole catalog built.
-  // `shown` is memoized, so this identity changes exactly when the answer does.
-  const shownRef = useRef(shown);
-  if (shownRef.current !== shown) {
-    shownRef.current = shown;
+  // A new query starts a new window — otherwise narrowing to 3 matches and
+  // clearing the filter again would leave the whole catalog built. Keyed on
+  // the query, not on `shown`: the same answer rebuilt (the stats landing)
+  // must not collapse a reader who has scrolled past the first slice.
+  const queryKey = JSON.stringify([q, kinds, keywords, sort, dir, showDeprecated, showWeak]);
+  const queryRef = useRef(queryKey);
+  if (queryRef.current !== queryKey) {
+    queryRef.current = queryKey;
     if (limit !== WINDOW) setLimit(WINDOW);
   }
   const visible = limit >= shown.length ? shown : shown.slice(0, limit);
+
+  /**
+   * Scale mode: the stats blob, fetched once, and only when a figure from it
+   * could be seen or ordered by — a rating or downloads sort the index can
+   * draw, or a row from the search file on screen (the rendered cards already
+   * carry theirs). An index with no badge flag never asks.
+   *
+   * A failure leaves the figures out and the sort ordering the unrated last;
+   * like the search file it is not retried.
+   */
+  const statsLoad = useRef<Promise<void> | null>(null);
+  const ensureStats = () => {
+    if (typeof statsDigest !== "string") return;
+    const digest = statsDigest;
+    statsLoad.current ??= (async () => {
+      try {
+        const { loadDigest } = await digestfetch();
+        setStats(
+          await loadDigest("f", digest, { cap: STATS_CAP, decode: decodeStats, attr: "stats" }),
+        );
+      } catch (err) {
+        console.error("catalog: stats unavailable, showing no figures from them", err);
+      }
+    })();
+  };
+  const rendered = useMemo(() => new Set(packages.map((p) => p.ref)), [packages]);
+  const ranked =
+    (sort === "rating" && flags?.hasRatings === true) ||
+    (sort === "downloads" && flags?.hasDownloads === true);
+  const figured =
+    (flags?.hasRatings === true || flags?.hasDownloads === true) &&
+    visible.some((p) => !rendered.has(p.ref));
+  useEffect(() => {
+    if (ranked || figured) ensureStats();
+  }, [ranked, figured]);
 
   /**
    * Grow the window when the sentinel below the list is reached.
@@ -1167,20 +1403,33 @@ export default function Catalog({
    * keeps growing the window a slice per frame rather than stalling.
    */
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // Past the window there is either more of `shown` to build, or more of the
+  // catalog to fetch.
+  const more =
+    visible.length < shown.length || (partial && searchable && size > shown.length);
   useEffect(() => {
     const el = sentinelRef.current;
     // Guarded like the rail's observer: the test renderer's DOM has neither.
     if (!el || typeof IntersectionObserver === "undefined") return;
-    const io = new IntersectionObserver(
+    const grow = new IntersectionObserver(
       (entries) => {
-        if (!entries.some((e) => e.isIntersecting)) return;
-        setLimit((l) => (l >= shown.length ? l : l + WINDOW));
+        if (entries.some((e) => e.isIntersecting)) setLimit((l) => (l >= shown.length ? l : l + WINDOW));
       },
       { rootMargin: "150% 0px" },
     );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [shown.length]);
+    // No margin: inside the wide one the sentinel is already "reached" at
+    // mount in a list view or a tall viewport, and that would fetch the
+    // search file for a reader who has not scrolled or asked for anything.
+    const reach = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) ensureRows();
+    });
+    grow.observe(el);
+    reach.observe(el);
+    return () => {
+      grow.disconnect();
+      reach.disconnect();
+    };
+  }, [shown.length, more]);
 
   /**
    * The keyword rail, over what is on screen rather than over the catalog.
@@ -1229,23 +1478,29 @@ export default function Catalog({
   // reorder counts as a change — the FLIP effect exists to animate exactly
   // that. NUL-joined because a keyword may contain anything but that.
   railSignature.current = visibleKeywords.map((k) => k.keyword).join("\u0000");
-  const menuKeywords = keywordFrequency(shown).filter(
+  const frequency = useMemo(() => keywordFrequency(shown), [shown]);
+  const menuKeywords = frequency.filter(
     (k) =>
       clippedKeywords.includes(k.keyword) ||
       !visibleKeywords.some((v) => v.keyword === k.keyword),
   );
   // Plain substring, not a fuzzy match: this searches a list the reader is
-  // looking at, and every entry in it is one short known word.
-  const menuShown = menuKeywords.filter((k) =>
-    k.keyword.toLowerCase().includes(keywordFilter.trim().toLowerCase()),
-  );
+  // looking at, and every entry in it is one short known word. Only while the
+  // menu is open: closed, it would be one hidden button per catalog keyword.
+  const menuShown = kwMenuOpen
+    ? menuKeywords.filter((k) => k.keyword.toLowerCase().includes(keywordFilter.trim().toLowerCase()))
+    : [];
 
   // A catalog with nothing deprecated gets no toggle — a control that can
   // only ever be a no-op is worse than its absence. An index that publishes
   // no ratings gets no rating chip for the same reason.
-  const hasDeprecated = packages.some((p) => p.deprecated);
-  const hasRatings = packages.some((p) => p.rating);
-  const hasDownloads = packages.some((p) => p.downloads);
+  const hasDeprecated = flags
+    ? flags.hasDeprecated
+    : packages.some((p) => p.deprecated);
+  const hasRatings = flags ? flags.hasRatings : packages.some((p) => p.rating);
+  const hasDownloads = flags
+    ? flags.hasDownloads
+    : packages.some((p) => p.downloads);
   // The sort fields on offer — a stat nobody publishes is not a choice.
   const sortFields: Sort[] = [
     "name",
@@ -1563,7 +1818,7 @@ export default function Catalog({
                       <small>{count}</small>
                     </button>
                   ))}
-                  {menuShown.length === 0 && (
+                  {kwMenuOpen && menuShown.length === 0 && (
                     <p class="kw-menu-empty">No keyword matches.</p>
                   )}
                 </div>
@@ -1638,9 +1893,11 @@ export default function Catalog({
               packages" as the filters change; putting it on the grid would
               read the whole result list out on every keystroke. */}
           <p class="result-count" role="status" aria-atomic="true">
-            {shown.length === counted.length
-              ? `${counted.length} packages`
-              : `${shown.length} of ${counted.length} packages`}
+            {awaiting
+              ? `Loading ${size} packages…`
+              : shown.length === size
+                ? `${size} packages`
+                : `${shown.length} of ${size} packages`}
             {/* Says why the order ignores the sort control while searching. */}
             {scores && shown.length > 1 && ", best match first"}
           </p>
@@ -1735,6 +1992,14 @@ export default function Catalog({
         </div>
       </div>
 
+      {(degraded || unsearchable) && (
+        <p class="empty" data-slot="catalog-notice">
+          Search covers only the {packages.length} packages on this page.{" "}
+          <a href={withBase("/browse/1/")}>
+            Browse all {total ?? packages.length} packages
+          </a>
+        </p>
+      )}
       {shown.length === 0 ? (
         <p class="empty">No packages match.</p>
       ) : view === "table" ? (
@@ -1743,12 +2008,14 @@ export default function Catalog({
           hasRatings={hasRatings}
           hasDownloads={hasDownloads}
           href={href}
+          busy={awaiting}
           onKeyDown={onCardKeyDown}
           rootRef={gridRef}
         />
       ) : (
         <ul
           class="grid"
+          aria-busy={awaiting || undefined}
           ref={(el) => {
             gridRef.current = el;
           }}
@@ -1775,9 +2042,7 @@ export default function Catalog({
           table's grid where it would take a row of tracks. `aria-hidden`
           because it is a scroll position, not content — the count above the
           list is what tells a screen reader how many packages there are. */}
-      {visible.length < shown.length && (
-        <div ref={sentinelRef} aria-hidden="true" />
-      )}
+      {more && <div ref={sentinelRef} aria-hidden="true" />}
     </section>
   );
 }
