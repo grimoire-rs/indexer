@@ -16,8 +16,20 @@ the per-package pages, the search, the install commands.
 ## Why enrichment is a separate step
 
 Everything a reader actually looks at lives in the registry. Fetching it is
-`grim-indexer enrich`, and it is deliberately the only command that goes
-online and the only one that needs `grim` on `PATH`.
+`grim-indexer enrich`. It is deliberately the only command that reads the
+registry and the only one that needs `grim` on `PATH`.
+
+The build chain has two online steps, and both run ahead of `build`:
+
+- **`enrich`** calls the registry through `grim`. It also reads the root the
+  last deploy published and the state that root names, so a run starts from what
+  the last deploy learned.
+- **`state-key`** reads that root and the plane index, and prints the cache key
+  of the state, so CI can restore the cache before `enrich` runs.
+
+`ratings`, `downloads` and `stats-seed` go online too, to a forge, to
+Artifactory or to the published stats. They feed the stats sidecar, not the
+enrich state.
 
 The consequence is worth stating plainly: **an index that never runs `enrich`
 renders a catalogue of names**, with *No README available* on every page. The
@@ -26,23 +38,29 @@ block if you genuinely want a pointers-only site.
 
 Splitting it this way buys three things:
 
-- **A build is offline and deterministic.** Given the same `index/**` and
-  `enrich/**`, it renders the same site — which is what makes the CI drift
-  check meaningful.
+- **A build is offline and deterministic.** Given the same `index/**`,
+  `enrich/**` and hand-off, it renders the same site. That is what makes the CI
+  drift check meaningful. `build` and `dev` make no request at all.
 - **A contribution PR is reviewable.** It adds one small JSON file. A PR that
   also carried a rendered README would be a PR carrying arbitrary content from
   a registry the reviewer does not control.
 - **A registry change does not rewrite history.** The pointer is the committed
   fact; the prose is a cache, refreshed on a schedule.
 
-## The checkpoint
+## The hand-off
 
-`enrich` writes `enrich.json` into the output, and the next run's
-`enrich --seed` reads it back from the deployed site before doing anything
-else. A pipeline that commits nothing therefore still only downloads what
-actually moved, rather than re-fetching every package every night.
+`enrich` keeps its state in `.grim-index-state/` and hands the finished enrich
+plane to the offline `build`, which publishes it. The hand-off is the only thing
+`build` reads from `enrich`. It holds the plane, the generation for the root, the
+counters for the log line, and the files of the previous root to keep. With
+none, `build` warns and publishes without a plane.
 
-That file is this package's own bookkeeping. It is published because that is
+The next `enrich` reads the published root before it does anything else, and
+restores from the state it names. A pipeline that commits nothing therefore
+still downloads only what moved. `state-key` lets CI restore the matching cache
+before `enrich` runs.
+
+That state is this package's own bookkeeping. It is published because that is
 the cheapest place to put it, not because anything else should read it.
 
 ## Ratings

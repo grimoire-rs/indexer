@@ -146,7 +146,7 @@ A package that is not installed fails the build before anything is staged.
 
 | Tier | Covers | What you can rely on |
 |---|---|---|
-| **Contract** | `theme/pages/**` → routes · the `@grim/*` specifier · `Base.astro`'s `title`/`description`/`image` props and its default slot · [`data-slot` names](data-slots.md) · [token names](theme-tokens.md) | Semver. A break is a major |
+| **Contract** | `theme/pages/**` → routes, except under `c/` and `browse/` ([amended](#amendment-c-and-browse-are-reserved)) · the `@grim/*` specifier · `Base.astro`'s `title`/`description`/`image` props and its default slot · [`data-slot` names](data-slots.md) · [token names](theme-tokens.md) | Semver. A break is a major |
 | **Unstable** | Component file paths and their props — `SiteHeader`, `SiteFooter`, `CommandBar`, `PackageCard`, `PackageRow`, and the rest | May move in a minor. Pin the version and read the changelog |
 
 The changelog is `CHANGELOG.md`, and it ships inside the npm package — so the
@@ -155,6 +155,42 @@ copy that matches the version you are on is
 no network needed. It is also at the root of
 [the repository](https://github.com/grimoire-rs/indexer).
 | **Yours** | Anything else you overwrite: `Catalog.tsx` internals, the layout's style block, the shipped page templates | Nothing. You own that file across releases |
+
+### Amendment: `c/` and `browse/` are reserved {#amendment-c-and-browse-are-reserved}
+
+The Contract tier promised that a file under `theme/pages/` becomes a route at
+its own path. That promise now has two exceptions, in every `sync.layout`,
+`flat` included. No route may begin with `c/` or `browse/`. Neither may a file
+in your `public/`. Both directories hold generated content. The root, its blobs
+and the enrich plane live under `c/`. An operator file in the same place would
+overwrite one of them or be overwritten.
+
+This amends the tier rather than waiting for a major release, because the break
+is narrow and loud. A site with no file there builds as before. A site with one
+fails with exit 65, and the message names the file and the move:
+
+```
+public/c/notes.txt: c/ and browse/ are reserved for the catalog in every layout — move this file to another directory
+```
+
+The fix is to move the file to another directory. The scan, its exact rules and
+the case-insensitive match are in
+[Output layout](output-layout.md#c-and-browse-are-reserved). The reservation
+ships in the release that adds the `sync` block, which the changelog lists under
+Added.
+
+### Record fields arrive bounded
+
+Components read each package through `@grim/lib/data`, and that record comes from
+`all.json`. When the build writes `all.json`, it now cuts every text field to a
+per-field bound and removes control and invisible code points. A `description`
+is cut at 16 KiB, a `summary` at 1 KiB, and `keywords` at 32 items. The full
+table is in [Output layout](output-layout.md#bounded-record-fields).
+
+A bound changes a value and never a shape: no key is dropped or reordered, and a
+field of the wrong shape becomes `null`. A component that assumed a field could
+be unbounded should expect the cut. No Contract-tier surface moves: the
+`data-slot` names, the token names and `Base.astro`'s props are unchanged.
 
 The middle tier is deliberate rather than an oversight. The finest-grained
 part of a customization API is the part most likely to churn, and freezing a
@@ -219,9 +255,9 @@ or edit one. It does execute at build time in your own CI, like the rest of
 your repository — see
 [Security and trust](../explanation/security-and-trust-model.md).
 
-Pages built from an overlay run under the site's Content-Security-Policy: a
+Pages built from an overlay run under the site's Content-Security-Policy. A
 `style=""` attribute or an `onclick=""` handler in a component you replace is
-blocked, and README images load over `https` only.
+blocked. README images load over `https` only.
 
 The build fails when it emits an SVG under `_astro/`, since an SVG served
 there can run script. To ship an SVG from a theme, put it in `public/` and
