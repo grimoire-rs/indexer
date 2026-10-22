@@ -42,167 +42,174 @@ const builtIndex = derivedIndex(config);
     <meta property="og:image" content={withBase(image)} />
     <meta name="twitter:card" content="summary" />
     {builtIndex && <meta name="grim-index" content={builtIndex} />}
+    {/*
+      Head script. Emitted verbatim on every page, comments included, so the
+      reasoning lives here and the script below carries none (IX-R17/IX-R46:
+      `/p/` pages are byte-capped and this is chrome no package can shrink).
+      Keep comments out of both blocks; indentation is flattened for the same
+      reason.
+
+      `pref`: reading `localStorage` *throws* in a browser set to block site
+      data — it does not return null — and everything below, the command-bar
+      helpers included, lives in this one block. One guarded reader, so a
+      blocked store costs a preference rather than the page.
+
+      Theme: before first paint, the stored preference wins, else the system
+      scheme.
+
+      Density: before first paint too, and for the same reason as the theme —
+      it moves the space scale, so applying it after hydration would relayout
+      the whole page in front of the reader. Absent attribute is the
+      comfortable default, so only the non-default value is ever written, the
+      same shape every other stored preference uses.
+
+      `dataset.query`: also before first paint. A deep link (a keyword chip on
+      a package page) or a stored preference means the catalog the server
+      rendered — every package, empty search box, name order, deprecated
+      hidden, as cards — is the wrong one. Flag it so CSS holds the catalog
+      back rather than showing the full list and rearranging it a moment
+      later. The island drops the flag once it has applied the view — which is
+      the render after hydration, never the hydrating one itself; the timeout
+      is the failsafe for an island that never hydrates, where a flash beats a
+      blank page.
+
+      `__grimPick`: selecting one choice in a command bar. Defined in the
+      head because it has two callers that cannot share a script: the click
+      handler at the end of the document, and the host-platform preselect that
+      has to run while the hero is still being parsed (see `index.astro`). One
+      definition, so the two cannot drift. Inside it: one element is both the
+      shown command and what gets copied, so they cannot drift apart; the
+      toast's name follows the choice (the bar's noun is fixed, "install
+      command", the choice supplies the adjective); a menu item is a
+      `menuitemradio` while a card is a native radio input that carries its
+      own checked state, and they are matched by name, not identity, because a
+      bar can offer one choice twice (hero cards and the field's menu) and
+      picking either must check both; the trigger carries every glyph and
+      shows one, since swapping which is hidden beats rewriting an SVG path;
+      the action segment follows the choice where it has one to follow (the
+      registry bar's VS Code link carries the scope the command names, so
+      picking Global cannot leave the button writing project config), and a
+      choice with no href leaves the link alone rather than blanking it.
+
+      `__grimDeriveIndex`: an index with no `registry.index` hands out the
+      address the visitor loaded it from, not the build's `site`; a mirror or
+      private host would otherwise copy a command that adds a different index.
+      The extension refuses a non-https index (see `addRegistryUrl`), so a link
+      to one would open VS Code onto an error and is removed instead.
+
+      `PICKS`, `storedPicks`, `__grimRemember`: picks the visitor made, newest
+      first, by choice name. Harness, platform and scope names never overlap,
+      so one list serves every bar: each takes the newest name it offers.
+
+      `__grimPreselect`: a bar's starting choice is the visitor's stored pick,
+      else (for a `detect` bar) the host platform, else the configured first
+      choice.
+
+      `__grimHostOs`: the platform a bar should start on, or null for one this
+      visitor's host is not among. Order matters: a macOS UA string contains
+      "Mac" but a Windows one contains "Win", and ChromeOS reports "CrOS" while
+      running the same shell installer as Linux.
+    */}
     <script is:inline>
-      // Reading `localStorage` *throws* in a browser set to block site data —
-      // it does not return null — and everything below this point, the
-      // command-bar helpers included, lives in the same script block. One
-      // guarded reader, so a blocked store costs a preference rather than
-      // the page.
-      const pref = (key) => {
-        try {
-          return localStorage.getItem(key);
-        } catch {
-          return null;
-        }
-      };
-
-      // Before first paint: stored preference wins, else system scheme.
-      document.documentElement.dataset.theme =
-        pref("theme") ??
-        (matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light");
-
-      // Before first paint too, and for the same reason the theme is: this
-      // one moves the space scale, so applying it after hydration would
-      // relayout the whole page in front of the reader. Absent attribute is
-      // the comfortable default, so only the non-default value is ever
-      // written — the same shape every other stored preference uses.
-      if (pref("grim.catalog.density") === "compact") {
-        document.documentElement.dataset.density = "compact";
-      }
-
-      // Also before first paint: a deep link (a keyword chip on a package
-      // page) or a stored preference means the catalog the server rendered —
-      // every package, empty search box, name order, deprecated hidden, as
-      // cards — is the wrong one. Flag it so CSS holds the catalog back
-      // rather than showing the full list and rearranging it a moment
-      // later. The island drops the flag once it has applied the view —
-      // which is the render after hydration, never the hydrating one
-      // itself; the timeout is the failsafe for an island that never
-      // hydrates, where a flash beats a blank page.
-      const view = new URLSearchParams(location.search);
-      const arranged = ["sort", "dir", "deprecated", "view"].some((k) =>
-        pref("grim.catalog." + k),
-      );
-      if (view.get("q") || view.get("kind") || view.get("kw") || arranged) {
-        document.documentElement.dataset.query = "";
-        setTimeout(() => delete document.documentElement.dataset.query, 3000);
-      }
-
-      // Selecting one choice in a command bar. Defined here, in the head,
-      // because it has two callers that cannot share a script: the click
-      // handler at the end of the document, and the host-platform preselect
-      // that has to run while the hero is still being parsed (see
-      // `index.astro`). One definition, so the two cannot drift.
-      window.__grimPick = (bar, pick) => {
-        const command = pick.dataset.osPick;
-        const field = bar.querySelector("[data-copy]");
-        const code = field?.querySelector("code");
-        // One element is both the shown command and what gets copied, so
-        // they cannot drift apart.
-        if (code) code.textContent = command;
-        if (field) field.dataset.copy = command;
-        // Keep the toast's name in step with the choice: the bar's noun is
-        // fixed ("install command"), the choice supplies the adjective.
-        if (field && bar.dataset.osNoun) {
-          field.dataset.copyName = `${pick.dataset.osName} ${bar.dataset.osNoun}`;
-        }
-        // A menu item is a `menuitemradio`; a card is a native radio input,
-        // which carries its own checked state. Matched by name, not identity:
-        // a bar can offer one choice twice (hero cards and the field's menu),
-        // and picking either must check both.
-        for (const other of bar.querySelectorAll("[data-os-pick]")) {
-          const on = other === pick || (!!pick.dataset.osName && other.dataset.osName === pick.dataset.osName);
-          if (other.type === "radio") other.checked = on;
-          else other.setAttribute("aria-checked", on ? "true" : "false");
-        }
-        // The trigger carries every glyph and shows one; swapping which is
-        // hidden beats rewriting an SVG path.
-        for (const glyph of bar.querySelectorAll("[data-os-glyph]")) {
-          glyph.hidden = glyph.dataset.osGlyph !== pick.dataset.osName;
-        }
-        // The action segment follows the choice where it has one to follow:
-        // the registry bar's VS Code link carries the scope the command names,
-        // so picking Global cannot leave the button writing project config.
-        // A choice with no href leaves the link alone rather than blanking it.
-        const link = bar.querySelector("[data-os-link]");
-        if (link && pick.dataset.osHref) link.href = pick.dataset.osHref;
-      };
-
-      // An index with no `registry.index` hands out the address the visitor
-      // loaded it from, not the build's `site`: a mirror or private host
-      // would otherwise copy a command that adds a different index.
-      window.__grimDeriveIndex = () => {
-        const meta = document.querySelector('meta[name="grim-index"]');
-        if (!meta || !/^https?:$/.test(location.protocol)) return;
-        const built = meta.content;
-        const here = (location.origin + new URL(built).pathname).replace(/\/+$/, "");
-        if (here === built) return;
-        const swap = (s) => (s?.endsWith(" --index " + built) ? s.slice(0, -built.length) + here : s);
-        for (const el of document.querySelectorAll("[data-os-pick]")) el.dataset.osPick = swap(el.dataset.osPick);
-        for (const el of document.querySelectorAll("[data-copy]")) {
-          el.dataset.copy = swap(el.dataset.copy);
-          const code = el.querySelector("code");
-          if (code) code.textContent = swap(code.textContent);
-        }
-        const deepLink = (href) => {
-          const url = new URL(href);
-          if (url.searchParams.get("index") !== new URL(built).href) return href;
-          url.searchParams.set("index", new URL(here).href);
-          return url.href;
-        };
-        for (const el of document.querySelectorAll("[data-os-href]")) el.dataset.osHref = deepLink(el.dataset.osHref);
-        for (const link of document.querySelectorAll("a[data-os-link]")) {
-          // The extension refuses a non-https index (see `addRegistryUrl`), so
-          // a link to one would open VS Code onto an error.
-          if (location.protocol !== "https:") link.remove();
-          else link.href = deepLink(link.href);
-        }
-      };
-
-      // Picks the visitor made, newest first, by choice name. Harness,
-      // platform and scope names never overlap, so one list serves every bar:
-      // each takes the newest name it offers.
-      const PICKS = "grim.picks";
-      const storedPicks = () => {
-        try {
-          const list = JSON.parse(pref(PICKS) ?? "[]");
-          return Array.isArray(list) ? list : [];
-        } catch {
-          return [];
-        }
-      };
-      window.__grimRemember = (name) => {
-        if (!name) return;
-        const list = [name, ...storedPicks().filter((n) => n !== name)].slice(0, 8);
-        try {
-          localStorage.setItem(PICKS, JSON.stringify(list));
-        } catch {}
-      };
-
-      // A bar's starting choice: the visitor's stored pick, else (for a
-      // `detect` bar) the host platform, else the configured first choice.
-      window.__grimPreselect = (bar) => {
-        const picks = [...bar.querySelectorAll("[data-os-pick]")];
-        const byName = (name) => picks.find((p) => p.dataset.osName === name);
-        const match =
-          storedPicks().map(byName).find(Boolean) ??
-          ("osDetect" in bar.dataset ? byName(window.__grimHostOs()) : undefined);
-        if (match) window.__grimPick(bar, match);
-      };
-
-      // The platform a bar should start on, or null for one this visitor's
-      // host is not among. Order matters: a macOS UA string contains "Mac"
-      // but a Windows one contains "Win", and ChromeOS reports "CrOS" while
-      // running the same shell installer as Linux.
-      window.__grimHostOs = () => {
-        const ua = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent;
-        if (/mac|iphone|ipad|darwin/i.test(ua)) return "macOS";
-        if (/win/i.test(ua)) return "Windows";
-        if (/linux|android|cros|x11/i.test(ua)) return "Linux";
-        return null;
-      };
+const pref = (key) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+document.documentElement.dataset.theme =
+  pref("theme") ??
+  (matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light");
+if (pref("grim.catalog.density") === "compact") {
+  document.documentElement.dataset.density = "compact";
+}
+const view = new URLSearchParams(location.search);
+const arranged = ["sort", "dir", "deprecated", "view"].some((k) =>
+  pref("grim.catalog." + k),
+);
+if (view.get("q") || view.get("kind") || view.get("kw") || arranged) {
+  document.documentElement.dataset.query = "";
+  setTimeout(() => delete document.documentElement.dataset.query, 3000);
+}
+window.__grimPick = (bar, pick) => {
+  const command = pick.dataset.osPick;
+  const field = bar.querySelector("[data-copy]");
+  const code = field?.querySelector("code");
+  if (code) code.textContent = command;
+  if (field) field.dataset.copy = command;
+  if (field && bar.dataset.osNoun) {
+    field.dataset.copyName = `${pick.dataset.osName} ${bar.dataset.osNoun}`;
+  }
+  for (const other of bar.querySelectorAll("[data-os-pick]")) {
+    const on = other === pick || (!!pick.dataset.osName && other.dataset.osName === pick.dataset.osName);
+    if (other.type === "radio") other.checked = on;
+    else other.setAttribute("aria-checked", on ? "true" : "false");
+  }
+  for (const glyph of bar.querySelectorAll("[data-os-glyph]")) {
+    glyph.hidden = glyph.dataset.osGlyph !== pick.dataset.osName;
+  }
+  const link = bar.querySelector("[data-os-link]");
+  if (link && pick.dataset.osHref) link.href = pick.dataset.osHref;
+};
+window.__grimDeriveIndex = () => {
+  const meta = document.querySelector('meta[name="grim-index"]');
+  if (!meta || !/^https?:$/.test(location.protocol)) return;
+  const built = meta.content;
+  const here = (location.origin + new URL(built).pathname).replace(/\/+$/, "");
+  if (here === built) return;
+  const swap = (s) => (s?.endsWith(" --index " + built) ? s.slice(0, -built.length) + here : s);
+  for (const el of document.querySelectorAll("[data-os-pick]")) el.dataset.osPick = swap(el.dataset.osPick);
+  for (const el of document.querySelectorAll("[data-copy]")) {
+    el.dataset.copy = swap(el.dataset.copy);
+    const code = el.querySelector("code");
+    if (code) code.textContent = swap(code.textContent);
+  }
+  const deepLink = (href) => {
+    const url = new URL(href);
+    if (url.searchParams.get("index") !== new URL(built).href) return href;
+    url.searchParams.set("index", new URL(here).href);
+    return url.href;
+  };
+  for (const el of document.querySelectorAll("[data-os-href]")) el.dataset.osHref = deepLink(el.dataset.osHref);
+  for (const link of document.querySelectorAll("a[data-os-link]")) {
+    if (location.protocol !== "https:") link.remove();
+    else link.href = deepLink(link.href);
+  }
+};
+const PICKS = "grim.picks";
+const storedPicks = () => {
+  try {
+    const list = JSON.parse(pref(PICKS) ?? "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+};
+window.__grimRemember = (name) => {
+  if (!name) return;
+  const list = [name, ...storedPicks().filter((n) => n !== name)].slice(0, 8);
+  try {
+    localStorage.setItem(PICKS, JSON.stringify(list));
+  } catch {}
+};
+window.__grimPreselect = (bar) => {
+  const picks = [...bar.querySelectorAll("[data-os-pick]")];
+  const byName = (name) => picks.find((p) => p.dataset.osName === name);
+  const match =
+    storedPicks().map(byName).find(Boolean) ??
+    ("osDetect" in bar.dataset ? byName(window.__grimHostOs()) : undefined);
+  if (match) window.__grimPick(bar, match);
+};
+window.__grimHostOs = () => {
+  const ua = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent;
+  if (/mac|iphone|ipad|darwin/i.test(ua)) return "macOS";
+  if (/win/i.test(ua)) return "Windows";
+  if (/linux|android|cros|x11/i.test(ua)) return "Linux";
+  return null;
+};
     </script>
   </head>
   <body>
@@ -235,198 +242,211 @@ const builtIndex = derivedIndex(config);
       <code class="toast-value"></code>
     </div>
 
-    <script is:inline>
-      // Optional: an index repo that replaces `SiteHeader.astro` is free to
-      // ship a header with no toggle, and this block runs on every page
-      // regardless. Unguarded, that one dereference threw and took every
-      // script below it with it — copy buttons, picker wiring, toast.
-      document.getElementById("theme-toggle")?.addEventListener("click", () => {
-        const root = document.documentElement;
-        const next = root.dataset.theme === "dark" ? "light" : "dark";
-        root.dataset.theme = next;
-        localStorage.setItem("theme", next);
-      });
+    {/*
+      Body script. A bundled module (`_astro/*.js`, minified, fetched once and
+      cached), not an inline block: it is the largest piece of chrome on a
+      `/p/` page and nothing in it has to run before first paint. It runs
+      after parsing, before `DOMContentLoaded`, which is the moment the
+      end-of-body block it replaces ran. Everything that must precede first
+      paint, and every `window.__grim*` global an inline script on a page
+      may call while it is still being parsed, stays in the head script.
 
-      // Static-page logo slots. The catalog island runs the same state
-      // machine in Preact, because it owns those nodes; this drives the ones
-      // Astro rendered. The placeholder is already in the markup, so all
-      // there is to do is move the slot from `loading` to `ready`/`broken`.
-      //
-      // The initial `complete` sweep is not redundant with the listeners: an
-      // image starts loading while the document is parsed, so a fast result
-      // can land before this script runs and fire its event at nobody.
-      // `complete` says the browser finished, not how it went — `decode()`
-      // separates them, and unlike `naturalWidth === 0` it does not
-      // misreport an SVG that has no intrinsic size.
-      // `[data-static]` is load-bearing, not decoration: the catalog island
-      // renders `.logo-slot` too, and Preact owns `data-state` there. Writing
-      // it from here made the slot flip to the script's answer, then back to
-      // Preact's `loading` on hydration, then forward again — the icon fading
-      // in and straight back out.
-      for (const slot of document.querySelectorAll(".logo-slot[data-static]")) {
-        const img = slot.querySelector("img");
-        if (!img) continue;
-        const settle = (state) => slot.setAttribute("data-state", state);
-        img.addEventListener("load", () => settle("ready"));
-        img.addEventListener("error", () => settle("broken"));
-        if (img.complete) {
-          img.decode().then(
-            () => settle("ready"),
-            () => settle("broken"),
-          );
-        }
-      }
+      Theme toggle is optional: an index repo that replaces `SiteHeader.astro`
+      is free to ship a header with no toggle, and this block runs on every
+      page regardless. Unguarded, that one dereference threw and took every
+      script below it with it — copy buttons, picker wiring, toast.
 
-      // Command-bar pickers. `__grimPick` (head) does the swap; this only
-      // wires the ways a choice gets made and the menu closed. The copy
-      // handler reads `data-copy` at click time, so it needs no part in this.
-      for (const bar of document.querySelectorAll("[data-os-switch]")) {
-        const menu = bar.querySelector(".os-menu");
-        const summary = menu?.querySelector("summary");
-        for (const pick of bar.querySelectorAll("[data-os-pick]")) {
-          pick.addEventListener("click", () => {
-            window.__grimPick(bar, pick);
-            window.__grimRemember(pick.dataset.osName);
-            // A card is a radio: closing the menu and pulling focus to its
-            // trigger would break arrow-key travel along the cards.
-            if (pick.type === "radio") return;
-            if (menu) menu.open = false;
-            summary?.focus();
-          });
-        }
-        // `<details>` opens and closes itself but knows nothing about the
-        // two ways every other menu closes.
-        if (menu) {
-          document.addEventListener("click", (event) => {
-            if (!menu.contains(event.target)) menu.open = false;
-          });
-          menu.addEventListener("keydown", (event) => {
-            if (event.key !== "Escape") return;
-            menu.open = false;
-            summary?.focus();
-          });
-        }
-      }
+      Static-page logo slots: the catalog island runs the same state machine
+      in Preact, because it owns those nodes; this drives the ones Astro
+      rendered. The placeholder is already in the markup, so all there is to
+      do is move the slot from `loading` to `ready`/`broken`. The initial
+      `complete` sweep is not redundant with the listeners: an image starts
+      loading while the document is parsed, so a fast result can land before
+      this script runs and fire its event at nobody. `complete` says the
+      browser finished, not how it went — `decode()` separates them, and
+      unlike `naturalWidth === 0` it does not misreport an SVG that has no
+      intrinsic size. `[data-static]` is load-bearing, not decoration: the
+      catalog island renders `.logo-slot` too, and Preact owns `data-state`
+      there. Writing it from here made the slot flip to the script's answer,
+      then back to Preact's `loading` on hydration, then forward again — the
+      icon fading in and straight back out.
 
-      // Restore the stored pick, or the host platform, in every bar. Here so
-      // a page under `theme/pages/` gets it too. The landing page also runs
-      // this beside its hero, since this one sits past the whole catalog and
-      // the browser can paint the wrong command first; `__grimPick` is
-      // idempotent, so the duplicate costs nothing.
-      window.__grimDeriveIndex();
-      for (const bar of document.querySelectorAll("[data-os-switch]")) {
-        window.__grimPreselect(bar);
-      }
-      // Back/forward restores a page from bfcache without rerunning scripts,
-      // so a pick made on the page left would never reach this one.
-      window.addEventListener("pageshow", (e) => {
-        if (!e.persisted) return;
-        for (const bar of document.querySelectorAll("[data-os-switch]")) {
-          window.__grimPreselect(bar);
-        }
-      });
+      Command-bar pickers: `__grimPick` (head) does the swap; this only wires
+      the ways a choice gets made and the menu closed. The copy handler reads
+      `data-copy` at click time, so it needs no part in this. A card is a
+      radio: closing the menu and pulling focus to its trigger would break
+      arrow-key travel along the cards. `<details>` opens and closes itself
+      but knows nothing about the two ways every other menu closes (outside
+      click, Escape).
 
-      // One toast for every copy on the page. The in-place check confirms
-      // that *something* was copied; a card has three copy buttons a few
-      // pixels apart, all of which flash the same check, so the toast is
-      // what says WHICH. It carries both readings: a name for what was
-      // copied, and the exact string, because "the install command" is the
-      // useful part when you meant to pick a different platform and the raw
-      // text is the useful part when you are not sure what landed.
-      //
-      // Announcing is left to the per-button status span that already exists
-      // — this element is `aria-hidden`, or every copy would be read twice.
-      // `body >`: a README heading can carry the same id, earlier in the page.
-      const toast = document.querySelector("body > #copy-toast");
-      let toastTimer;
-      function showToast(name, value) {
-        if (!toast) return;
-        toast.querySelector(".toast-name").textContent = name
-          ? `Copied ${name}`
-          : "Copied";
-        toast.querySelector(".toast-value").textContent = value;
-        // Restart the animation even mid-fade: without the reflow a second
-        // copy inside the window leaves the class already set and nothing
-        // moves.
-        toast.classList.remove("show");
-        void toast.offsetWidth;
-        toast.classList.add("show");
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
-      }
-      // Hydrated islands cannot reach this function, so they say so by event.
-      document.addEventListener("grimoire:copied", (event) => {
-        showToast(event.detail.name, event.detail.value);
-      });
+      Preselect: restore the stored pick, or the host platform, in every bar.
+      Here so a page under `theme/pages/` gets it too. The landing page also
+      runs this beside its hero, since this one sits past the whole catalog
+      and the browser can paint the wrong command first; `__grimPick` is
+      idempotent, so the duplicate costs nothing. Back/forward restores a page
+      from bfcache without rerunning scripts, so a pick made on the page left
+      would never reach this one; `pageshow` re-applies it.
 
-      // A copy button on every code block. Injected rather than authored:
-      // the blocks come out of Shiki, inside rendered markdown, so there is
-      // no markup to add one to. `data-copy` is all it takes to join the
-      // handler below — same clipboard path, same flash, same toast.
-      const CLIPBOARD_ICON =
-        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>' +
-        '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+      Toast: one for every copy on the page. The in-place check confirms that
+      *something* was copied; a card has three copy buttons a few pixels
+      apart, all of which flash the same check, so the toast is what says
+      WHICH. It carries both readings: a name for what was copied, and the
+      exact string, because "the install command" is the useful part when you
+      meant to pick a different platform and the raw text is the useful part
+      when you are not sure what landed. Announcing is left to the per-button
+      status span that already exists — the toast is `aria-hidden`, or every
+      copy would be read twice. `body >`: a README heading can carry the same
+      id, earlier in the page. `showToast` restarts the animation even
+      mid-fade: without the reflow a second copy inside the window leaves the
+      class already set and nothing moves. Hydrated islands cannot reach this
+      function, so they say so by the `grimoire:copied` event.
 
-      for (const pre of document.querySelectorAll("pre.astro-code")) {
-        // `CodeBlock.astro` already ships the wrapper and the action slot, so
-        // adopt them where they are there. Wrapping a second time would nest
-        // two positioning contexts and orphan whatever the component put in
-        // the slot.
-        const parent = pre.parentElement;
-        let wrapper = parent?.classList.contains("code-block") ? parent : null;
-        if (!wrapper) {
-          wrapper = document.createElement("div");
-          wrapper.className = "code-block";
-          pre.replaceWith(wrapper);
-          wrapper.append(pre);
-        }
+      Code-block copy buttons: injected rather than authored, since the blocks
+      come out of Shiki, inside rendered markdown, so there is no markup to
+      add one to. `data-copy` is all it takes to join the handler below — same
+      clipboard path, same flash, same toast. `CodeBlock.astro` already ships
+      the wrapper and the action slot, so they are adopted where present;
+      wrapping a second time would nest two positioning contexts and orphan
+      whatever the component put in the slot. `textContent`, not `innerText`:
+      the block is not rendered yet at this point, and `innerText` would
+      collapse its whitespace. A component-rendered block names itself; a
+      markdown one cannot.
 
-        let actions = wrapper.querySelector(".code-actions");
-        if (!actions) {
-          actions = document.createElement("span");
-          actions.className = "code-actions";
-          wrapper.append(actions);
-        }
-
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "code-copy";
-        btn.title = "Copy";
-        btn.setAttribute("aria-label", "Copy this code block");
-        // `textContent`, not `innerText`: the block is not rendered yet at
-        // this point, and `innerText` would collapse its whitespace.
-        btn.dataset.copy = pre.textContent ?? "";
-        // A component-rendered block names itself; a markdown one cannot.
-        btn.dataset.copyName = wrapper.dataset.copyName || "code block";
-        btn.innerHTML = CLIPBOARD_ICON + '<span class="sr-only" role="status"></span>';
-        actions.append(btn);
-      }
-
-      for (const btn of document.querySelectorAll("[data-copy]")) {
-        // The visible label never changes — swapping "copy" for "copied"
-        // resized the button and shifted its neighbours. `.copied` swaps the
-        // icon instead, and the status span carries the same news to a
-        // screen reader without occupying any width.
-        const status = btn.querySelector('[role="status"]');
-        btn.addEventListener("click", () => {
-          const value = btn.dataset.copy ?? "";
-          navigator.clipboard.writeText(value).then(() => {
-            btn.classList.add("copied");
-            if (status) status.textContent = "copied";
-            showToast(btn.dataset.copyName ?? "", value);
-            setTimeout(() => {
-              btn.classList.remove("copied");
-              if (status) status.textContent = "";
-            }, 1500);
-          });
-        });
-      }
+      Copy handler: the visible label never changes — swapping "copy" for
+      "copied" resized the button and shifted its neighbours. `.copied` swaps
+      the icon instead, and the status span carries the same news to a screen
+      reader without occupying any width.
+    */}
+    <script>
+document.getElementById("theme-toggle")?.addEventListener("click", () => {
+  const root = document.documentElement;
+  const next = root.dataset.theme === "dark" ? "light" : "dark";
+  root.dataset.theme = next;
+  localStorage.setItem("theme", next);
+});
+for (const slot of document.querySelectorAll(".logo-slot[data-static]")) {
+  const img = slot.querySelector("img");
+  if (!img) continue;
+  const settle = (state) => slot.setAttribute("data-state", state);
+  img.addEventListener("load", () => settle("ready"));
+  img.addEventListener("error", () => settle("broken"));
+  if (img.complete) {
+    img.decode().then(
+      () => settle("ready"),
+      () => settle("broken"),
+    );
+  }
+}
+for (const bar of document.querySelectorAll("[data-os-switch]")) {
+  const menu = bar.querySelector(".os-menu");
+  const summary = menu?.querySelector("summary");
+  for (const pick of bar.querySelectorAll("[data-os-pick]")) {
+    pick.addEventListener("click", () => {
+      window.__grimPick(bar, pick);
+      window.__grimRemember(pick.dataset.osName);
+      if (pick.type === "radio") return;
+      if (menu) menu.open = false;
+      summary?.focus();
+    });
+  }
+  if (menu) {
+    document.addEventListener("click", (event) => {
+      if (!menu.contains(event.target)) menu.open = false;
+    });
+    menu.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      menu.open = false;
+      summary?.focus();
+    });
+  }
+}
+window.__grimDeriveIndex();
+for (const bar of document.querySelectorAll("[data-os-switch]")) {
+  window.__grimPreselect(bar);
+}
+window.addEventListener("pageshow", (e) => {
+  if (!e.persisted) return;
+  for (const bar of document.querySelectorAll("[data-os-switch]")) {
+    window.__grimPreselect(bar);
+  }
+});
+const toast = document.querySelector("body > #copy-toast");
+let toastTimer;
+function showToast(name, value) {
+  if (!toast) return;
+  toast.querySelector(".toast-name").textContent = name
+    ? `Copied ${name}`
+    : "Copied";
+  toast.querySelector(".toast-value").textContent = value;
+  toast.classList.remove("show");
+  void toast.offsetWidth;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+}
+document.addEventListener("grimoire:copied", (event) => {
+  showToast(event.detail.name, event.detail.value);
+});
+const CLIPBOARD_ICON =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>' +
+  '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+for (const pre of document.querySelectorAll("pre.astro-code")) {
+  const parent = pre.parentElement;
+  let wrapper = parent?.classList.contains("code-block") ? parent : null;
+  if (!wrapper) {
+    wrapper = document.createElement("div");
+    wrapper.className = "code-block";
+    pre.replaceWith(wrapper);
+    wrapper.append(pre);
+  }
+  let actions = wrapper.querySelector(".code-actions");
+  if (!actions) {
+    actions = document.createElement("span");
+    actions.className = "code-actions";
+    wrapper.append(actions);
+  }
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "code-copy";
+  btn.title = "Copy";
+  btn.setAttribute("aria-label", "Copy this code block");
+  btn.dataset.copy = pre.textContent ?? "";
+  btn.dataset.copyName = wrapper.dataset.copyName || "code block";
+  btn.innerHTML = CLIPBOARD_ICON + '<span class="sr-only" role="status"></span>';
+  actions.append(btn);
+}
+for (const btn of document.querySelectorAll("[data-copy]")) {
+  const status = btn.querySelector('[role="status"]');
+  btn.addEventListener("click", () => {
+    const value = btn.dataset.copy ?? "";
+    navigator.clipboard.writeText(value).then(() => {
+      btn.classList.add("copied");
+      if (status) status.textContent = "copied";
+      showToast(btn.dataset.copyName ?? "", value);
+      setTimeout(() => {
+        btn.classList.remove("copied");
+        if (status) status.textContent = "";
+      }, 1500);
+    });
+  });
+}
     </script>
 
     <style is:global>
       @layer grimoire {
+        /* What every lucide icon repeats as attributes. The page cap drops
+           those attributes from an over-cap page (see `slimIcons` in
+           pagecap.ts); this rule is what then draws the stroke. Zero
+           specificity, like the attributes it stands in for. */
+        :where(svg.lucide) {
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 2;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
         * {
           box-sizing: border-box;
         }

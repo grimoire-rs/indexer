@@ -27,6 +27,13 @@ sort or scroll. `c/root.json` names it under `search`. The
 A theme that replaces `components/Catalog.tsx` or `pages/index.astro` keeps
 the old page, with every card inlined. The build says so on stderr.
 
+### Package pages are capped {#site-at-scale-page-cap}
+
+A package page is now at most 24 KiB. A long changelog, contents list or README
+is cut, and the page names the `grim` command that prints the rest. The rules
+are in the [output layout](../reference/output-layout.md#page-cap). The scripts
+every page carried inline now load once, from one cached file under `_astro/`.
+
 ### Browse pages and the sitemap {#site-at-scale-browse}
 
 The site gains `browse/1/`, `browse/2/` and so on: every package as a plain

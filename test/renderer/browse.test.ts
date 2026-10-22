@@ -134,7 +134,12 @@ async function records(count: number): Promise<{ name: string; deprecated: strin
   return Array.from({ length: count }, (_, i) => {
     const name = `pkg-${String(i).padStart(3, "0")}`;
     const deprecated = i % 50 === 7 ? "Use another package." : null;
-    return { ...bare, name, ref: `registry.example/team/${name}`, deprecated } as { name: string; deprecated: string | null };
+    // One description at the emit bound, so a page of 200 cannot add up to a megabyte.
+    const description = i === 3 ? "d".repeat(16 * 1024) : bare.description;
+    return { ...bare, name, ref: `registry.example/team/${name}`, deprecated, description } as {
+      name: string;
+      deprecated: string | null;
+    };
   });
 }
 
@@ -183,6 +188,13 @@ describe("browse pages in a package index", () => {
     expect(marked).toHaveLength(recs.filter((r) => r.deprecated).length);
   });
 
+  it("prints a description at the summary's byte budget, not at the length it was published", async () => {
+    const html = await built.read("browse/1/index.html");
+    // 1 KiB less the three bytes of the ellipsis.
+    expect(html).toContain(`${"d".repeat(1021)}…`);
+    expect(html).not.toContain("d".repeat(1022));
+  });
+
   it("names the page and the total in its heading and title", async () => {
     const html = await built.read("browse/2/index.html");
     expect(html).toMatch(/<h1[^>]*>[^<]*page 2 of 2[^<]*<\/h1>/i);
@@ -207,18 +219,18 @@ describe("browse pages in a package index", () => {
     ]);
   });
 
-  it("carries the CSP and ships no client script", async () => {
+  it("carries the CSP and ships no script of its own", async () => {
     for (const rel of ["browse/1/index.html", "browse/2/index.html"]) {
       const html = await built.read(rel);
       expect(html, rel).toContain('<meta http-equiv="Content-Security-Policy"');
       const scripts = elements(html).filter((el) => el.tagName === "script");
-      // Only the layout's own inline blocks: nothing loaded, nothing hydrated.
+      // Only the layout's chrome, which every page carries (D13): the list
+      // itself needs no script, and nothing on the page hydrates.
       for (const script of scripts) {
-        expect(attr(script, "src"), rel).toBeUndefined();
-        expect(attr(script, "type"), rel).toBeUndefined();
+        const src = attr(script, "src");
+        if (src !== undefined) expect(src, rel).toMatch(/^\/_astro\/Base\.astro_astro_type_script_[^/]+\.js$/);
       }
       expect(html, rel).not.toContain("astro-island");
-      expect(html, rel).not.toContain("<script type=\"module\"");
     }
   });
 });

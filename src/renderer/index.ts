@@ -52,6 +52,11 @@ export interface BuildSiteOptions {
   outDir: string;
   /** `sync` is the loaded block; a hand-built config without it renders as `legacy: true`. */
   config: SiteConfig & { sync?: SyncConfig };
+  /**
+   * Bytes a `/p/` page may reach (default 24 KiB). Internal, for tests whose
+   * fixture needs a page's full content; not a config key, in no schema.
+   */
+  pageCap?: number;
 }
 
 export interface DevSiteOptions extends BuildSiteOptions {
@@ -1020,6 +1025,10 @@ function inlineConfig(
           "@grim-original/": `${staged.original}/`,
         },
       },
+      // A bundled page script under the default 4 KiB limit is inlined into
+      // every page that uses it; the layout's script is meant to be one
+      // cached file, and a `/p/` page is byte-capped.
+      build: { assetsInlineLimit: (file: string) => (file.endsWith(".js") ? false : undefined) },
       plugins: [bundlePreactRenderer],
     },
   };
@@ -1149,7 +1158,7 @@ export async function buildSite(opts: BuildSiteOptions): Promise<SiteFacts> {
     await fs.rm(path.join(opts.outDir, "marketplace", "index.html"), { force: true });
   }
   await postProcessSite(opts.outDir, inputs.base);
-  const pages = await capPages(opts.outDir, inputs.packages);
+  const pages = await capPages(opts.outDir, inputs.packages, { cap: opts.pageCap });
   // After the build, and outside the `finally`: there is nothing to check
   // against until the routes exist, and a build that threw has a real error
   // to report rather than a list of links that were never emitted.

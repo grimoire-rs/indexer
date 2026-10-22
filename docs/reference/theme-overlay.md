@@ -208,6 +208,16 @@ prop contract before anyone has used it in anger buys a promise nobody has
 tested. It will narrow once real overrides show which components people
 actually replace.
 
+### Package pages are capped
+
+A package page is cut to 24 KiB after it renders: the changelog first, then the
+contents, the bounded sections and the README. See
+[Output layout](output-layout.md#page-cap). A theme that replaces
+`components/PackageDetail.astro` should keep its markup in the panels the cut
+knows. A page it leaves over the cap still deploys, with one warning line. An
+over-cap page drops the repeated lucide stroke attributes, and `:where(svg.lucide)`
+in `layouts/Base.astro` draws them, so a theme replacing that file keeps the rule.
+
 ## What the renderer ships
 
 The tree `theme/` overlays, and therefore the set of paths you can replace:

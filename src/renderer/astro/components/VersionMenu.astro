@@ -5,46 +5,54 @@
 // `manual`, not `auto`: an auto popover light-dismisses on the mouseup of
 // the very right-click that opened it, so the menu flashes and vanishes.
 // The page script therefore owns placement AND dismissal.
+//
+// The menu is drawn once per page (`menu`), not once per pill: every pill's
+// five commands differ only in the reference, which the pill already carries
+// in `data-copy`, so the script fills the shared menu from the pill that
+// opened it. A `/p/` page is byte-capped.
 interface Props {
-  pkgRef: string;
-  tag: string;
+  pkgRef?: string;
+  tag?: string;
   current?: boolean;
+  /** Draw the shared command menu instead of a pill. */
+  menu?: boolean;
 }
-const { pkgRef, tag, current = false } = Astro.props;
+const { pkgRef = "", tag = "", current = false, menu = false } = Astro.props;
 // `:latest` is what every grim command already resolves to with no tag, so
 // spelling it out is noise the visitor has to delete — the bare ref is the
 // same request. Every other tag pins and has to survive the copy.
 const pinned = tag === "latest" ? pkgRef : `${pkgRef}:${tag}`;
 const menuId = `vm-${tag.replace(/[^a-z0-9]+/gi, "-")}`;
 const commands: [string, string][] = [
-  ["copy reference", pinned],
-  ["add to project", `grim add ${pinned}`],
-  ["add globally", `grim add --global ${pinned}`],
-  ["describe", `grim describe ${pinned}`],
-  ["fetch", `grim fetch ${pinned}`],
+  ["copy reference", "{ref}"],
+  ["add to project", "grim add {ref}"],
+  ["add globally", "grim add --global {ref}"],
+  ["describe", "grim describe {ref}"],
+  ["fetch", "grim fetch {ref}"],
 ];
 ---
 
-<button
-  type="button"
-  class:list={["version", { current }]}
-  data-slot="version-pill"
-  data-copy={pinned}
-  data-copy-name={tag === "latest" ? "reference" : `pinned ${tag}`}
-  data-menu={menuId}
-  aria-current={current ? "true" : undefined}
-  title={`Copy ${pinned} — right-click for commands`}>{tag}</button
->
-
-<div popover="manual" id={menuId} class="version-menu">
-  {
-    commands.map(([label, cmd]) => (
-      <button type="button" class="cmd" data-copy={cmd} data-copy-name={`grim ${label}`} title={cmd}>
-        <span>{label}</span>
-      </button>
-    ))
-  }
-</div>
+{
+  menu ? (
+    <div popover="manual" id="version-menu" class="version-menu">
+      {commands.map(([label, cmd]) => (
+        <button type="button" class="cmd" data-cmd={cmd} data-copy="" data-copy-name={`grim ${label}`}>
+          <span>{label}</span>
+        </button>
+      ))}
+    </div>
+  ) : (
+    <button
+      type="button"
+      class:list={["version", { current }]}
+      data-slot="version-pill"
+      data-copy={pinned}
+      data-copy-name={tag === "latest" ? "reference" : `pinned ${tag}`}
+      data-menu={menuId}
+      aria-current={current ? "true" : undefined}>{tag}</button
+    >
+  )
+}
 
 <style>
 @layer grimoire {

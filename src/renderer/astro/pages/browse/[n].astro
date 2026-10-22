@@ -5,6 +5,7 @@
 // is reserved in every layout (see `assertReservedPaths`).
 import Base from "../../layouts/Base.astro";
 import { withBase } from "../../lib/base";
+import { boundBytes } from "../../lib/bounds";
 import { browsePages } from "../../lib/browse";
 import type { CatalogPackage } from "../../lib/catalog";
 import { data } from "../../lib/data";
@@ -44,7 +45,7 @@ const heading = `All ${total} ${total === 1 ? "package" : "packages"}, page ${n}
               <span class="badge deprecated">deprecated</span>
             </Fragment>
           )}
-          {p.description && <Fragment> — {p.description}</Fragment>}
+          {p.description && <Fragment> — {boundBytes(p.description)}</Fragment>}
         </li>
       ))
     }

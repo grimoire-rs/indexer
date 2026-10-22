@@ -1,0 +1,204 @@
+{
+  "members": [
+    {
+      "kind": "skill",
+      "name": "member-00",
+      "id": "ghcr.io/other/member-00:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-01",
+      "id": "ghcr.io/other/member-01:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-02",
+      "id": "ghcr.io/other/member-02:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-03",
+      "id": "ghcr.io/other/member-03:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-04",
+      "id": "ghcr.io/other/member-04:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-05",
+      "id": "ghcr.io/other/member-05:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-06",
+      "id": "ghcr.io/other/member-06:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-07",
+      "id": "ghcr.io/other/member-07:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-08",
+      "id": "ghcr.io/other/member-08:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-09",
+      "id": "ghcr.io/other/member-09:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-10",
+      "id": "ghcr.io/other/member-10:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-11",
+      "id": "ghcr.io/other/member-11:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-12",
+      "id": "ghcr.io/other/member-12:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-13",
+      "id": "ghcr.io/other/member-13:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-14",
+      "id": "ghcr.io/other/member-14:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-15",
+      "id": "ghcr.io/other/member-15:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-16",
+      "id": "ghcr.io/other/member-16:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-17",
+      "id": "ghcr.io/other/member-17:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-18",
+      "id": "ghcr.io/other/member-18:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-19",
+      "id": "ghcr.io/other/member-19:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-20",
+      "id": "ghcr.io/other/member-20:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-21",
+      "id": "ghcr.io/other/member-21:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-22",
+      "id": "ghcr.io/other/member-22:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-23",
+      "id": "ghcr.io/other/member-23:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-24",
+      "id": "ghcr.io/other/member-24:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-25",
+      "id": "ghcr.io/other/member-25:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-26",
+      "id": "ghcr.io/other/member-26:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-27",
+      "id": "ghcr.io/other/member-27:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-28",
+      "id": "ghcr.io/other/member-28:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-29",
+      "id": "ghcr.io/other/member-29:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-30",
+      "id": "ghcr.io/other/member-30:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-31",
+      "id": "ghcr.io/other/member-31:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-32",
+      "id": "ghcr.io/other/member-32:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-33",
+      "id": "ghcr.io/other/member-33:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-34",
+      "id": "ghcr.io/other/member-34:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-35",
+      "id": "ghcr.io/other/member-35:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-36",
+      "id": "ghcr.io/other/member-36:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-37",
+      "id": "ghcr.io/other/member-37:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-38",
+      "id": "ghcr.io/other/member-38:1"
+    },
+    {
+      "kind": "skill",
+      "name": "member-39",
+      "id": "ghcr.io/other/member-39:1"
+    }
+  ]
+}

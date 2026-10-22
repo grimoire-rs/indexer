@@ -203,6 +203,30 @@ file under `c/`. Past 50,000 URLs it becomes a sitemap index that names
 `sitemap-1.xml`, `sitemap-2.xml` and so on, each with at most 50,000 URLs.
 `robots.txt` names `sitemap.xml` either way.
 
+## Package pages are capped at 24 KiB {#page-cap}
+
+Every `p/<namespace>/<name>/index.html` is at most 24,576 bytes, measured as
+served, after the CSP post-process. The build renders the page in full, and
+only a page over the cap is cut. The cuts go in this order and stop as soon as
+the page fits:
+
+1. the changelog panel, then the contents panel;
+2. the bounded sections (older tags, download rows), largest first, while the
+   page without its README is still over;
+3. the README, cut at a top-level block;
+4. the hard cut: every panel and section at once.
+
+Each cut leaves a `<p class="empty">` with `data-grim-cut="link-out"`, or
+`data-grim-cut="truncated"` on the README. It names the `grim` command that
+prints what was cut and links the package's repository when there is one. A cut
+adds no script and no style, so the page's CSP still holds.
+
+Cutting has a five-minute budget. Past it, every page still over the cap takes
+the hard cut. A page still over the cap after the hard cut is listed as a
+warning on the [build log line](cli.md#the-build-log-line), and the build exits
+0. Only a theme that replaces `components/PackageDetail.astro` can produce one.
+Marketplace plugin pages under `marketplace/` are not capped.
+
 ## Bounded record fields
 
 When it writes `all.json`, the build cuts every record to the bounds below. It

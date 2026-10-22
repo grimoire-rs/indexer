@@ -97,7 +97,8 @@ beforeAll(async () => {
     JSON.stringify({ members: [{ kind: "skill __shiki_forged", name: "code-review", id: "./code-review:1" }] }),
   );
 
-  await buildSite({ root, outDir, config });
+  // The cap has its own tests (pagecap.test.ts); these look at full content.
+  await buildSite({ root, outDir, config, pageCap: Number.MAX_SAFE_INTEGER });
   package_ = await fs.readFile(path.join(outDir, "p/github.com/acme/code-review/index.html"), "utf8");
   bundle = await fs.readFile(path.join(outDir, "p/github.com/acme/starter-pack/index.html"), "utf8");
   plugin = await fs.readFile(path.join(outDir, "marketplace/dev/index.html"), "utf8");
