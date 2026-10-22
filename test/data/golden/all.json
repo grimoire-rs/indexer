@@ -3,7 +3,7 @@
   "description": "A test skill.",
   "summary": "Enriched summary",
   "version": "1.2.3",
-  "logo": "/logos/github.com/acme/foo.svg",
+  "logo": "/logos/github.com/acme/foo.png",
   "schema": 1,
   "name": "foo",
   "kind": "skill",

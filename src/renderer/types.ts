@@ -28,7 +28,8 @@ export interface CatalogPackage extends IndexRecord {
   deprecated?: string | null;
   replacedBy?: string;
   tags?: string[];
-  logo?: string;
+  /** `null` when `compileIndex` dropped a logo that failed its byte check. */
+  logo?: string | null;
   /** Publishing commit SHA, `-dirty` suffixed from a dirty tree. Never shown raw. */
   revision?: string;
   /** Maintainer. Only present when the artifact was authored or published with git. */

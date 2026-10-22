@@ -30,19 +30,13 @@ import { promisify } from "node:util";
 
 import { findMetadataFiles, namespaceOf } from "../data/index.js";
 import { parseGrimVersion } from "../grim.js";
+import { PACKAGE_LOGOS, logoOk } from "../logo.js";
 
 const execFileAsync = promisify(execFile);
 
 /** Per-`grim`-call ceiling. A description companion is text plus one logo. */
 const TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
-
-/**
- * A logo filename comes from the registry, which is not ours. Only an
- * alphanumeric extension is ever joined onto a path — `logo.a/b` or
- * `logo.` + traversal must not reach `writeFileSync`.
- */
-export const LOGO_EXT = /^[A-Za-z0-9]{1,8}$/;
 
 /** Runs one `grim` subcommand and parses its JSON. Injected so tests need no binary. */
 export type GrimRunner = (args: string[], opts?: { timeoutMs?: number }) => Promise<unknown>;
@@ -277,9 +271,11 @@ function writeCompanions(
       fs.writeFileSync(path.join(dir, "changelog.md"), decode(member));
       hasChangelog = true;
     } else if (low.startsWith("logo.")) {
+      // The name comes from the registry: only an extension `logoOk` knows is ever joined onto a path.
       const ext = member.path.slice(member.path.lastIndexOf(".") + 1);
-      if (!LOGO_EXT.test(ext)) continue;
-      fs.writeFileSync(path.join(dir, `logo.${ext}`), decode(member));
+      const bytes = decode(member);
+      if (!logoOk(ext, bytes, PACKAGE_LOGOS)) continue;
+      fs.writeFileSync(path.join(dir, `logo.${ext}`), bytes);
       logo = `/logos/${namespace}/${name}.${ext}`;
     }
   }

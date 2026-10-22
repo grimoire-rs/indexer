@@ -63,10 +63,14 @@ const DESCRIBE = {
   has_description: true,
 };
 
+const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+const JPEG = Buffer.from("ffd8ffe000104a464946", "hex");
+const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+
 const COMPANION = [
   { path: "README.md", content: "# Foo\n" },
   { path: "CHANGELOG.md", content: "## 1.2.3\n" },
-  { path: "logo.svg", content: Buffer.from("<svg/>").toString("base64"), encoding: "base64" },
+  { path: "logo.png", content: PNG.toString("base64"), encoding: "base64" },
 ];
 
 interface FakeOptions {
@@ -110,6 +114,14 @@ function packAndWipe(): string {
   return body;
 }
 
+/** The checkpoint document for the current tree, parsed. */
+function packedDocument(): {
+  packages: Record<string, { data: Record<string, unknown>; files: Record<string, string> }>;
+} {
+  packCheckpoint(outDir, entries());
+  return JSON.parse(fs.readFileSync(path.join(outDir, CHECKPOINT_FILE), "utf8")) as ReturnType<typeof packedDocument>;
+}
+
 /** Serve `body` at the checkpoint URL and seed from it. */
 async function seed(body: string, status = 200): Promise<number> {
   stubFetch((url) => (url === URL_ ? { status, body } : null));
@@ -135,7 +147,7 @@ describe("packCheckpoint", () => {
     await enrichIndex({ root: dir, run: fakeGrim().run });
 
     const before = sidecar("github.com/acme", "foo");
-    const files = ["readme.md", "changelog.md", "logo.svg", "contents.md"].map((name) =>
+    const files = ["readme.md", "changelog.md", "logo.png", "contents.md"].map((name) =>
       fs.readFileSync(path.join(sidecarDir("github.com/acme", "foo"), name)),
     );
 
@@ -143,7 +155,7 @@ describe("packCheckpoint", () => {
 
     expect(sidecar("github.com/acme", "foo")).toEqual(before);
     files.forEach((content, i) => {
-      const name = ["readme.md", "changelog.md", "logo.svg", "contents.md"][i];
+      const name = ["readme.md", "changelog.md", "logo.png", "contents.md"][i];
       expect(fs.readFileSync(path.join(sidecarDir("github.com/acme", "foo"), name))).toEqual(content);
     });
   });
@@ -158,7 +170,7 @@ describe("packCheckpoint", () => {
     const stamped = { ...sidecar("github.com/acme", "foo"), describedAt: "2026-09-01T09:00:00Z" };
     fs.writeFileSync(dataFile, JSON.stringify(stamped, null, 1) + "\n");
 
-    const names = ["data.json", "readme.md", "changelog.md", "logo.svg", "contents.md"];
+    const names = ["data.json", "readme.md", "changelog.md", "logo.png", "contents.md"];
     const before = names.map((n) => fs.readFileSync(path.join(sidecarDir("github.com/acme", "foo"), n)));
 
     expect(await seed(packAndWipe())).toBe(1);
@@ -369,20 +381,44 @@ describe("seedFromCheckpoint", () => {
     addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo:1.2.3");
     await enrichIndex({ root: dir, run: fakeGrim().run });
 
-    packCheckpoint(outDir, entries());
-    const doc = JSON.parse(fs.readFileSync(path.join(outDir, CHECKPOINT_FILE), "utf8")) as {
-      packages: Record<string, { files: Record<string, string> }>;
-    };
+    const doc = packedDocument();
     const files = doc.packages["github.com/acme/foo"].files;
-    files["logo.png"] = files["logo.svg"];
-    delete files["logo.svg"];
+    files["logo.jpg"] = JPEG.toString("base64");
+    delete files["logo.png"];
     fs.rmSync(path.join(dir, "enrich"), { recursive: true, force: true });
 
     expect(await seed(JSON.stringify(doc))).toBe(1);
     const data = sidecar("github.com/acme", "foo");
     // The record must name the file that actually landed, or `compileIndex`
     // publishes a card pointing at a logo it never copied.
-    expect(data.logo).toBe("/logos/github.com/acme/foo.png");
+    expect(data.logo).toBe("/logos/github.com/acme/foo.jpg");
+    expect(data).not.toHaveProperty("descDigest");
+  });
+
+  // The checkpoint is published on the index origin and read back from there,
+  // so a logo in it is as foreign as one off a registry.
+  it.each([
+    ["an svg", "logo.svg", SVG],
+    ["a png-named file holding jpeg bytes", "logo.png", JPEG],
+    ["an extensionless logo", "logo.", PNG],
+    ["a png-named file holding html", "logo.png", Buffer.from("<html><script>alert(1)</script></html>")],
+  ])("does not restore %s, and drops the logo from the record", async (_what, name, bytes) => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo:1.2.3");
+    await enrichIndex({ root: dir, run: fakeGrim().run });
+
+    const doc = packedDocument();
+    const entry = doc.packages["github.com/acme/foo"];
+    delete entry.files["logo.png"];
+    entry.files[name] = bytes.toString("base64");
+    entry.data.logo = `/logos/github.com/acme/foo.${name.slice(name.indexOf(".") + 1) || "png"}`;
+    fs.rmSync(path.join(dir, "enrich"), { recursive: true, force: true });
+
+    expect(await seed(JSON.stringify(doc))).toBe(1);
+    expect(fs.readdirSync(sidecarDir("github.com/acme", "foo")).filter((f) => f.startsWith("logo."))).toEqual([]);
+    const data = sidecar("github.com/acme", "foo");
+    expect(data).not.toHaveProperty("logo");
+    // The record disagreed with its files, so the digest that would stop the
+    // companion being fetched again goes with it.
     expect(data).not.toHaveProperty("descDigest");
   });
 

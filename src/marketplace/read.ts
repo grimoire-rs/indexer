@@ -18,12 +18,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { MARKETPLACE_CLIENTS, type MarketplaceClient } from "../config.js";
+import { MARKETPLACE_LOGOS, MAX_LOGO_BYTES, logoOk } from "../logo.js";
 import type { CatalogPackage } from "../renderer/types.js";
 
 export const MAX_PLUGINS = 100;
 export const MAX_MARKETPLACE_BYTES = 256 * 1024;
-// Logo and docs match what `grim export` accepts (1 MiB), so a valid export loses nothing.
-export const MAX_LOGO_BYTES = 1024 * 1024;
+export { MAX_LOGO_BYTES };
+// Docs match what `grim export` accepts (1 MiB), so a valid export loses nothing.
 export const MAX_DOC_BYTES = 1024 * 1024;
 const MAX_REPOSITORY = 2048;
 const MAX_DESCRIPTION = 300;
@@ -35,7 +36,7 @@ const MAX_CATEGORY = 40;
 const MAX_KEYWORD = 40;
 const MAX_KEYWORDS = 10;
 
-export const LOGO_EXTS = ["png", "svg", "webp"] as const;
+export const LOGO_EXTS = ["png", "webp"] as const;
 export type LogoExt = (typeof LOGO_EXTS)[number];
 
 const PLUGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -52,7 +53,7 @@ function reservedName(name: string): string | null {
   return null;
 }
 /** A logo file this module wrote: `<plugin name>.<safe ext>`. */
-export const LOGO_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.(png|svg|webp)$/;
+export const LOGO_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.(png|webp)$/;
 export const PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 const URL_FIELDS = ["homepage", "repository", "documentationUrl", "supportUrl"] as const;
@@ -234,34 +235,10 @@ export function parseMarketplace(raw: unknown, warn: (message: string) => void =
   return out;
 }
 
-const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-/** Bytes that really are the image their extension claims, and nothing active. */
+/** Bytes that really are the image their extension claims, from the types a plugin may ship. */
 export function validLogo(ext: LogoExt, bytes: Buffer): boolean {
-  if (bytes.length === 0 || bytes.length > MAX_LOGO_BYTES) return false;
-  if (ext === "png") return bytes.subarray(0, 8).equals(PNG_MAGIC);
-  if (ext === "webp") {
-    return bytes.subarray(0, 4).toString("latin1") === "RIFF" && bytes.subarray(8, 12).toString("latin1") === "WEBP";
-  }
-  const text = bytes.toString("utf8");
-  if (!/^\s*(<\?xml(?=[\s?])[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(text)) return false;
-  // Loaded through `<img>` the page is safe regardless, but the file is also
-  // served as a document at its own URL; refuse anything that could run or
-  // fetch there. Allow-list: the one xml declaration is the only processing
-  // instruction (`<?xml-stylesheet … xsl>` runs a transform), no stylesheet
-  // (`<style>`, `<link>`, `url()` in a style attribute) and no reference
-  // that leaves the file (`href` must be a `#fragment`). Element names match
-  // with any namespace prefix (`<x:script>` is a script to an XML parser), and
-  // a character reference inside an attribute value (`&#106;avascript:`) can
-  // spell what the plain scan looks for.
-  const rest = text.replace(/^\s*<\?xml(?=[\s?])[^>]*>/i, "");
-  if (/<\?/.test(rest) || /<!DOCTYPE[^>]*\[/i.test(rest)) return false;
-  if (/\b(?:xlink:)?href\s*=\s*["']?\s*[^#\s"'>]/i.test(rest)) return false;
-  if (/attributeName\s*=\s*["']?\s*(?:xlink:)?href/i.test(rest)) return false;
-  if (/url\(\s*["']?\s*[^#\s"')]/i.test(rest)) return false;
-  return !/<(?:[^\s<>/:]*:)?(?:script|style|link|foreignObject|iframe|embed|object)(?=[\s/>])|javascript:|\son[a-z]+\s*=|<!ENTITY|&#|&(amp|colon|Tab|NewLine);/i.test(text);
+  return logoOk(ext, bytes, MARKETPLACE_LOGOS);
 }
-
 
 /** One member of a plugin, from the marketplace lock; `href` when the ref is an indexed package. */
 export interface MarketplaceMember {

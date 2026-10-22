@@ -57,6 +57,7 @@
   {
     "schema": 1,
     "name": "rust-style",
+    "logo": null,
     "kind": "rule",
     "ref": "ghcr.io/acme/rust-style",
     "description": "House Rust style, scoped to the crates that opt in.",

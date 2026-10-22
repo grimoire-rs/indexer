@@ -34,7 +34,8 @@ import path from "node:path";
 // index tree back to decide what it is allowed to hydrate. Everything crossing
 // is a hoisted function declaration, referenced only from inside a closure.
 import { findMetadataFiles, namespaceOf } from "../data/index.js";
-import { LOGO_EXT, clearCompanions, clearContents } from "./index.js";
+import { PACKAGE_LOGOS, logoExtType, logoOk } from "../logo.js";
+import { clearCompanions, clearContents } from "./index.js";
 import { LARGE_RESPONSE_BYTES, request } from "../validate/adapters/http.js";
 import { packMarketplace, seedMarketplace } from "./marketplace.js";
 
@@ -55,8 +56,7 @@ export const SCHEMA_VERSION = 1;
 /**
  * Every sidecar file the checkpoint carries, and the only names hydration will
  * write. The set is the one `clearCompanions` and `clearContents` already
- * enforce; a logo is handled separately because its extension comes from the
- * registry.
+ * enforce; a logo is handled separately because its extension varies.
  */
 const COMPANION_FILES = ["readme.md", "changelog.md", "contents.md", "contents.json"];
 
@@ -102,7 +102,7 @@ function soleLogo(dir: string): string | undefined {
   const found = fs
     .readdirSync(dir)
     .filter((entry) => entry.toLowerCase().startsWith("logo."))
-    .filter((entry) => LOGO_EXT.test(entry.slice(entry.indexOf(".") + 1)));
+    .filter((entry) => logoExtType(entry.slice(entry.indexOf(".") + 1), PACKAGE_LOGOS) !== null);
   return found.length === 1 ? found[0] : undefined;
 }
 
@@ -236,9 +236,11 @@ async function loadCheckpoint(url: string): Promise<CheckpointDocument | null> {
 /**
  * Write one package's files, and return the names that actually landed.
  *
- * Filenames are chosen from [`COMPANION_FILES`] and `logo.<ext>` gated on
- * [`LOGO_EXT`] — never echoed from the document — and the directory comes from
- * the index's own tree, so no part of a path here is attacker-controlled.
+ * Filenames are chosen from [`COMPANION_FILES`] and `logo.<ext>` for an
+ * extension [`logoOk`] accepts together with the bytes — never echoed from the
+ * document — and the directory comes from the index's own tree, so no part of a
+ * path here is attacker-controlled. A logo that fails is not written, so
+ * `reconcile` sees no logo and drops the record's claim to one.
  */
 function hydrateFiles(dir: string, files: Record<string, unknown>): Set<string> {
   const written = new Set<string>();
@@ -249,9 +251,10 @@ function hydrateFiles(dir: string, files: Record<string, unknown>): Set<string> 
   for (const [name, content] of Object.entries(files)) {
     if (typeof content !== "string") continue;
     const low = name.toLowerCase();
-    const logo = low.startsWith("logo.") && LOGO_EXT.test(low.slice(low.indexOf(".") + 1));
+    const bytes = Buffer.from(content, "base64");
+    const logo = low.startsWith("logo.") && logoOk(low.slice(low.indexOf(".") + 1), bytes, PACKAGE_LOGOS);
     if (!COMPANION_FILES.includes(low) && !logo) continue;
-    fs.writeFileSync(path.join(dir, low), Buffer.from(content, "base64"));
+    fs.writeFileSync(path.join(dir, low), bytes);
     written.add(low);
   }
   return written;
