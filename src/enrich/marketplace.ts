@@ -201,7 +201,7 @@ export async function enrichMarketplace(root: string, run: GrimRunner): Promise<
 
 // ---- checkpoint bridge ----------------------------------------------------
 
-/** What `enrich.json` carries for the marketplace: every file of the local tree, base64, by relative path. */
+/** What the enrich plane carries for the marketplace: every file of the local tree, base64, by relative path. */
 export interface MarketplaceCheckpoint {
   files: Record<string, string>;
 }

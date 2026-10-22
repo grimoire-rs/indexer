@@ -31,6 +31,25 @@ export interface HttpResponse {
   status: number;
   body: string;
   header(name: string): string;
+  /** Why `status` is 0: the error code, the timeout or the cap. Absent on a real status. */
+  reason?: string;
+}
+
+/**
+ * What to print for a response that is not a success: `HTTP 503`, or why no
+ * answer arrived. A bare `HTTP 0` names no cause an operator could act on.
+ */
+export function describeStatus(res: Pick<HttpResponse, "status" | "reason">): string {
+  return res.status === 0 ? `no answer (${res.reason ?? "unknown cause"})` : `HTTP ${res.status}`;
+}
+
+/** The code a failed `fetch` carries (undici puts it on `cause`), else the timeout; never free text. */
+function failureReason(err: unknown): string {
+  const e = err as { name?: unknown; code?: unknown; cause?: { code?: unknown } } | null;
+  const code = e?.cause?.code ?? e?.code;
+  if (typeof code === "string" && /^[A-Z0-9_]{1,40}$/.test(code)) return code;
+  if (e?.name === "TimeoutError") return `timed out after ${TIMEOUT_MS} ms`;
+  return "transport error";
 }
 
 async function readCapped(
@@ -89,7 +108,8 @@ export async function request(
   headers: Record<string, string> = {},
   options: RequestOptions = {},
 ): Promise<HttpResponse> {
-  const none: HttpResponse = { status: 0, body: "", header: () => "" };
+  const cap = options.maxBytes ?? MAX_RESPONSE_BYTES;
+  const none = (reason: string): HttpResponse => ({ status: 0, body: "", header: () => "", reason });
   try {
     const response = await fetch(url, {
       headers: { "User-Agent": USER_AGENT, ...headers },
@@ -102,19 +122,15 @@ export async function request(
       redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    const body = await readCapped(
-      response,
-      options.maxBytes ?? MAX_RESPONSE_BYTES,
-      options.encoding ?? "utf8",
-    );
-    if (body === null) return none;
+    const body = await readCapped(response, cap, options.encoding ?? "utf8");
+    if (body === null) return none(`body over the ${cap} byte cap`);
     return {
       status: response.status,
       body,
       header: (name) => response.headers.get(name) ?? "",
     };
-  } catch {
-    return none;
+  } catch (err) {
+    return none(failureReason(err));
   }
 }
 

@@ -17,6 +17,13 @@ import { gunzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { run } from "../../src/cli/main.js";
+import type { Root } from "../../src/emit/root.js";
+import { BlobStore } from "../../src/state/blobstore.js";
+import { handOff } from "../../src/state/collect.js";
+import { STATE_DIR } from "../../src/state/handoff.js";
+import { grimSpawns, spawned } from "./spawn_spy.js";
+
+vi.mock("node:child_process", async (real) => (await import("./spawn_spy.js")).tapChildProcess(await real()));
 
 let dir: string;
 
@@ -51,7 +58,7 @@ interface PublishedRoot {
   stats: { sha256: string; size: number } | null;
   generation: number;
   generated_at: string;
-  planes: { catalog: null; enrich: null };
+  planes: { catalog: null; enrich: { sha256: string; size: number } | null };
   search: null;
 }
 
@@ -86,6 +93,7 @@ beforeEach(async () => {
     "--base-url",
     "https://index.acme.test",
   ]);
+  spawned.length = 0;
 });
 
 afterEach(() => {
@@ -207,4 +215,114 @@ describe("build", () => {
     expect(root.stats).toBeNull();
     expect(fs.existsSync(path.join(dir, "dist", "stats.json.gz"))).toBe(false);
   }, 120_000);
+  // The build is offline (spec §6.10, IX-R35): every byte it publishes comes
+  // from the checkout and `<state>/out/`.
+  describe("hand-off (IX-R35, V-29)", () => {
+    function denyNetwork(): ReturnType<typeof vi.fn> {
+      const fetchSpy = vi.fn(() => Promise.reject(new Error("network denied")));
+      vi.stubGlobal("fetch", fetchSpy);
+      return fetchSpy;
+    }
+
+    function dropSite(): void {
+      const file = path.join(dir, "index.config.json");
+      const config = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+      delete config.site;
+      fs.writeFileSync(file, JSON.stringify(config));
+    }
+
+    /** What `enrich` leaves behind, from a sidecar with a README. */
+    function enriched(published: Root | null = null): ReturnType<typeof handOff> {
+      addPackage("acme", "hello");
+      addSidecar("acme", "hello", "2026-07-01T10:00:00+00:00");
+      fs.writeFileSync(path.join(dir, "enrich/acme/hello/readme.md"), "# hello\n");
+      return handOff(dir, new BlobStore(path.join(dir, STATE_DIR)), { now: new Date(), published, restored: null });
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it.each([
+      ["site set", false],
+      ["site unset", true],
+    ])("V-29 passes with the network denied, %s", async (_name, unset) => {
+      if (unset) dropSite();
+      const fetchSpy = denyNetwork();
+      addPackage("acme", "hello");
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(grimSpawns()).toEqual([]);
+    }, 120_000);
+
+    it("V-29 with no hand-off publishes planes.enrich null and the build second, and warns", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const before = Math.floor(Date.now() / 1000);
+      addPackage("acme", "hello");
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(readRoot().planes.enrich).toBeNull();
+      expect(readRoot().generation).toBeGreaterThanOrEqual(before);
+      expect(warn.mock.calls.flat().join("\n")).toMatch(/hand-off/);
+    }, 120_000);
+
+    it("V-29 ci.enrich false: no enrich step, no hand-off, planes.enrich null", async () => {
+      const file = path.join(dir, "index.config.json");
+      const config = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+      fs.writeFileSync(file, JSON.stringify({ ...config, ci: { ...(config.ci as object), enrich: false } }));
+      addPackage("acme", "hello");
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(readRoot().planes.enrich).toBeNull();
+    }, 120_000);
+
+    it("publishes the handed-off generation and plane, with every plane file in dist/c", async () => {
+      const future = Math.floor(Date.now() / 1000) + 5000;
+      const h = enriched({ flat: null, generated_at: "x", generation: future, planes: { catalog: null, enrich: null }, schema: 1, search: null, stats: null });
+      const fetchSpy = denyNetwork();
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      const root = readRoot();
+      expect(root.generation).toBe(future + 1);
+      expect(root.planes.enrich).toEqual(h.planes.enrich);
+      const index = dist(`c/p/sha256/${h.planes.enrich?.sha256}.json`);
+      expect(sha256(index)).toBe(h.planes.enrich?.sha256);
+      const shards = fs.readdirSync(path.join(dir, "dist", "c/s/sha256"));
+      expect(shards).toHaveLength(1);
+      expect(sha256(dist(`c/s/sha256/${shards[0]}`))).toBe(shards[0]?.replace(/\.json$/, ""));
+    }, 120_000);
+
+    it("publishes no plane, and warns, when a plane file named by the hand-off is damaged", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const h = enriched();
+      const shard = fs.readdirSync(path.join(dir, STATE_DIR, "out/c/s/sha256"))[0]!;
+      fs.writeFileSync(path.join(dir, STATE_DIR, "out/c/s/sha256", shard), "{}");
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(readRoot().planes.enrich).toBeNull();
+      expect(readRoot().generation).toBe(h.generation);
+      expect(fs.existsSync(path.join(dir, "dist", "c/p"))).toBe(false);
+      expect(warn.mock.calls.flat().join("\n")).toMatch(/plane/);
+    }, 120_000);
+
+    it("IX-R28 a failed enrich leaves no hand-off: build warns and still deploys without a plane", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      addPackage("acme", "hello");
+      // `false --version` exits non-zero: the grim gate refuses before any hand-off exists.
+      expect(await run(["node", "grim-indexer", "enrich", dir, "--grim", "/bin/false"])).toBe(69);
+      expect(fs.existsSync(path.join(dir, STATE_DIR, "out", "handoff.json"))).toBe(false);
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      expect(readRoot().planes.enrich).toBeNull();
+      expect(fs.existsSync(path.join(dir, "dist", "index.html"))).toBe(true);
+    }, 120_000);
+  });
 });

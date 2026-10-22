@@ -14,7 +14,8 @@
  * Pages that differ between two builds of the base only in the island `uid`
  * are listed under `masked` with the sha256 of their uid-masked text, and are
  * compared that way. Files unreproducible in any other way are listed under
- * `excluded` and are not asserted here.
+ * `excluded` and are not asserted here. `RETIRED` names the files the base
+ * published and this build deliberately does not; they must be absent.
  */
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
@@ -66,6 +67,9 @@ const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).di
 const ISLAND_UID = /uid="[^"]*"/g;
 const maskedSha256 = (bytes: Buffer) => sha256(bytes.toString("utf8").replace(ISLAND_UID, 'uid=""'));
 
+// grimoire-rs/grimoire#216 cut 8: the build no longer writes `enrich.json`.
+const RETIRED = ["enrich.json"];
+
 interface Built {
   /** `compileIndex` output over the dev fixture. */
   compiled: string;
@@ -98,7 +102,6 @@ async function build(patch: Record<string, unknown> = {}): Promise<Built> {
   const dist = path.join(root, "dist");
   await fs.mkdir(dist);
   await fs.rename(path.join(root, "all.json"), path.join(dist, "all.json"));
-  await fs.writeFile(path.join(dist, "enrich.json"), '{"schema_version":1,"packages":{}}\n');
   const config = await loadConfig(root);
   await buildSite({ root, outDir: dist, config });
   // The step `grim-indexer build` runs after the site, so the additive-set
@@ -121,11 +124,13 @@ async function expectGolden(built: Built, inventory: Inventory): Promise<void> {
   await expectBytes(path.join(built.dist, "stats.json"), "stats.json");
 
   const actual: Record<string, string> = {};
-  for (const rel of Object.keys(inventory.files)) {
+  const expected: Record<string, string> = {};
+  for (const [rel, digest] of Object.entries(inventory.files)) {
     const bytes = await fs.readFile(path.join(built.dist, rel)).catch(() => null);
     actual[rel] = bytes === null ? "<missing>" : sha256(bytes);
+    expected[rel] = RETIRED.includes(rel) ? "<missing>" : digest;
   }
-  expect(actual).toEqual(inventory.files);
+  expect(actual).toEqual(expected);
 
   const masked: Record<string, string> = {};
   for (const rel of Object.keys(inventory.masked ?? {})) {

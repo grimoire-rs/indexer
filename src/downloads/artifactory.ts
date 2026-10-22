@@ -25,7 +25,7 @@
 // Layer blobs are never counted: they read 0 across every version of one
 // package and 6 on another, so they measure nothing. `manifest.json` only.
 import { CliError, EXIT } from "../cli/exit.js";
-import { LARGE_RESPONSE_BYTES, request } from "../validate/adapters/http.js";
+import { LARGE_RESPONSE_BYTES, describeStatus, request } from "../validate/adapters/http.js";
 import { parseRef } from "../validate/core/metadata.js";
 
 /** One ref's `downloads` stat, in the shape `stats.json` publishes. */
@@ -109,7 +109,7 @@ async function aql(baseUrl: string, token: string, repo: string): Promise<Row[]>
   );
   if (response.status < 200 || response.status >= 300) {
     throw new CliError(
-      `downloads: AQL against ${repo} failed (HTTP ${response.status}) — ` +
+      `downloads: AQL against ${repo} failed (${describeStatus(response)}) — ` +
         `refusing to publish a sidecar that would empty every download count`,
       EXIT.unavailable,
     );
@@ -159,7 +159,7 @@ async function readableRepos(baseUrl: string, token: string): Promise<Map<string
   });
   if (response.status < 200 || response.status >= 300) {
     throw new CliError(
-      `downloads: could not list repositories at ${baseUrl} (HTTP ${response.status})`,
+      `downloads: could not list repositories at ${baseUrl} (${describeStatus(response)})`,
       EXIT.unavailable,
     );
   }

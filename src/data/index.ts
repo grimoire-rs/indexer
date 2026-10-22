@@ -8,7 +8,6 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { boundRecord } from "../emit/records.js";
-import { packCheckpoint, type CheckpointEntry } from "../enrich/checkpoint.js";
 import { MAX_LOGO_BYTES, PACKAGE_LOGOS, logoExtType, logoOk } from "../logo.js";
 import { readRegular } from "../marketplace/read.js";
 
@@ -184,10 +183,6 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
 
   const packages: IndexRecord[] = [];
   const logos: Array<{ rel: string; src: string; ext: string }> = [];
-  // Collected here rather than re-walked in `packCheckpoint`: this loop
-  // already resolves every namespace and sidecar directory, and a second
-  // derivation of the same answer is a second thing to keep in agreement.
-  const sidecars: CheckpointEntry[] = [];
 
   for (const file of findMetadataFiles(indexDir)) {
     const meta = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
@@ -203,11 +198,6 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
       // internal change-probe / slice bookkeeping — never ship
       const { descDigest: _descDigest, describedAt: _describedAt, ...enrich } = sidecar;
       record = { ...enrich, ...withNamespace }; // index metadata wins on overlap
-      sidecars.push({
-        namespace: ns,
-        name: meta.name as string,
-        dir: path.dirname(dataPath),
-      });
     }
 
     if (record.logo !== undefined && record.logo !== null) {
@@ -242,9 +232,6 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.writeFileSync(dst, read.bytes);
   }
-  // Downstream of the `rmSync` above, like `all.json` — that is what lets
-  // `stage()`'s last `public/` layer publish it rather than Astro wiping it.
-  packCheckpoint(outDir, sidecars, path.join(enrichDir, "marketplace"));
 
   const namespaces = [...new Set(packages.map((p) => p.namespace))].sort();
   return { count: packages.length, namespaces };
