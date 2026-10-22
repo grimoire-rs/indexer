@@ -1666,8 +1666,9 @@ describe("discovery", () => {
   it("writes a sitemap and a robots.txt naming it", async () => {
     const sitemap = await site.read("sitemap.xml");
     const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-    // Every package page, plus the index itself.
-    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 1);
+    // Every package page, plus the index itself and the one browse page.
+    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 2);
+    expect(locs).toContain("https://index.example.test/browse/1/");
     for (const p of FIXTURE_PACKAGES) {
       expect(locs).toContain(`https://index.example.test/p/${p.namespace}/${p.name}/`);
     }
@@ -1766,7 +1767,8 @@ describe("a package index without a marketplace", () => {
     await expect(readOut("marketplace/index.html")).rejects.toThrow();
     await expect(readOut("marketplace/all.json")).rejects.toThrow();
     await expect(readOut("marketplace/logos/hex.png")).rejects.toThrow();
-    expect(await sitemapLocs(site)).toHaveLength(FIXTURE_PACKAGES.length + 1);
+    // Every package page, the index and the one browse page.
+    expect(await sitemapLocs(site)).toHaveLength(FIXTURE_PACKAGES.length + 2);
     expect(indexHtml).not.toContain("/marketplace/");
   });
 });
@@ -1888,7 +1890,8 @@ describe("an index with packages and a marketplace (mode both)", () => {
     expect(locs).toContain(`${SUB_SITE}/marketplace/`);
     expect(locs).toContain(`${SUB_SITE}/marketplace/hex/`);
     expect(locs).toContain(`${SUB_SITE}/marketplace/plain/`);
-    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 4);
+    expect(locs).toContain(`${SUB_SITE}/browse/1/`);
+    expect(locs).toHaveLength(FIXTURE_PACKAGES.length + 5);
   });
 
   it("publishes the validated logo under /marketplace/logos/<plugin>.<ext>, and only that one", async () => {

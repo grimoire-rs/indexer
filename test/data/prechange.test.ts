@@ -2,8 +2,9 @@
 // Copyright 2026 The Grimoire Authors
 
 /**
- * The default build publishes the same bytes it did before the catalog plane
- * existed. `golden/pre_plane_c0cd6bd/` holds what the build at the base its
+ * The default build publishes the same data bytes it did before the catalog
+ * plane existed; the markup `UNPINNED` names is exempt by design.
+ * `golden/pre_plane_c0cd6bd/` holds what the build at the base its
  * `inventory.json` records (the directory keeps its first name) wrote for
  * `test/fixtures/dev` (`all.json`) and `test/renderer/fixture`
  * (`stats.json` and a sha256 per `dist/` file); this builds the current tree
@@ -70,6 +71,28 @@ const maskedSha256 = (bytes: Buffer) => sha256(bytes.toString("utf8").replace(IS
 // grimoire-rs/grimoire#216 cut 8: the build no longer writes `enrich.json`.
 const RETIRED = ["enrich.json"];
 
+/**
+ * What this test no longer pins, each with the requirement rows behind it. The
+ * site-at-scale ADR (`adr_index_site_at_scale.md`) changes the default build's
+ * markup by design: the home page (IX-R14), the browse pages and sitemap
+ * (IX-R16) and the package-page cap (IX-R17, IX-R46). Markup is owned by
+ * `test/renderer/packages_golden.test.ts` and the page-cap tests from here on.
+ * A file matched here must still be published; every data file (`all.json`,
+ * `stats.json`, `robots.txt`, the logos) stays pinned byte for byte.
+ */
+const UNPINNED: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\.html$/, "markup, IX-R14 IX-R16 IX-R17 IX-R46"],
+  [/^sitemap\.xml$/, "IX-R16, lists the browse/ pages"],
+];
+/** The chunks the markup links: renamed or split along with it, so neither their bytes nor their names are pinned. */
+const CHUNK = /^_astro\//;
+const unpinned = (rel: string) => UNPINNED.find(([re]) => re.test(rel))?.[1];
+/** Paths the default build may add beyond the golden's, each with its row. */
+const ADDED: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^browse\/\d+\/index\.html$/, "IX-R16, every package linked from a page with no script"],
+  [CHUNK, "chunks renamed or split by the markup changes above"],
+];
+
 interface Built {
   /** `compileIndex` output over the dev fixture. */
   compiled: string;
@@ -126,18 +149,28 @@ async function expectGolden(built: Built, inventory: Inventory): Promise<void> {
   const actual: Record<string, string> = {};
   const expected: Record<string, string> = {};
   for (const [rel, digest] of Object.entries(inventory.files)) {
+    if (CHUNK.test(rel)) continue;
     const bytes = await fs.readFile(path.join(built.dist, rel)).catch(() => null);
-    actual[rel] = bytes === null ? "<missing>" : sha256(bytes);
-    expected[rel] = RETIRED.includes(rel) ? "<missing>" : digest;
+    const why = unpinned(rel);
+    actual[rel] = bytes === null ? "<missing>" : why ? `<unpinned: ${why}>` : sha256(bytes);
+    expected[rel] = RETIRED.includes(rel) ? "<missing>" : why ? `<unpinned: ${why}>` : digest;
   }
   expect(actual).toEqual(expected);
 
   const masked: Record<string, string> = {};
   for (const rel of Object.keys(inventory.masked ?? {})) {
     const bytes = await fs.readFile(path.join(built.dist, rel)).catch(() => null);
-    masked[rel] = bytes === null ? "<missing>" : maskedSha256(bytes);
+    const why = unpinned(rel);
+    masked[rel] = bytes === null ? "<missing>" : why ? `<unpinned: ${why}>` : maskedSha256(bytes);
   }
-  expect(masked).toEqual(inventory.masked ?? {});
+  expect(masked).toEqual(
+    Object.fromEntries(
+      Object.entries(inventory.masked ?? {}).map(([rel, digest]) => {
+        const why = unpinned(rel);
+        return [rel, why ? `<unpinned: ${why}>` : digest];
+      }),
+    ),
+  );
 }
 
 let inventory: Inventory;
@@ -170,7 +203,7 @@ describe("the default build against the pre-change build", () => {
     await expectGolden(explicit, inventory);
   }, 600_000);
 
-  it("contract:I1 the default build adds only c/**, all.json.gz and stats.json.gz to dist/", async () => {
+  it("contract:I1 the default build adds only c/**, all.json.gz, stats.json.gz and the ADDED paths to dist/", async () => {
     const added: string[] = [];
     for (const e of await fs.readdir(standard.dist, { recursive: true, withFileTypes: true })) {
       if (!e.isFile()) continue;
@@ -178,12 +211,14 @@ describe("the default build against the pre-change build", () => {
       if (rel in inventory.files || rel in (inventory.masked ?? {}) || rel in inventory.excluded) continue;
       added.push(rel);
     }
-    const allowed = (rel: string) => rel.startsWith("c/") || rel === "all.json.gz" || rel === "stats.json.gz";
+    const allowed = (rel: string) =>
+      rel.startsWith("c/") || rel === "all.json.gz" || rel === "stats.json.gz" || ADDED.some(([re]) => re.test(rel));
     expect(added.filter((rel) => !allowed(rel))).toEqual([]);
     // An empty `added` would satisfy the filter above, so name what must be there.
     expect(added).toContain("c/root.json");
     expect(added).toContain("all.json.gz");
     expect(added).toContain("stats.json.gz");
     expect(added.filter((rel) => rel.startsWith("c/f/sha256/"))).toHaveLength(1);
+    expect(added).toContain("browse/1/index.html");
   });
 });
