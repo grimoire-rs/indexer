@@ -14,6 +14,7 @@ dist/
   stats.json.gz                                the same bytes, gzipped (while sync.legacy is true)
   c/root.json                                  the root: which files are current
   c/f/sha256/<digest>.json.gz                  the catalog and stats blobs
+  c/q/sha256/<digest>.json.gz                  the site's search file
   c/p/sha256/<digest>.json                     the enrich plane index
   c/s/sha256/<digest>.json                     one enrich shard per bucket
   index/<host>/<ns>/<pkg>/metadata.json        the pointer tree, served as data
@@ -31,7 +32,8 @@ dist/
 | `/c/root.json` and `/c/f/sha256/` | The client contract. Permanent once an index emits them. An index built by an older indexer publishes neither |
 
 Everything else may still move. The enrich plane under `c/p/` and `c/s/` is
-pipeline-private and not a contract either.
+pipeline-private and not a contract either. So is the search file under `c/q/`,
+which only the site reads.
 
 ## The root
 
@@ -62,7 +64,7 @@ round placeholders, not measurements.
 | `stats` | The stats blob, or `null` when the build has no `stats.json` |
 | `planes.enrich` | The enrich plane index. `null` when the build had no hand-off from `enrich`, or when the hand-off's plane was not whole |
 | `planes.catalog` | Always `null`. Reserved |
-| `search` | Reserved for the site's search file. `null` today |
+| `search` | The site's [search file](#the-cq-search-file). `null` when the site serves no packages, when the file would pass its 32 MiB cap, and under `dev`. `grim` ignores it |
 
 Each blob reference is `{sha256, size}` over the **inflated** JSON, not over the
 file on disk.
@@ -70,11 +72,13 @@ file on disk.
 The build writes the root after every file it names, so a reader that finds a
 root finds all of them. The order is:
 
-1. The enrich plane, `c/p/` and `c/s/`, copied from the hand-off.
-2. The `c/f/` blobs, then `all.json.gz` and `stats.json.gz` while `sync.legacy`
-   is true, then `c/root.json`.
-3. With `sync.legacy: false`, the removal of `all.json` and `stats.json`.
-4. The [retained files](#retained-files), copied after the root.
+1. The search file, `c/q/`, written by the site step before it renders.
+2. The enrich plane, `c/p/` and `c/s/`, copied from the hand-off.
+3. The `c/f/` blobs, then `all.json.gz` and `stats.json.gz` while `sync.legacy`
+   is true, then `c/root.json`. The build stops before the root if the search
+   file it names is missing.
+4. With `sync.legacy: false`, the removal of `all.json` and `stats.json`.
+5. The [retained files](#retained-files), copied after the root.
 
 A deploy target that uploads file by file should upload `c/root.json` and
 `index.html` after everything else.
@@ -89,6 +93,39 @@ the stats blob to the bytes of `stats.json`.
 While `sync.legacy` is true, `all.json.gz` and `stats.json.gz` are
 byte-identical to the blob files of the same JSON. With `layout: flat` the
 folder holds the stats blob only.
+
+## The `c/q/` search file
+
+`c/q/sha256/<digest>.json.gz` is the file the catalog page searches. It is
+written in every layout, and `sync.legacy` does not govern it. `<digest>` is the
+SHA-256 of the inflated JSON, and `root.search` names it.
+
+The file is gzip only, as one deterministic member like the `c/f/` blobs. There
+is no raw `.json` copy and no sibling file.
+
+The inflated JSON has no whitespace:
+
+```json
+{"schema":1,"fields":["ref","kind","name","…"],"rows":[["ghcr.io/acme/skills/hello","skill","hello","…"]]}
+```
+
+- `schema` is `1`.
+- `fields` lists the 19 column names, always in the order below.
+- Each row is one package, an array of 19 cells in the order of `fields`. A
+  field the package lacks is `null`. `logo` is the path the site serves.
+- Rows follow the order of the site's package list. A later release may add
+  columns at the end, and never reorders or removes one.
+
+The columns, in order:
+
+```
+ref kind name title keywords tags summary description namespace vendor
+authors license compatibility version created updated deprecated replacedBy logo
+```
+
+The inflated file is at most 32 MiB. Past that, the build writes no file, sets
+`root.search` to `null`, and prints an error line. The site then searches only
+the cards it rendered. The build still exits 0.
 
 ## The enrich plane
 

@@ -60,7 +60,7 @@ interface PublishedRoot {
   generation: number;
   generated_at: string;
   planes: { catalog: null; enrich: { sha256: string; size: number } | null };
-  search: null;
+  search: { sha256: string; size: number } | null;
 }
 
 function readRoot(): PublishedRoot {
@@ -197,9 +197,44 @@ describe("build", () => {
     expect(gunzipSync(dist("all.json.gz")).equals(dist("all.json"))).toBe(true);
     expect(dist("stats.json.gz").equals(dist(`c/f/sha256/${root.stats?.sha256}.json.gz`))).toBe(true);
     expect(root.planes).toEqual({ catalog: null, enrich: null });
-    expect(root.search).toBeNull();
+    expect(root.search).not.toBeNull(); // the site serves packages: IX-R15
     expect(root.generation).toBeGreaterThanOrEqual(Math.floor(before / 1000));
     expect(root.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  }, 120_000);
+
+  // The renderer writes the file before Astro empties `dist/`, and the root is
+  // written after it: a ref naming a file the deploy lacks would fail every
+  // search on the live site.
+  it("IX-R15 IX-R32 the root names a c/q file that exists, gunzips, and matches the ref's sha256 and size", async () => {
+    addPackage("acme", "hello");
+
+    expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+    const ref = readRoot().search;
+    expect(ref).not.toBeNull();
+    const wire = dist(`c/q/sha256/${ref?.sha256}.json.gz`);
+    const body = gunzipSync(wire);
+    expect(sha256(body)).toBe(ref?.sha256);
+    expect(body.length).toBe(ref?.size);
+    expect(wire.equals(gzipDeterministic(body))).toBe(true);
+    const file = JSON.parse(body.toString("utf8")) as { schema: number; rows: unknown[][] };
+    expect(file.schema).toBe(1);
+    expect(file.rows).toHaveLength(1);
+    // gzip-only: no raw copy and no sibling beside it.
+    expect(fs.readdirSync(path.join(dir, "dist", "c/q/sha256"))).toEqual([`${ref?.sha256}.json.gz`]);
+  }, 120_000);
+
+  it("IX-R15 P-9 holds under layout anchored with legacy false, where the legacy copies are cut after the root", async () => {
+    addPackage("acme", "hello");
+    setSync({ layout: "anchored", legacy: false });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+    const ref = readRoot().search;
+    expect(ref).not.toBeNull();
+    expect(sha256(gunzipSync(dist(`c/q/sha256/${ref?.sha256}.json.gz`)))).toBe(ref?.sha256);
+    expect(fs.existsSync(path.join(dir, "dist", "all.json"))).toBe(false);
   }, 120_000);
 
   it("IX-R05 P-1 P-5 layout anchored: root.flat names the digest of the all.json served beside it", async () => {
@@ -319,6 +354,30 @@ describe("build", () => {
       expect(warn.mock.calls.flat().join("\n")).toMatch(/not a regular file that verifies/);
       expect(readRoot().planes.enrich).not.toBeNull();
     }, 120_000);
+
+    it("IX-R15 IX-R22 a rebuild with a changed catalog and a hand-off keeps the previous root's c/q file byte-identical in dist/", async () => {
+      addPackage("acme", "hello");
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+      const before = readRoot().search;
+      expect(before).not.toBeNull();
+      const previous = `c/q/sha256/${before?.sha256}.json.gz`;
+      const bytes = dist(previous);
+
+      // What `enrich` stages from the live site: the previous root's search file.
+      const retained = path.join(dir, STATE_DIR, "out/retained/c/q/sha256");
+      fs.mkdirSync(retained, { recursive: true });
+      fs.writeFileSync(path.join(retained, `${before?.sha256}.json.gz`), bytes);
+      enriched();
+      addPackage("acme", "second");
+
+      expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+      const after = readRoot().search;
+      expect(after).not.toBeNull();
+      expect(after?.sha256).not.toBe(before?.sha256);
+      expect(dist(`c/q/sha256/${after?.sha256}.json.gz`).length).toBeGreaterThan(0);
+      expect(dist(previous).equals(bytes)).toBe(true);
+    }, 240_000);
 
     it("IX-R28 NFR-7 a retention fs failure warns and the new closure is still published", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

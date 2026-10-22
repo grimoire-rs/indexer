@@ -15,12 +15,18 @@ import { run } from "../../src/cli/main.js";
 import {
   ENTRY_CEILING,
   GRIM_BODY_CAP,
+  SEARCH_WIRE_ERROR,
+  SEARCH_WIRE_WARN,
+  SITE_BYTES_CEILING,
+  SITE_FILES_CEILING,
   STATE_FILE_WARN,
   budgetWarnings,
   formatBuildLine,
   largestStateFile,
+  measureDist,
   printBuild,
   type BuildReport,
+  type SiteReport,
 } from "../../src/emit/logline.js";
 import type { HandoffCounters } from "../../src/state/handoff.js";
 import { STATE_DIR } from "../../src/state/handoff.js";
@@ -49,6 +55,21 @@ const COUNTERS: HandoffCounters = {
   failed_buckets: 0,
 };
 
+const D = "d".repeat(64);
+
+const SITE: SiteReport = {
+  search: { sha256: D, size: 5000 },
+  searchWire: 1200,
+  siteBytes: 9000,
+  siteFiles: 40,
+  astroMs: 4200,
+  astroDirBytes: 1000000,
+  pagesCut: 3,
+  pagesHardCut: 1,
+  overCap: [],
+};
+const withSite = (over: Partial<SiteReport>): BuildReport => report({ site: { ...SITE, ...over } });
+
 const report = (over: Partial<BuildReport> = {}): BuildReport => ({
   layout: "anchored",
   legacy: true,
@@ -59,6 +80,7 @@ const report = (over: Partial<BuildReport> = {}): BuildReport => ({
   entries: 20000,
   counters: COUNTERS,
   largestStateFile: null,
+  site: SITE,
   ...over,
 });
 const withCounters = (over: Partial<HandoffCounters>): BuildReport => report({ counters: { ...COUNTERS, ...over } });
@@ -68,16 +90,23 @@ describe("formatBuildLine", () => {
     expect(formatBuildLine(report())).toBe(
       `grim-indexer: built layout=anchored legacy=true generation=1792560000 flat sha256=${A} bytes=41400000 gzip=7000000 ` +
         `stats sha256=${B} bytes=3000000 planes enrich=${C} retained files=262 skipped=0 probed=17143 deep=2857 calls=42857 ` +
-        "probe_ms_p50=300 deep_ms_p50=300 budget_min=85 throttled=0 backoff_refs=0 enrich=complete failed_buckets=0",
+        "probe_ms_p50=300 deep_ms_p50=300 budget_min=85 throttled=0 backoff_refs=0 enrich=complete failed_buckets=0 " +
+        `search=${D} search_wire=1200 site_bytes=9000 site_files=40 astro_ms=4200 astro_dir_bytes=1000000 pages_cut=3 pages_hard_cut=1`,
     );
   });
 
   it("IX-R23 §5.9 without a hand-off reads enrich=none and zeroed counters, and keeps the flat and stats fields", () => {
-    expect(formatBuildLine(report({ layout: "flat", counters: null, stats: null, enrichPlane: null }))).toBe(
+    const none = { ...SITE, search: null, searchWire: 0 };
+    expect(formatBuildLine(report({ layout: "flat", counters: null, stats: null, enrichPlane: null, site: none }))).toBe(
       `grim-indexer: built layout=flat legacy=true generation=1792560000 flat sha256=${A} bytes=41400000 gzip=7000000 ` +
         "stats sha256=- bytes=0 planes enrich=- retained files=0 skipped=0 probed=0 deep=0 calls=0 " +
-        "probe_ms_p50=0 deep_ms_p50=0 budget_min=0 throttled=0 backoff_refs=0 enrich=none failed_buckets=0",
+        "probe_ms_p50=0 deep_ms_p50=0 budget_min=0 throttled=0 backoff_refs=0 enrich=none failed_buckets=0 " +
+        "search=none search_wire=0 site_bytes=9000 site_files=40 astro_ms=4200 astro_dir_bytes=1000000 pages_cut=3 pages_hard_cut=1",
     );
+  });
+
+  it("IX-R33 the astro time is a whole number of milliseconds", () => {
+    expect(formatBuildLine(withSite({ astroMs: 4200.6 }))).toContain(" astro_ms=4201 ");
   });
 });
 
@@ -109,6 +138,43 @@ describe("budgetWarnings", () => {
   ])("IX-R23 %s is error-level, and the cap itself is still a warning", (_name, above, atCap, text) => {
     expect(budgetWarnings(above)).toEqual([{ level: "error", text: expect.stringMatching(text) }]);
     expect(budgetWarnings(atCap)).toEqual([{ level: "warn", text: expect.any(String) }]);
+  });
+
+  it("IX-R33 trigger D: search_wire warns at 6 MiB, is an error at 8 MiB, and is silent below 6", () => {
+    const wire = /search file is \d+ bytes gzipped.*trigger D/;
+    expect(budgetWarnings(withSite({ searchWire: SEARCH_WIRE_WARN - 1 }))).toEqual([]);
+    expect(budgetWarnings(withSite({ searchWire: SEARCH_WIRE_WARN }))).toEqual([{ level: "warn", text: expect.stringMatching(wire) }]);
+    expect(budgetWarnings(withSite({ searchWire: SEARCH_WIRE_ERROR - 1 }))).toEqual([{ level: "warn", text: expect.stringMatching(wire) }]);
+    expect(budgetWarnings(withSite({ searchWire: SEARCH_WIRE_ERROR }))).toEqual([{ level: "error", text: expect.stringMatching(wire) }]);
+  });
+
+  it.each<[string, BuildReport, BuildReport, RegExp]>([
+    ["site_bytes at 800 * 1000 * 1000", withSite({ siteBytes: SITE_BYTES_CEILING }), withSite({ siteBytes: SITE_BYTES_CEILING - 1 }), /site is \d+ bytes.*trigger E/],
+    ["site_files at 160 * 1000", withSite({ siteFiles: SITE_FILES_CEILING }), withSite({ siteFiles: SITE_FILES_CEILING - 1 }), /site is \d+ files.*trigger E/],
+  ])("IX-R33 trigger E: %s is error-level, and silent one step below", (_name, at, below, text) => {
+    expect(budgetWarnings(at)).toEqual([{ level: "error", text: expect.stringMatching(text) }]);
+    expect(budgetWarnings(below)).toEqual([]);
+  });
+
+  it("IX-R33 the bounds are the ADR's: 6 MiB, 8 MiB, 800 * 1000 * 1000 bytes, 160 * 1000 files", () => {
+    expect([SEARCH_WIRE_WARN, SEARCH_WIRE_ERROR, SITE_BYTES_CEILING, SITE_FILES_CEILING]).toEqual([
+      6 * 1024 * 1024,
+      8 * 1024 * 1024,
+      800 * 1000 * 1000,
+      160 * 1000,
+    ]);
+  });
+
+  it("IX-R33 an over-cap page is one warn line each, naming the page", () => {
+    const lines = budgetWarnings(withSite({ overCap: ["p/acme/a/index.html", "p/acme/b/index.html"] }));
+    expect(lines).toEqual([
+      { level: "warn", text: expect.stringContaining("p/acme/a/index.html") },
+      { level: "warn", text: expect.stringContaining("p/acme/b/index.html") },
+    ]);
+  });
+
+  it("IX-R33 a site over both trigger E bounds is two lines", () => {
+    expect(budgetWarnings(withSite({ siteBytes: SITE_BYTES_CEILING, siteFiles: SITE_FILES_CEILING }))).toHaveLength(2);
   });
 
   it("IX-R23 reads no counter without a hand-off: the zeros are not a short budget", () => {
@@ -206,6 +272,37 @@ describe("largestStateFile", () => {
   });
 });
 
+describe("measureDist", () => {
+  let dist: string;
+  beforeEach(() => {
+    dist = fs.mkdtempSync(path.join(os.tmpdir(), "index-measure-"));
+  });
+  afterEach(() => {
+    fs.rmSync(dist, { recursive: true, force: true });
+  });
+
+  it("IX-R33 sums the regular files at any depth and counts each once", () => {
+    fs.mkdirSync(path.join(dist, "c", "q", "sha256"), { recursive: true });
+    fs.writeFileSync(path.join(dist, "index.html"), "x".repeat(10));
+    fs.writeFileSync(path.join(dist, "c", "root.json"), "x".repeat(20));
+    fs.writeFileSync(path.join(dist, "c", "q", "sha256", "a.json.gz"), "x".repeat(300));
+
+    expect(measureDist(dist)).toEqual({ bytes: 330, files: 3 });
+  });
+
+  it("IX-R33 an empty dist/ is zero files, and a symlink is not a file", () => {
+    expect(measureDist(dist)).toEqual({ bytes: 0, files: 0 });
+    const target = `${dist}-target`;
+    fs.writeFileSync(target, "x".repeat(5000));
+    try {
+      fs.symlinkSync(target, path.join(dist, "link"));
+      expect(measureDist(dist)).toEqual({ bytes: 0, files: 0 });
+    } finally {
+      fs.rmSync(target, { force: true });
+    }
+  });
+});
+
 describe("build", () => {
   let dir: string;
   const sha256 = (b: Buffer): string => createHash("sha256").update(b).digest("hex");
@@ -261,7 +358,27 @@ describe("build", () => {
     expect(built[0]).toContain(
       `layout=flat legacy=true generation=${generation} flat sha256=${sha256(all)} bytes=${all.length} gzip=${fs.statSync(path.join(dir, "dist", "all.json.gz")).size} `,
     );
-    expect(built[0]).toMatch(/ enrich=none failed_buckets=0$/);
+    expect(built[0]).toMatch(/ enrich=none failed_buckets=0 search=[0-9a-f]{64} /);
+  }, 120_000);
+
+  it("IX-R33 the line ends with the search file's digest and gzip size and the dist/ totals, and warns of nothing", async () => {
+    addPackage("hello");
+
+    expect(await run(["node", "grim-indexer", "build", dir])).toBe(0);
+
+    const dist = path.join(dir, "dist");
+    const search = (JSON.parse(fs.readFileSync(path.join(dist, "c", "root.json"), "utf8")) as { search: { sha256: string } }).search;
+    const wire = fs.statSync(path.join(dist, "c", "q", "sha256", `${search.sha256}.json.gz`)).size;
+    const { bytes, files } = measureDist(dist);
+    const built = lines(log).filter((l) => l.startsWith("grim-indexer: built "));
+    expect(built).toHaveLength(1);
+    expect(built[0]).toMatch(
+      new RegExp(
+        ` search=${search.sha256} search_wire=${wire} site_bytes=${bytes} site_files=${files} astro_ms=[1-9]\\d* astro_dir_bytes=[1-9]\\d* pages_cut=0 pages_hard_cut=0$`,
+      ),
+    );
+    expect(lines(error).filter((l) => /trigger [DE]/.test(l))).toEqual([]);
+    expect(lines(warn).filter((l) => /trigger [DE]/.test(l))).toEqual([]);
   }, 120_000);
 
   it("IX-R23 an anchored legacy: false build still reports the flat file, warns of a big state file, and exits 0 above the entry ceiling", async () => {

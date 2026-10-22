@@ -7,19 +7,22 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { sha256Hex } from "../../src/emit/digest.js";
 import { buildSite } from "../../src/renderer/index.js";
 import type { SiteFacts } from "../../src/renderer/types.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 
 let root: string;
+let outDir: string;
 let facts: SiteFacts;
 
 beforeAll(async () => {
   // A bare directory with no `node_modules` on its parent chain, as in the shipping run.
   root = await fs.mkdtemp(path.join(os.tmpdir(), "site-facts-"));
-  const outDir = path.join(root, "dist");
+  outDir = path.join(root, "dist");
   await fs.cp(FIXTURE, root, { recursive: true });
   await fs.mkdir(outDir, { recursive: true });
   await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
@@ -40,8 +43,16 @@ describe("buildSite facts", () => {
     expect(facts.pages).toEqual({ cut: 0, hardCut: 0, overCap: [] });
   });
 
-  it("publishes no search file or stats ref while the producer is a stub", () => {
-    expect(facts.search).toBeNull();
-    expect(facts.stats).toBeNull();
+  it("IX-R15 names the search file it wrote, by the digest and size of its inflated bytes", async () => {
+    expect(facts.search).not.toBeNull();
+    const wire = await fs.readFile(path.join(outDir, "c", "q", "sha256", `${facts.search?.sha256}.json.gz`));
+    const inflated = gunzipSync(wire);
+    expect(sha256Hex(inflated)).toBe(facts.search?.sha256);
+    expect(inflated.length).toBe(facts.search?.size);
+  });
+
+  it("names the stats it published beside all.json", async () => {
+    const stats = await fs.readFile(path.join(outDir, "stats.json"));
+    expect(facts.stats).toEqual({ sha256: sha256Hex(stats), size: stats.length });
   });
 });

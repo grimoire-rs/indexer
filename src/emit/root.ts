@@ -43,6 +43,8 @@ export interface PublishedInput {
   /** RFC 3339 UTC. */
   generatedAt: string;
   sync: SyncConfig;
+  /** The search file the renderer already wrote to `c/q/`; this module never writes it. Default `null`. */
+  search?: BlobRef | null;
 }
 
 const put = (dist: string, rel: string, data: Uint8Array | string): void => {
@@ -60,9 +62,18 @@ function pack(bytes: Uint8Array): { ref: BlobRef; gz: Buffer } {
  * Write order: the `c/f` blobs, the legacy `.gz` siblings, and the root last,
  * so a reader never finds a root naming a file that is not there yet. Never
  * touches `all.json` or `stats.json`: their bytes are the frozen legacy files.
+ * The search file is the renderer's, so it is checked rather than written: a
+ * root naming one that is not in `dist/` throws before anything is written.
  */
 export function emitPublished(dist: string, input: PublishedInput): Root {
   const { sync } = input;
+  const search = input.search ?? null;
+  if (search) {
+    const rel = `c/q/sha256/${search.sha256}.json.gz`;
+    if (!fs.statSync(path.join(dist, rel), { throwIfNoEntry: false })?.isFile()) {
+      throw new Error(`the root names the search file ${rel}, which is not in ${dist}`);
+    }
+  }
   const all = pack(input.allJson);
   const stats = input.statsJson ? pack(input.statsJson) : null;
   const blob = (p: { ref: BlobRef; gz: Buffer }): void => put(dist, `c/f/sha256/${p.ref.sha256}.json.gz`, p.gz);
@@ -80,7 +91,7 @@ export function emitPublished(dist: string, input: PublishedInput): Root {
     generation: input.generation,
     planes: { catalog: null, enrich: input.planeRef },
     schema: 1,
-    search: null,
+    search,
     stats: stats?.ref ?? null,
   };
   put(dist, "c/root.json", serializeDeterministic(root, { trailingNewline: true }));
@@ -107,13 +118,15 @@ export function nextGeneration(now: Date, published?: number): number {
  * Publish what is in `dist/` as the `c/` tree. `handoff` is what `enrich` left
  * for this build (IX-R35): its generation and the enrich plane already copied
  * into `dist/c/`. Without one the generation is the build second and
- * `planes.enrich` is `null`.
+ * `planes.enrich` is `null`. `search` is the ref the renderer returned for the
+ * file it wrote to `c/q/`, `null` for a caller with no site (dev, conformance).
  */
 export function publishDist(
   dist: string,
   sync: SyncConfig,
   handoff: { generation: number; planeRef: BlobRef | null } | null = null,
   now = new Date(),
+  search: BlobRef | null = null,
 ): Root {
   const statsFile = path.join(dist, "stats.json");
   return emitPublished(dist, {
@@ -123,5 +136,6 @@ export function publishDist(
     generation: handoff?.generation ?? nextGeneration(now),
     generatedAt: now.toISOString().replace(/\.\d+Z$/, "Z"),
     sync,
+    search,
   });
 }

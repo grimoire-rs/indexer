@@ -35,6 +35,15 @@ const read = (rel: string, at = dist): Buffer => fs.readFileSync(path.join(at, r
 const inflated = (rel: string): Buffer => gunzipSync(read(rel));
 const blobPath = (b: Uint8Array): string => `c/f/sha256/${sha(b)}.json.gz`;
 
+const searchBytes = bytes('{"schema":1,"fields":[],"rows":[]}');
+const searchRef = { sha256: sha(searchBytes), size: searchBytes.length };
+const searchPath = `c/q/sha256/${searchRef.sha256}.json.gz`;
+/** What the renderer leaves in `dist/` before the root is written: the deterministic gzip, named by the inflated digest. */
+const putSearch = (at = dist): void => {
+  fs.mkdirSync(path.join(at, "c/q/sha256"), { recursive: true });
+  fs.writeFileSync(path.join(at, searchPath), gzipDeterministic(searchBytes));
+};
+
 describe("nextGeneration", () => {
   const now = new Date(1_792_000_000_999);
   const s = 1_792_000_000;
@@ -177,6 +186,52 @@ describe("emitPublished", () => {
     expect(fs.existsSync(path.join(dist, "c/root.json"))).toBe(false);
   });
 
+  it.each([
+    ["flat", true],
+    ["flat", false],
+    ["anchored", true],
+    ["anchored", false],
+  ] as const)("IX-R15 IX-R32 layout %s, legacy %s: the root names the search file and leaves it where the renderer put it", (layout, legacy) => {
+    putSearch();
+    const before = read(searchPath);
+
+    const root = emitPublished(dist, { ...input, search: searchRef, sync: sync(layout, legacy) });
+
+    expect(root.search).toEqual(searchRef);
+    expect(JSON.parse(read("c/root.json").toString("utf8")).search).toEqual(searchRef);
+    expect(read(searchPath).equals(before)).toBe(true);
+    expect(inflated(searchPath).equals(Buffer.from(searchBytes))).toBe(true);
+    // The search file is a `q` file only: no sibling, no copy under `c/f`.
+    expect(fs.readdirSync(path.join(dist, "c/q/sha256"))).toEqual([`${searchRef.sha256}.json.gz`]);
+    expect(fs.existsSync(path.join(dist, blobPath(searchBytes)))).toBe(false);
+  });
+
+  it.each([
+    ["flat", true],
+    ["flat", false],
+    ["anchored", true],
+    ["anchored", false],
+  ] as const)("IX-R15 P-9 layout %s, legacy %s: a root naming a search file that is not in dist/ throws before the root is written", (layout, legacy) => {
+    expect(() => emitPublished(dist, { ...input, search: searchRef, sync: sync(layout, legacy) })).toThrow(searchPath);
+    expect(fs.existsSync(path.join(dist, "c/root.json"))).toBe(false);
+  });
+
+  it("IX-R15 P-9 a search file that is a directory is not a file the root may name", () => {
+    fs.mkdirSync(path.join(dist, searchPath), { recursive: true });
+    expect(() => emitPublished(dist, { ...input, search: searchRef, sync: sync("anchored") })).toThrow(searchPath);
+    expect(fs.existsSync(path.join(dist, "c/root.json"))).toBe(false);
+  });
+
+  it.each([
+    ["omitted", {}],
+    ["null", { search: null }],
+  ])("IX-R15 with the search ref %s the root says search: null and the c/ tree is the one it was", (_how, extra) => {
+    const without = emitPublished(dist, { ...input, ...extra, sync: sync("anchored") });
+    expect(without.search).toBeNull();
+    expect(JSON.parse(read("c/root.json").toString("utf8")).search).toBeNull();
+    expect(fs.existsSync(path.join(dist, "c/q"))).toBe(false);
+  });
+
   it("contract:I1 P-9 every file the root names exists once the root does", () => {
     const root = emitPublished(dist, { ...input, sync: sync("anchored") });
     expect(fs.existsSync(path.join(dist, "c/root.json"))).toBe(true);
@@ -207,5 +262,21 @@ describe("publishDist", () => {
   it("contract:I1 IX-R05 a dist/ with no stats.json publishes stats: null", () => {
     fs.writeFileSync(path.join(dist, "all.json"), allJson);
     expect(publishDist(dist, sync("flat")).stats).toBeNull();
+  });
+
+  it("IX-R15 publishes search: null when no ref is passed", () => {
+    fs.writeFileSync(path.join(dist, "all.json"), allJson);
+    expect(publishDist(dist, sync("flat"), null, new Date(1_792_000_000_999)).search).toBeNull();
+  });
+
+  it("IX-R15 the trailing ref is named by the root, and a ref whose file is absent throws before the root", () => {
+    fs.writeFileSync(path.join(dist, "all.json"), allJson);
+    const now = new Date(1_792_000_000_999);
+
+    expect(() => publishDist(dist, sync("flat"), null, now, searchRef)).toThrow(searchPath);
+    expect(fs.existsSync(path.join(dist, "c/root.json"))).toBe(false);
+
+    putSearch();
+    expect(publishDist(dist, sync("flat"), null, now, searchRef).search).toEqual(searchRef);
   });
 });
