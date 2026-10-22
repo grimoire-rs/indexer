@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { boundRecord } from "../emit/records.js";
 import { packCheckpoint, type CheckpointEntry } from "../enrich/checkpoint.js";
 import { MAX_LOGO_BYTES, PACKAGE_LOGOS, logoExtType, logoOk } from "../logo.js";
 import { readRegular } from "../marketplace/read.js";
@@ -215,7 +216,7 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
       if (vetted.file) logos.push(vetted.file);
     }
 
-    packages.push(record as IndexRecord);
+    packages.push(boundRecord(record) as IndexRecord);
   }
 
   // Every sidecar, a de-indexed package's too: the site's content glob reads all of `enrich/`.
