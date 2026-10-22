@@ -215,10 +215,13 @@ describe("the generated stats job — GitLab", () => {
   it("re-tallies on a schedule, and lets the scheduled pipeline deploy", () => {
     const doc = load("gitlab", RATINGS);
     const schedule = { if: '$CI_PIPELINE_SOURCE == "schedule"' };
+    // `pages` also saves the build-state cache, so its schedule rule is bound
+    // to the default branch; the collection job has no cache to protect.
+    const deploys = { if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH' };
 
     expect(jobs(doc)["grim-indexer:stats"].rules).toContainEqual(schedule);
-    expect(jobs(doc).pages.rules).toContainEqual(schedule);
-    expect(jobs(load("gitlab")).pages.rules).not.toContainEqual(schedule);
+    expect(jobs(doc).pages.rules).toContainEqual(deploys);
+    expect(jobs(load("gitlab")).pages.rules).not.toContainEqual(deploys);
   });
 });
 

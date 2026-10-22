@@ -231,7 +231,8 @@ describe("ci", () => {
 
       for (const file of renderedFiles(root)) {
         const text = read(file, root);
-        expect(text, `${file}: nothing fetches a package at run time`).not.toContain("npx");
+        // `npx --no` runs what `npm ci` installed and refuses to fetch anything else.
+        expect(text, `${file}: nothing fetches a package at run time`).not.toMatch(/\bnpx\b(?!\s+--no\b)/);
         expect(text, `${file}: no version pinned by hand`).not.toMatch(/@grimoire-rs\/indexer@/);
         expect(text, `${file}: runs the repo's own scripts`).toMatch(/npm (ci|run) /);
       }
@@ -414,8 +415,13 @@ describe("the enrich step", () => {
   const pipeline = (ci: CiConfig) =>
     renderCi(resolveCi(ci)).get(ci.forge === "gitlab" ? GITLAB : PAGES) ?? "";
 
+  // The flags `--purge` and `--fresh` are appended to this base only when set
+  // (test/cli/ci-state.test.ts), so `--seed` is the argument list's first word.
   it.each([...FORGES])("seeds from the published checkpoint on %s", (forge) => {
-    expect(pipeline({ forge })).toContain("npm run enrich -- --seed");
+    const rendered = pipeline({ forge });
+
+    expect(rendered).toContain("set -- --seed");
+    expect(rendered).toContain('npm run enrich -- "$@"');
   });
 
   it.each([...FORGES])("renders no enrich step at all when %s turns it off", (forge) => {

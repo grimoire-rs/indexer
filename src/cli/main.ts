@@ -18,6 +18,7 @@ import { init } from "./init.js";
 import { downloads } from "./downloads.js";
 import { ratings } from "./ratings.js";
 import { statsSeed } from "./stats_seed.js";
+import { stateKey } from "./state_key.js";
 import { validate, type ValidateFlags } from "./validate.js";
 
 interface InitCliOptions {
@@ -210,6 +211,15 @@ export async function run(argv: string[]): Promise<number> {
     .option("--purge <ref|sha256>", "drop a blob (64 hex) or a ref's blobs, and enrich every ref that held them again")
     .action(async (root: string, opts: EnrichFlags) => {
       code = await enrich(root, opts);
+    });
+
+  program
+    .command("state-key")
+    .argument("[root]", "index repo root", ".")
+    .description("print the build-state cache key (CI reads it; exit non-zero prints nothing)")
+    .option("--next", "print the key of the state `enrich` handed off, read offline")
+    .action(async (root: string, opts: { next?: boolean }) => {
+      code = await stateKey(root, opts);
     });
 
   program

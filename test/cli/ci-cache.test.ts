@@ -254,7 +254,8 @@ describe("GitLab: merge request jobs and timeouts", () => {
 
   function jobs(doc: Doc): Array<[string, Job]> {
     return Object.entries(doc).filter(
-      ([key, value]) => key !== "default" && key !== "stages" && value !== null && typeof value === "object",
+      ([key, value]) =>
+        key !== "default" && key !== "stages" && key !== "variables" && value !== null && typeof value === "object",
     ) as Array<[string, Job]>;
   }
 
@@ -279,9 +280,14 @@ describe("GitLab: merge request jobs and timeouts", () => {
 
     for (const [name, job] of jobs(doc)) {
       if (runsOnMergeRequests(job)) continue;
+      // `pages` is the one exception: its own list replaces the default, so it
+      // names the shared npm cache again beside the build-state cache.
+      if (name === "pages") continue;
       expect(job.cache, name).toBeUndefined();
     }
     expect((doc.default as Doc).cache).toBeDefined();
+    const pages = jobs(doc).find(([name]) => name === "pages")?.[1];
+    expect((pages?.cache as unknown[])[0]).toEqual((doc.default as Doc).cache);
   });
 
   it("gives every job a two hour timeout", async () => {

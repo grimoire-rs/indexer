@@ -1,0 +1,11 @@
+
+
+# Set on the "Run pipeline" page to drive `enrich` once. Empty means off, and an
+# empty value is what every push and scheduled pipeline sees.
+variables:
+  GRIM_INDEX_FRESH:
+    value: ""
+    description: "Set to true to start a new build-state epoch: enrich every artifact again"
+  GRIM_INDEX_PURGE:
+    value: ""
+    description: "Drop one artifact from the carried-forward state: a registry reference, or a sha256 digest"
