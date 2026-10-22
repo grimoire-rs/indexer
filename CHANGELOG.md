@@ -11,6 +11,12 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.5.12] - 2026-10-22
+
+### Fixed
+
+- Retry staged-tree removal in dev stop(), bump npm deps *(renderer)*
+
 ## [0.5.11] - 2026-10-22
 
 ### Added
@@ -342,6 +348,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.5.12]: https://github.com/grimoire-rs/indexer/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/grimoire-rs/indexer/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/grimoire-rs/indexer/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/grimoire-rs/indexer/compare/v0.5.8...v0.5.9
