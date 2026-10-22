@@ -231,6 +231,62 @@ function fail(msg: string): never {
   throw new SiteConfigError(`${CONFIG_FILE}: ${msg}`);
 }
 
+/** The warning for a key nothing reads. An older indexer prints this for `sync`. */
+function warnUnread(key: string): void {
+  console.warn(
+    `warn: ${CONFIG_FILE} sets \`${key}\`, which nothing reads — ` +
+      `check the spelling, or drop the key if it is left over from an older config`,
+  );
+}
+
+/** The `sync` block of `index.config.json`, resolved. */
+export interface SyncConfig {
+  /** `tree` is reserved: `parseSync` rejects it. */
+  layout: "flat" | "anchored";
+  /** `false` publishes only `c/`, so it is invalid with `layout: flat`. */
+  legacy: boolean;
+  /** The `revalidate` window in milliseconds, 15 minutes to 7 days. */
+  revalidateMs: number;
+}
+
+const SYNC_KEYS = new Set(["layout", "legacy", "revalidate"]);
+const REVALIDATE = /^([1-9][0-9]*)(m|h|d)$/;
+const UNIT_MS = { m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
+const REVALIDATE_MIN_MS = 15 * UNIT_MS.m;
+const REVALIDATE_MAX_MS = 7 * UNIT_MS.d;
+
+/**
+ * Resolve the raw `sync` member (`undefined` when absent). Every violation is
+ * a `SiteConfigError`, which the CLI maps to exit 65.
+ */
+export function parseSync(raw: unknown): SyncConfig {
+  if (raw === undefined) return { layout: "flat", legacy: true, revalidateMs: UNIT_MS.h };
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) fail("sync must be an object");
+  const sync = raw as Record<string, unknown>;
+  for (const key of Object.keys(sync)) if (!SYNC_KEYS.has(key)) warnUnread(`sync.${key}`);
+  // `null` is a value here, not an absent key: `??` would default it silently.
+  const get = (key: string, fallback: unknown) => (sync[key] === undefined ? fallback : sync[key]);
+
+  const layout = get("layout", "flat");
+  if (layout !== "flat" && layout !== "anchored") {
+    fail(`sync.layout must be "flat" or "anchored"${layout === "tree" ? ' ("tree" is reserved)' : ""}`);
+  }
+  const legacy = get("legacy", true);
+  if (typeof legacy !== "boolean") fail("sync.legacy must be a boolean");
+  // Under flat the legacy `/all.json` is the only copy of the catalog.
+  if (!legacy && layout === "flat") {
+    fail('sync.legacy: false needs sync.layout: "anchored" — layout "flat" would publish no catalog file');
+  }
+
+  const revalidate = get("revalidate", "1h");
+  const match = typeof revalidate === "string" ? REVALIDATE.exec(revalidate) : null;
+  const revalidateMs = match ? Number(match[1]) * UNIT_MS[match[2] as keyof typeof UNIT_MS] : NaN;
+  if (!(revalidateMs >= REVALIDATE_MIN_MS && revalidateMs <= REVALIDATE_MAX_MS)) {
+    fail('sync.revalidate must be a whole number of m, h or d between 15m and 7d, e.g. "1h"');
+  }
+  return { layout, legacy, revalidateMs };
+}
+
 function optionalString(raw: Record<string, unknown>, key: string): void {
   const value = raw[key];
   if (value !== undefined && value !== null && typeof value !== "string") {
@@ -398,9 +454,12 @@ function validateLinks(raw: Record<string, unknown>, key: string): void {
  * Drop a name and every index that configures that feature — which is most of
  * them — gets a warning about a key that is doing its job.
  */
-const KNOWN_KEYS = new Set([...Object.keys(DEFAULT_CONFIG), "ci", "ratings", "downloads"]);
+const KNOWN_KEYS = new Set([...Object.keys(DEFAULT_CONFIG), "ci", "ratings", "downloads", "sync"]);
 
-function validate(raw: unknown): SiteConfig {
+/** What `loadConfig` returns: the site keys plus the resolved `sync` block, which is not a rendered key. */
+export type LoadedConfig = SiteConfig & { sync: SyncConfig };
+
+function validate(raw: unknown): LoadedConfig {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     fail("must contain a JSON object");
   }
@@ -416,12 +475,7 @@ function validate(raw: unknown): SiteConfig {
   // loaded clean, rendered no notice line, and built green. So warn, name the
   // key, and load the rest anyway.
   for (const key of Object.keys(cfg)) {
-    if (!KNOWN_KEYS.has(key)) {
-      console.warn(
-        `warn: ${CONFIG_FILE} sets \`${key}\`, which nothing reads — ` +
-          `check the spelling, or drop the key if it is left over from an older config`,
-      );
-    }
+    if (!KNOWN_KEYS.has(key)) warnUnread(key);
   }
 
   for (const key of ["brand", "brandMark", "description", "tagline", "favicon", "footerNote", "notice", "customCss", "logo", "theme"]) {
@@ -478,19 +532,19 @@ function validate(raw: unknown): SiteConfig {
   }
 
 
-  return cfg as SiteConfig;
+  return { ...(cfg as SiteConfig), sync: parseSync(cfg.sync) };
 }
 
 /**
  * Read `index.config.json` from `root`. A missing file is not an
  * error — an index repo that wants the defaults ships no config at all.
  */
-export async function loadConfig(root: string): Promise<SiteConfig> {
+export async function loadConfig(root: string): Promise<LoadedConfig> {
   let text: string;
   try {
     text = await fs.readFile(path.join(root, CONFIG_FILE), "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { sync: parseSync(undefined) };
     throw err;
   }
   let parsed: unknown;
