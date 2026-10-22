@@ -86,6 +86,10 @@ tag lists, and the curated annotations grim reports (`revision`, `authors`,
 `vendor`, `url`, `documentation`, `compatibility`, and the repository's
 `support` channels).
 
+A logo is kept only when it is a PNG, JPEG, WebP or GIF and its file extension
+matches its bytes. An SVG, or any other file, is dropped and the package has no
+logo.
+
 **The only step that goes online, and the only one that needs `grim` on
 `PATH`.**
 

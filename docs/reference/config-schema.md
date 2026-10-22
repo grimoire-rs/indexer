@@ -109,7 +109,7 @@ at the repository root`.
 | `[marketplace].name` | The `@<name>` half of `<plugin>@<name>` in every add command |
 | `[marketplace].repository` | The https clone URL the add bar prints. Without it the commands carry a placeholder and a hint to set it |
 | `[marketplace].clients` | The harnesses shown, in order (`claude`, `copilot`, `codex`, `qoder`, `cursor`; `codex` is labelled "ChatGPT / Codex"). Cursor is opt-in |
-| `[plugins.<name>]` | One plugin page per entry at `/marketplace/<plugin>/`, with its README, CHANGELOG, logo, author, licence, links, category and keywords |
+| `[plugins.<name>]` | One plugin page per entry at `/marketplace/<plugin>/`, with its README, CHANGELOG, logo (PNG or WebP), author, licence, links, category and keywords |
 
 `grim-indexer enrich` runs `grim export marketplace` on the manifest into
 `enrich/marketplace/export/` and records `repository`, the exported clients and

@@ -47,11 +47,16 @@ const DESCRIBE = {
   has_description: true,
 };
 
+const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+const JPEG = Buffer.from("ffd8ffe000104a464946", "hex");
+const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+const member = (name: string, bytes: Buffer) => ({ path: name, content: bytes.toString("base64"), encoding: "base64" });
+
 /** Companion members as `grim fetch --description --format json` reports them. */
 const COMPANION = [
   { path: "README.md", content: "# Foo\n" },
   { path: "CHANGELOG.md", content: "## 1.2.3\n" },
-  { path: "logo.svg", content: Buffer.from("<svg/>").toString("base64"), encoding: "base64" },
+  member("logo.png", PNG),
 ];
 
 interface FakeOptions {
@@ -124,7 +129,7 @@ describe("enrichIndex", () => {
       descDigest: "sha256:aaa",
       hasReadme: true,
       hasChangelog: true,
-      logo: "/logos/github.com/acme/foo.svg",
+      logo: "/logos/github.com/acme/foo.png",
       contentDigest: "sha256:art",
       hasContents: true,
       // An artifact with a `created` is dated by it, never by the clock.
@@ -135,7 +140,7 @@ describe("enrichIndex", () => {
     const out = path.join(dir, "enrich/github.com/acme/foo");
     expect(fs.readFileSync(path.join(out, "readme.md"), "utf8")).toBe("# Foo\n");
     expect(fs.readFileSync(path.join(out, "changelog.md"), "utf8")).toBe("## 1.2.3\n");
-    expect(fs.readFileSync(path.join(out, "logo.svg"), "utf8")).toBe("<svg/>");
+    expect(fs.readFileSync(path.join(out, "logo.png"))).toEqual(PNG);
     expect(fs.readFileSync(path.join(out, "contents.md"), "utf8")).toBe("# Entry\n");
   });
 
@@ -264,7 +269,7 @@ describe("enrichIndex", () => {
     expect(sidecar("github.com/acme", "foo")).toMatchObject({
       hasReadme: true,
       hasChangelog: true,
-      logo: "/logos/github.com/acme/foo.svg",
+      logo: "/logos/github.com/acme/foo.png",
       contentDigest: "sha256:art",
       hasContents: true,
     });
@@ -281,7 +286,7 @@ describe("enrichIndex", () => {
 
     const out = path.join(dir, "enrich/github.com/acme/foo");
     expect(fs.existsSync(path.join(out, "changelog.md"))).toBe(false);
-    expect(fs.existsSync(path.join(out, "logo.svg"))).toBe(false);
+    expect(fs.existsSync(path.join(out, "logo.png"))).toBe(false);
     expect(fs.readFileSync(path.join(out, "readme.md"), "utf8")).toBe("v2");
     expect(sidecar("github.com/acme", "foo")).toMatchObject({
       hasReadme: true,
@@ -315,16 +320,40 @@ describe("enrichIndex", () => {
         { path: "logo.a/b", content: "x" },
         { path: "logo.../../evil", content: "x" },
         { path: "logo.", content: "x" },
-        { path: "logo.svg", content: "ok" },
+        member("logo.png", PNG),
       ],
     });
 
     await enrichIndex({ root: dir, run });
 
     const out = path.join(dir, "enrich/github.com/acme/foo");
-    expect(fs.readdirSync(out).sort()).toEqual(["contents.md", "data.json", "logo.svg"]);
+    expect(fs.readdirSync(out).sort()).toEqual(["contents.md", "data.json", "logo.png"]);
     expect(fs.existsSync(path.join(dir, "enrich/github.com/acme/evil"))).toBe(false);
-    expect(sidecar("github.com/acme", "foo").logo).toBe("/logos/github.com/acme/foo.svg");
+    expect(sidecar("github.com/acme", "foo").logo).toBe("/logos/github.com/acme/foo.png");
+  });
+
+  // The registry is not ours: a logo is kept only when its bytes are an image
+  // this index will publish and its extension names that image.
+  it.each([
+    ["an svg", member("logo.svg", SVG)],
+    ["an svg with an image extension", member("logo.png", SVG)],
+    ["jpeg bytes under .png", member("logo.png", JPEG)],
+    ["a file with no extension", member("logo.", PNG)],
+  ])("does not keep %s as the logo", async (_what, logo) => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    await enrichIndex({ root: dir, run: fakeGrim({ files: [{ path: "README.md", content: "# r" }, logo] }).run });
+
+    const out = path.join(dir, "enrich/github.com/acme/foo");
+    expect(fs.readdirSync(out).filter((f) => f.startsWith("logo."))).toEqual([]);
+    expect(sidecar("github.com/acme", "foo")).not.toHaveProperty("logo");
+  });
+
+  it("keeps a jpeg logo under either spelling of its extension", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    await enrichIndex({ root: dir, run: fakeGrim({ files: [member("logo.jpg", JPEG)] }).run });
+
+    expect(sidecar("github.com/acme", "foo").logo).toBe("/logos/github.com/acme/foo.jpg");
+    expect(fs.readFileSync(path.join(dir, "enrich/github.com/acme/foo/logo.jpg"))).toEqual(JPEG);
   });
 
   it("keeps the stale sidecar when one package fails, and reports it", async () => {

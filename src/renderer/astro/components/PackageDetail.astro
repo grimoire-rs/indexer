@@ -207,7 +207,7 @@ const thread = externalUrl(pkg.rating?.url);
 const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
 ---
 
-<Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo}>
+<Base title={`${title} — ${config.brand}`} description={description} image={pkg.logo ?? undefined}>
   <div class="detail">
     <div class="detail-body" data-slot="detail-body">
       <div class="detail-col">

@@ -9,6 +9,7 @@ import { MAX_LOGO_BYTES, MAX_PLUGINS, parseMarketplace, validLogo } from "../../
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("rest")]);
 const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
+const WEBP = Buffer.concat([Buffer.from("RIFF"), Buffer.from([1, 0, 0, 0]), Buffer.from("WEBPVP8 ")]);
 
 describe("parseMarketplace", () => {
   it("keeps name, description, version and a plain relative source", () => {
@@ -138,31 +139,26 @@ describe("parseMarketplace metadata", () => {
 });
 
 describe("validLogo", () => {
-  it("accepts a real png, webp and svg", () => {
-    const webp = Buffer.concat([Buffer.from("RIFF"), Buffer.from([1, 0, 0, 0]), Buffer.from("WEBPVP8 ")]);
+  it("accepts a real png and webp", () => {
     expect(validLogo("png", PNG)).toBe(true);
-    expect(validLogo("webp", webp)).toBe(true);
-    expect(validLogo("svg", SVG)).toBe(true);
-    expect(validLogo("svg", Buffer.from('<?xml version="1.0"?>\n<!-- c -->\n<svg viewBox="0 0 1 1"/>'))).toBe(true);
+    expect(validLogo("webp", WEBP)).toBe(true);
   });
 
   it("rejects bytes that are not the claimed format, and oversize files", () => {
     expect(validLogo("png", Buffer.from("<svg/>"))).toBe(false);
     expect(validLogo("webp", PNG)).toBe(false);
-    expect(validLogo("svg", PNG)).toBe(false);
+    expect(validLogo("png", WEBP)).toBe(false);
     expect(validLogo("png", Buffer.alloc(0))).toBe(false);
     expect(validLogo("png", Buffer.concat([PNG, Buffer.alloc(MAX_LOGO_BYTES)]))).toBe(false);
   });
 
-  it.each([
-    ['<svg><script>alert(1)</script></svg>'],
-    ['<svg onload="alert(1)"/>'],
-    ['<svg><a href="javascript:alert(1)"/></svg>'],
-    ['<svg><foreignObject><div/></foreignObject></svg>'],
-    ['<svg xmlns:x="http://www.w3.org/2000/svg"><x:script>alert(1)</x:script></svg>'],
-    ['<svg><a href="&#106;avascript:alert(1)"/></svg>'],
-    ['<svg><a href="java&#x73;cript:alert(1)"/></svg>'],
-  ])("rejects an svg with active content: %s", (svg) => {
-    expect(validLogo("svg", Buffer.from(svg))).toBe(false);
+  it("never accepts an svg, whatever it contains or is named", () => {
+    expect(validLogo("png", SVG)).toBe(false);
+    expect(validLogo("webp", SVG)).toBe(false);
+    expect(validLogo("png", Buffer.from("<svg><script>alert(1)</script></svg>"))).toBe(false);
+  });
+
+  it("takes a png signature followed by html for a png, which is served as image/png", () => {
+    expect(validLogo("png", Buffer.concat([PNG, Buffer.from("<html><script>alert(1)</script></html>")]))).toBe(true);
   });
 });

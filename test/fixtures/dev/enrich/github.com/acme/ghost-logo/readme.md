@@ -1,6 +1,6 @@
 # ghost-logo
 
-`data.json` claims `/logos/github.com/acme/ghost-logo.svg`; no `logo.svg`
+`data.json` claims `/logos/github.com/acme/ghost-logo.png`; no `logo.png`
 sits beside it, so `compileIndex` publishes nothing and the request 404s.
 
 Expected rendering: the `ImageOff` glyph, labelled *Logo image unavailable* —

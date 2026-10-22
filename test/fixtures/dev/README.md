@@ -62,7 +62,8 @@ and `starter-pack` square, `enterprise-compliance-policy-pack` 3:1 wide,
 whatever they are (see `.tile` on the detail page), so a mark that is not
 square has to letterbox inside it rather than stretch, crop or resize the
 tile. With square logos only, the frame and the mark agree by accident and
-nothing shows when they stop agreeing.
+nothing shows when they stop agreeing. They are PNGs: `compileIndex` publishes
+only PNG, JPEG, WebP or GIF logos, so an SVG here would render as no logo.
 
 `deprecated` is the publisher's **message**, not a date — grim's own detail
 pane renders it as `Deprecated: <message>`. Both deprecated artifacts here

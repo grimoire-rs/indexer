@@ -505,6 +505,16 @@ describe("downloads", () => {
   });
 });
 
+// `compileIndex` writes `logo: null` for a logo that failed its byte check.
+describe("a dropped logo", () => {
+  it("renders the letter tile and the site's og:image", async () => {
+    const html = await readOut("p/github.com/acme/rust-style/index.html");
+    expect(html).toContain('class="tile letter"');
+    expect(html).not.toContain("/logos/github.com/acme/rust-style");
+    expect(html).toContain('<meta property="og:image" content="/logo.svg"');
+  });
+});
+
 // grim derives build provenance by default and reports five more curated
 // fields plus a repository-level `support` object. The index is a phone book,
 // so none of it reaches `all.json` as a pointer field: it arrives through the

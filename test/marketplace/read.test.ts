@@ -17,7 +17,6 @@ import {
   MAX_MARKETPLACE_BYTES,
   parseMarketplace,
   readMarketplace,
-  validLogo,
 } from "../../src/marketplace/read.js";
 
 let root: string;
@@ -36,6 +35,7 @@ afterEach(() => {
 
 const EXPORT = "enrich/marketplace/export";
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("rest")]);
+const WEBP = Buffer.concat([Buffer.from("RIFF"), Buffer.from([1, 0, 0, 0]), Buffer.from("WEBPVP8 ")]);
 
 function write(rel: string, content: string | Buffer): void {
   const file = path.join(root, rel);
@@ -98,8 +98,22 @@ describe("readMarketplace caps", () => {
     listing([entry("a"), entry("b")]);
     write(`${EXPORT}/c/a/assets/logo.png`, Buffer.concat([PNG, Buffer.alloc(MAX_LOGO_BYTES)]));
     write(`${EXPORT}/c/b/assets/logo.png`, "<html/>");
-    write(`${EXPORT}/c/b/assets/logo.svg`, '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
-    expect(readMarketplace(root)?.logos).toEqual({ b: "c/b/assets/logo.svg" });
+    write(`${EXPORT}/c/b/assets/logo.webp`, WEBP);
+    expect(readMarketplace(root)?.logos).toEqual({ b: "c/b/assets/logo.webp" });
+  });
+
+  // An svg opened at its own URL runs script, so a plugin that ships one renders without a logo.
+  it("keeps png and webp logos and drops svg, jpeg, gif and mismatched ones", () => {
+    listing([entry("png"), entry("webp"), entry("svg"), entry("jpeg"), entry("gif"), entry("fake")]);
+    write(`${EXPORT}/c/png/assets/logo.png`, PNG);
+    write(`${EXPORT}/c/webp/assets/logo.webp`, WEBP);
+    write(`${EXPORT}/c/svg/assets/logo.svg`, '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
+    write(`${EXPORT}/c/jpeg/assets/logo.jpg`, Buffer.from("ffd8ffe000104a464946", "hex"));
+    write(`${EXPORT}/c/gif/assets/logo.gif`, "GIF89a\x01\x00\x01\x00");
+    write(`${EXPORT}/c/fake/assets/logo.webp`, PNG);
+    const mk = readMarketplace(root);
+    expect(mk?.logos).toEqual({ png: "c/png/assets/logo.png", webp: "c/webp/assets/logo.webp" });
+    expect(names(mk)).toEqual(["png", "webp", "svg", "jpeg", "gif", "fake"]);
   });
 
   it("is null for a marketplace.json over the cap, or one that names nothing", () => {
@@ -414,36 +428,6 @@ describe("caps match grim's own limits", () => {
     listing([entry("a")]);
     write(`${EXPORT}/c/a/README.md`, Buffer.alloc(MAX_DOC_BYTES + 1, "a"));
     expect(warned((warn) => loadMarketplace(root, [], warn)).join("\n")).toMatch(/README\.md/);
-  });
-});
-
-describe("validLogo svg allow-list", () => {
-  const svg = (inner: string, head = "") => Buffer.from(`${head}<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${inner}</svg>`);
-
-  it("accepts a plain svg, an xml declaration, a fragment <use>, and a gradient", () => {
-    expect(validLogo("svg", svg('<rect width="1" height="1"/>'))).toBe(true);
-    expect(validLogo("svg", svg("<rect/>", '<?xml version="1.0" encoding="UTF-8"?>\n'))).toBe(true);
-    expect(validLogo("svg", svg('<defs><linearGradient id="g"/></defs><use href="#g"/><use xlink:href="#g"/>'))).toBe(true);
-  });
-
-  it.each([
-    ["an xml-stylesheet instruction", svg("<rect/>", '<?xml version="1.0"?><?xml-stylesheet type="text/xsl" href="x.xsl"?>')],
-    ["a leading xml-stylesheet instruction in place of the declaration", svg("<rect/>", '<?xml-stylesheet type="text/xsl" href="https://evil.test/x.xsl"?>')],
-    ["a script under a dotted namespace prefix", svg('<a.b:script xmlns:a.b="http://www.w3.org/2000/svg">alert(1)</a.b:script>')],
-    ["a script under a non-ASCII namespace prefix", svg('<é:script xmlns:é="http://www.w3.org/2000/svg">alert(1)</é:script>')],
-    ["any other processing instruction", svg('<?php echo 1 ?><rect/>')],
-    ["a second xml declaration", svg('<?xml version="1.0"?><rect/>', '<?xml version="1.0"?>')],
-    ["a <style> element", svg("<style>@import url(https://evil.test/x.css);</style>")],
-    ["a prefixed <style> element", svg('<s:style xmlns:s="http://www.w3.org/2000/svg">a{}</s:style>')],
-    ["a <link> element", svg('<link rel="stylesheet" href="https://evil.test/x.css"/>')],
-    ["an external href", svg('<image href="https://evil.test/x.png"/>')],
-    ["a data: href", svg('<image xlink:href="data:image/svg+xml;base64,AAAA"/>')],
-    ["a relative href", svg('<use href="other.svg#a"/>')],
-    ["an href animated in", svg('<a><animate attributeName="href" to="x"/></a>')],
-    ["an external url() in a style attribute", svg('<rect style="fill:url(https://evil.test/x)"/>')],
-    ["a DOCTYPE with an internal subset", svg("<rect/>", '<!DOCTYPE svg [<!ENTITY x "y">]>')],
-  ])("refuses %s", (_what, bytes) => {
-    expect(validLogo("svg", bytes)).toBe(false);
   });
 });
 
