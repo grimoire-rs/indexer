@@ -67,7 +67,44 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # The same URL, handed to `probe`.
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+  # Warns when the live site answers with a content type browsers reject. The run
+  # stays green: `probe` exits 0 on anything it finds and `continue-on-error`
+  # covers a lock that predates it. `timeout-minutes` is load-bearing: the
+  # concurrency group is held until every job ends, so a hung probe would
+  # queue the next deploy behind it.
+  probe:
+    needs: deploy
+    runs-on: ubuntu-latest{{githubCacheModeJob}}
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No `cache: npm`: `build` is the one job that saves the Actions cache.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "{{nodeVersion}}"
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      # The URL arrives through the environment and is quoted, never spliced
+      # into the script. `npx --no` runs the copy package-lock.json pins and
+      # never fetches one, so a lock that predates `probe` fails this job only.
+      - name: Probe the deployed site
+        env:
+          SITE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: npx --no grim-indexer probe "$SITE_URL"
+
 {{githubStatsJob}}

@@ -16,6 +16,7 @@ import { enrich, type EnrichFlags } from "./enrich.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 import { init } from "./init.js";
 import { downloads } from "./downloads.js";
+import { probe } from "./probe.js";
 import { ratings } from "./ratings.js";
 import { statsSeed } from "./stats_seed.js";
 import { stateKey } from "./state_key.js";
@@ -244,6 +245,14 @@ export async function run(argv: string[]): Promise<number> {
     .description("carry the published stats into .stats.json when no collector left one")
     .action(async (root: string) => {
       code = await statsSeed(root);
+    });
+
+  program
+    .command("probe")
+    .argument("<site-url>", "URL the index is served from")
+    .description("check a deployed site serves the content types browsers need (warns, exits 0)")
+    .action(async (siteUrl: string) => {
+      code = await probe(siteUrl);
     });
 
   program

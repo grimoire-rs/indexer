@@ -44,11 +44,11 @@ export function describeStatus(res: Pick<HttpResponse, "status" | "reason">): st
 }
 
 /** The code a failed `fetch` carries (undici puts it on `cause`), else the timeout; never free text. */
-function failureReason(err: unknown): string {
+export function failureReason(err: unknown, timeoutMs = TIMEOUT_MS): string {
   const e = err as { name?: unknown; code?: unknown; cause?: { code?: unknown } } | null;
   const code = e?.cause?.code ?? e?.code;
   if (typeof code === "string" && /^[A-Z0-9_]{1,40}$/.test(code)) return code;
-  if (e?.name === "TimeoutError") return `timed out after ${TIMEOUT_MS} ms`;
+  if (e?.name === "TimeoutError") return `timed out after ${timeoutMs} ms`;
   return "transport error";
 }
 

@@ -104,7 +104,7 @@ describe("github.com: cache scoping", () => {
   it("sets cache-mode none on every job except the one default-branch cache writer", async () => {
     const files = await render(githubConfig(ON_GITHUB_COM));
 
-    // All seven jobs are in play, or the sweep below proves less than it says.
+    // All eight jobs are in play, or the sweep below proves less than it says.
     const seen = [...files.entries()]
       .filter(([rel]) => rel !== GITLAB)
       .flatMap(([rel, text]) => jobsOf(parse(text)).map(([name]) => `${rel}:${name}`));
@@ -112,6 +112,7 @@ describe("github.com: cache scoping", () => {
       [
         `${PAGES}:build`,
         `${PAGES}:deploy`,
+        `${PAGES}:probe`,
         `${PAGES}:stats`,
         `${VALIDATE}:validate`,
         `${VALIDATE}:automerge`,
@@ -140,6 +141,7 @@ describe("github.com: cache scoping", () => {
     expect(pages["cache-mode"], "a workflow-level key would switch the writer off").toBeUndefined();
     const jobs = pages.jobs as Record<string, Job>;
     expect(jobs.deploy?.["cache-mode"]).toBe("none");
+    expect(jobs.probe?.["cache-mode"]).toBe("none");
     expect(jobs.stats?.["cache-mode"]).toBe("none");
   });
 
@@ -187,6 +189,14 @@ describe("every host: npm caching", () => {
     const pages = parse((await render(githubConfig(hosts))).get(PAGES));
 
     expect(cacheInputs((pages.jobs as Record<string, Job>).stats as Job)).toEqual([]);
+  });
+
+  it.each(HOSTS)("never caches npm in the probe job (%s)", async (_label, hosts) => {
+    const pages = parse((await render(githubConfig(hosts))).get(PAGES));
+
+    const probe = (pages.jobs as Record<string, Job>).probe as Job;
+    expect(probe.steps?.length, "the probe job is rendered").toBeGreaterThan(0);
+    expect(cacheInputs(probe)).toEqual([]);
   });
 
   it.each(HOSTS)("keeps the pages build as the one job that caches npm (%s)", async (_label, hosts) => {
@@ -280,6 +290,12 @@ describe("GitLab: merge request jobs and timeouts", () => {
 
     for (const [name, job] of jobs(doc)) {
       if (runsOnMergeRequests(job)) continue;
+      // The probe only reads the live site, so it opts out of the cache the
+      // way a merge request job does, though it never runs on one.
+      if (name === "grim-indexer:probe") {
+        expect(job.cache, name).toEqual([]);
+        continue;
+      }
       // `pages` is the one exception: its own list replaces the default, so it
       // names the shared npm cache again beside the build-state cache.
       if (name === "pages") continue;
@@ -296,6 +312,7 @@ describe("GitLab: merge request jobs and timeouts", () => {
 
     // The jobs are all there, or "every job" is vacuous.
     expect(jobs(doc).map(([name]) => name).sort()).toEqual([
+      "grim-indexer:probe",
       "grim-indexer:publish",
       "grim-indexer:stats",
       "grim-indexer:validate",
