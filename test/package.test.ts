@@ -65,6 +65,16 @@ describe("published manifest", () => {
     }
   });
 
+  // Shiki's packages are versioned in lockstep, and a transformers release that
+  // lags the highlighter brings its own `@shikijs/core`: two engines in one
+  // tree, with the class registry of one fed by the other's output.
+  it("installs @shikijs/transformers at the version of shiki", () => {
+    const installed = (name: string) =>
+      (JSON.parse(fs.readFileSync(path.join(root, "node_modules", name, "package.json"), "utf8")) as { version: string })
+        .version;
+    expect(installed("@shikijs/transformers")).toBe(installed("shiki"));
+  });
+
   // Trusted publishing attaches a sigstore provenance bundle naming the repo
   // that built the tarball. npm cross-checks it against `repository.url` and
   // rejects the publish with a 422 if they disagree — which is only visible
