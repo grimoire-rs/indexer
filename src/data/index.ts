@@ -176,6 +176,11 @@ function sweepLogos(dir: string, id: string): void {
   }
 }
 
+/** The bytes of `all.json`: the frozen legacy serializer, shared by the conformance generator. */
+export function serializeAll(packages: readonly IndexRecord[]): string {
+  return JSON.stringify(packages, null, 1) + "\n";
+}
+
 export async function compileIndex(opts: CompileOptions): Promise<CompileResult> {
   const { root, outDir } = opts;
   const indexDir = path.join(root, "index");
@@ -221,7 +226,7 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
   fs.mkdirSync(outDir, { recursive: true });
   // A marketplace-only repo has no `index/`.
   if (fs.existsSync(indexDir)) fs.cpSync(indexDir, path.join(outDir, "index"), { recursive: true });
-  fs.writeFileSync(path.join(outDir, "all.json"), JSON.stringify(packages, null, 1) + "\n");
+  fs.writeFileSync(path.join(outDir, "all.json"), serializeAll(packages));
   for (const { rel, src, ext } of logos) {
     // Read and checked in one step: what is published is the bytes that pass here.
     const read = readRegular(src, MAX_LOGO_BYTES);
