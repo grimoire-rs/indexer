@@ -98,6 +98,48 @@ is refused at the root of `theme/` only — a file of that name under
     repository content and is trusted as such — see
     [Security and trust](../explanation/security-and-trust-model.md).
 
+## Theme packages
+
+A theme can ship as an npm package instead of living in your repository. Name
+it in `index.config.json` and install it:
+
+```json
+{ "theme": "@acme/grimoire-index-theme" }
+```
+
+The package is found the way Node finds any dependency of the index root, so
+`npm`, `pnpm` and `yarn` installs all work. It needs no JS entry and its
+`exports` map may hide `package.json`. Its layout:
+
+```
+@acme/grimoire-index-theme/
+  package.json   peerDependencies: { "@grimoire-rs/indexer": "^0.5" }
+  theme/         overlay, same rules as your own theme/
+  public/        static files
+  theme.css      inlined before your customCss
+```
+
+Each part is optional. Every layer sits between the renderer's own files and
+yours, so your repository still wins:
+
+| Layer | Overlay | Static | CSS |
+|---|---|---|---|
+| renderer | shipped sources | shipped `public/` | token sheet |
+| theme package | `<pkg>/theme` | `<pkg>/public` | `<pkg>/theme.css` |
+| index repo | `theme/` | `public/` | `customCss` |
+
+The package's `theme/` gets the same refusals and the same stderr lines as
+yours, prefixed with the package name:
+
+```
+@acme/grimoire-index-theme/theme/components/SiteHeader.astro: replaces a file shipped by grimoire-indexer 0.5.10
+```
+
+`@grim-original/*` still names the renderer's shipped file, not the package's.
+
+A package that is not installed fails the build before anything is staged.
+`dev` reads the package once at start, so restart it after an upgrade.
+
 ## Stability
 
 | Tier | Covers | What you can rely on |

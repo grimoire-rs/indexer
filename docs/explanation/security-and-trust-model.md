@@ -63,6 +63,8 @@ already refuses those PRs. It does mean:
 - The build job's token is available to whatever `theme/` runs. Keep that job's
   permissions minimal.
 - A dependency you import from a theme page is a dependency of your build.
+- A `theme` package from `index.config.json` is the same: its files run at
+  build time like your own `theme/`. Pin it in your lockfile.
 
 The two paths the overlay
 [refuses](../reference/theme-overlay.md#what-the-overlay-refuses) —

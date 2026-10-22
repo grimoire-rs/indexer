@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { buildSite, indexerVersion } from "../../src/renderer/index.js";
+import { buildSite, indexerVersion, RenderInputError } from "../../src/renderer/index.js";
 import type { SiteConfig } from "../../src/config.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -124,6 +124,8 @@ const config: SiteConfig = {
 async function render(
   theme: Record<string, string>,
   overrides: SiteConfig = {},
+  /** Files of a `theme` package, installed as `@acme/theme`. */
+  pkg: Record<string, string> = {},
 ): Promise<(rel: string) => Promise<string>> {
   // Same shipping shape `build.test.ts` uses: a bare directory with no
   // `node_modules` anywhere on its parent chain.
@@ -152,6 +154,18 @@ async function render(
     const file = path.join(root, "theme", rel);
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, content);
+  }
+
+  // pnpm's shape: `node_modules/@acme/theme` is a symlink into a store.
+  if (Object.keys(pkg).length > 0) {
+    const store = path.join(root, ".store", "acme-theme");
+    for (const [rel, content] of Object.entries(pkg)) {
+      const file = path.join(store, rel);
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      await fs.writeFile(file, content);
+    }
+    await fs.mkdir(path.join(decoy, "@acme"), { recursive: true });
+    await fs.symlink(store, path.join(decoy, "@acme", "theme"), "junction");
   }
 
   await buildSite({ root, outDir, config: { ...config, ...overrides } });
@@ -383,13 +397,14 @@ const { value, label, name } = Astro.props;
 async function renderCapturing(
   theme: Record<string, string>,
   overrides: SiteConfig = {},
+  pkg: Record<string, string> = {},
 ): Promise<{ read: (rel: string) => Promise<string>; stderr: string[] }> {
   const stderr: string[] = [];
   const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     stderr.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
   });
   try {
-    return { read: await render(theme, overrides), stderr };
+    return { read: await render(theme, overrides, pkg), stderr };
   } finally {
     spy.mockRestore();
   }
@@ -599,5 +614,69 @@ describe("the staging directory", () => {
     );
     const deps = (manifest as { dependencies?: Record<string, string> }).dependencies ?? {};
     expect(Object.keys(deps)).toContain("preact-render-to-string");
+  });
+});
+
+describe("a theme package", () => {
+  const PKG_PAGE = (who: string) => `<html><body><p data-testid="pkg-page">${who}</p></body></html>\n`;
+  let pkgRead: (rel: string) => Promise<string>;
+  let stderr: string[];
+
+  beforeAll(async () => {
+    ({ read: pkgRead, stderr } = await renderCapturing(
+      { "pages/pkg.astro": PKG_PAGE("root") },
+      { theme: "@acme/theme", customCss: "theme.css" },
+      {
+        // An `exports` map that hides the manifest, and no JS entry at all.
+        "package.json": JSON.stringify({ name: "@acme/theme", exports: { "./theme.css": "./theme.css" } }),
+        "theme/components/SiteHeader.astro": OVERRIDDEN_HEADER,
+        "theme/pages/pkg.astro": PKG_PAGE("package"),
+        "theme/lib/data.ts": DENIED_DATA,
+        "public/pkg.txt": "from the package\n",
+        "theme.css": ".pkg-sheet{}\n",
+      },
+    ));
+  }, 120_000);
+
+  it("layers the package below the index's own theme", async () => {
+    // The package header wins over the shipped one ...
+    expect(await pkgRead("index.html")).toContain('data-testid="acme-header"');
+    // ... and the root's page wins over the package's.
+    expect(await pkgRead("pkg/index.html")).toContain(">root<");
+  });
+
+  it("serves the package's public/ and inlines its theme.css before customCss", async () => {
+    expect(await pkgRead("pkg.txt")).toBe("from the package\n");
+    const html = await pkgRead("index.html");
+    const pkgAt = html.indexOf(".pkg-sheet{}");
+    expect(pkgAt).toBeGreaterThan(-1);
+    expect(html.indexOf("rgb(1 2 3)")).toBeGreaterThan(pkgAt);
+  });
+
+  it("applies the deny-list to the package, naming it", async () => {
+    expect(await pkgRead("index.html")).not.toContain("DENIED-lib-was-copied");
+    expect(stderr).toContain("@acme/theme/theme/lib: not overlaid — grimoire-indexer keeps its own copy of this path");
+    expect(stderr).toContain(
+      `@acme/theme/theme/components/SiteHeader.astro: replaces a file shipped by grimoire-indexer ${indexerVersion()}`,
+    );
+  });
+
+  it("refuses an uninstalled package before staging", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "index-theme-missing-"));
+    const outDir = path.join(root, "dist");
+    await fs.cp(FIXTURE, root, { recursive: true });
+    await fs.mkdir(outDir, { recursive: true });
+    await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
+    try {
+      const err: unknown = await buildSite({ root, outDir, config: { ...config, theme: "@acme/missing" } }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(RenderInputError);
+      expect(String(err)).toContain("theme: package @acme/missing not found");
+      expect((await fs.readdir(root)).filter((n) => n.startsWith(".index-"))).toEqual([]);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });

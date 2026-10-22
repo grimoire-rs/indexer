@@ -157,6 +157,11 @@ export interface SiteConfig {
    * default token set; unlayered, so it wins over every default rule.
    */
   customCss?: string | null;
+  /**
+   * npm package name of a theme, resolved from the index root. Its `theme/`,
+   * `public/` and `theme.css` are layered below the index's own.
+   */
+  theme?: string | null;
 }
 
 /**
@@ -211,6 +216,7 @@ export const DEFAULT_CONFIG: Required<SiteConfig> = {
   footerLinks: [],
   attribution: true,
   customCss: null,
+  theme: null,
 };
 
 /** Thrown for a malformed config file — a user data problem, not a bug. */
@@ -418,7 +424,7 @@ function validate(raw: unknown): SiteConfig {
     }
   }
 
-  for (const key of ["brand", "brandMark", "description", "tagline", "favicon", "footerNote", "notice", "customCss", "logo"]) {
+  for (const key of ["brand", "brandMark", "description", "tagline", "favicon", "footerNote", "notice", "customCss", "logo", "theme"]) {
     optionalString(cfg, key);
   }
   for (const key of ["docsUrl", "installDocsUrl", "repoUrl"]) {

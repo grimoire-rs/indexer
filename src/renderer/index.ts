@@ -11,6 +11,7 @@ import fs from "node:fs/promises";
 // `readFileSync` too, for `indexerVersion` below: the manifest is read at
 // call time rather than imported, and nothing here is on a hot path.
 import { mkdirSync, readFileSync, watch, type FSWatcher } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, dev } from "astro";
@@ -238,7 +239,9 @@ function overlayFilter(
 }
 
 /**
- * Lay `<root>/theme` over the staged sources. Absent is the normal case.
+ * Lay one theme directory over the staged sources — a theme package's
+ * `theme/`, then `<root>/theme`. Absent is the normal case. `label` is how
+ * the directory is named on stderr: `theme` or `<package>/theme`.
  *
  * `force` is half the mechanism: an overlaid file that names a shipped path
  * wins, and one that names a new path is simply added. `overlayFilter` is
@@ -254,21 +257,20 @@ function overlayFilter(
  * overlaid, so the claim would simply be false. A path that only adds a file
  * earns neither, because adding one is no compatibility risk.
  */
-async function overlayTheme(root: string, src: string): Promise<void> {
-  const theme = path.join(root, THEME_DIR);
+async function overlayTheme(theme: string, src: string, label: string): Promise<void> {
   if (!(await exists(theme))) return;
   await fs.cp(theme, src, {
     recursive: true,
     force: true,
     filter: overlayFilter(theme, (rel) => {
       console.error(
-        `theme/${rel}: not overlaid — grimoire-indexer keeps its own copy of this path`,
+        `${label}/${rel}: not overlaid — grimoire-indexer keeps its own copy of this path`,
       );
     }),
   });
   for (const rel of await replacedShippedPaths(theme)) {
     console.error(
-      `theme/${rel}: replaces a file shipped by grimoire-indexer ${indexerVersion()}`,
+      `${label}/${rel}: replaces a file shipped by grimoire-indexer ${indexerVersion()}`,
     );
   }
 }
@@ -542,6 +544,33 @@ async function readCustomCss(root: string, customCss: string | null): Promise<st
 }
 
 /**
+ * Locate the `theme` package's directory, as Node would from the index root.
+ *
+ * Probes `<node_modules>/<name>/package.json` rather than resolving it: a
+ * theme package ships no JS entry, and an `exports` map may hide the
+ * manifest.
+ */
+async function resolveThemePackage(root: string, name: string | null): Promise<ThemePackage | null> {
+  if (!name) return null;
+  const dirs = createRequire(path.join(root, "package.json")).resolve.paths(name) ?? [];
+  for (const dir of dirs) {
+    const pkg = path.join(dir, name);
+    if (await exists(path.join(pkg, "package.json"))) return { name, dir: pkg };
+  }
+  throw new RenderInputError(`theme: package ${name} not found from ${root} — install it`);
+}
+
+/** A resolved `theme` package: its configured name and its directory. */
+type ThemePackage = { name: string; dir: string };
+
+/** A theme package's optional `theme.css`. Absent = none. */
+async function readThemeCss(pkg: ThemePackage | null): Promise<string> {
+  if (!pkg) return "";
+  const file = path.join(pkg.dir, "theme.css");
+  return (await exists(file)) ? fs.readFile(file, "utf8") : "";
+}
+
+/**
  * What Vite must be able to resolve from the Astro root. An index repo has
  * none of them — `npx @grimoire-rs/indexer build` runs with no local install — so
  * the staged root gets a `node_modules/` of symlinks to wherever *this*
@@ -653,10 +682,11 @@ async function stage(
   marketplaceFiles: LoadedMarketplace["files"] = new Map(),
   /** The site's base path without a trailing slash (`""` at a domain root). */
   base = "",
+  themePackage: ThemePackage | null = null,
 ): Promise<{ dir: string; src: string; original: string }> {
   const dir = await fs.mkdtemp(path.join(root, ".index-"));
   try {
-    return await stageInto(dir, root, outDir, srcDir, marketplaceFiles, base);
+    return await stageInto(dir, root, outDir, srcDir, marketplaceFiles, base, themePackage);
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true });
     throw err;
@@ -671,6 +701,7 @@ async function stageInto(
   srcDir: string | undefined,
   marketplaceFiles: LoadedMarketplace["files"],
   base: string,
+  themePackage: ThemePackage | null,
 ): Promise<{ dir: string; src: string; original: string }> {
   // A caller-supplied `srcDir` is used in place of the staged copy: Vite
   // watches `srcDir` directly, so dev edits in the working tree hot-reload.
@@ -687,7 +718,10 @@ async function stageInto(
     // `@grim-original/` (see `inlineConfig`) keeps resolving to the shipped
     // file even once `overlayTheme` has replaced it under `src`.
     original = await stagePristineCopy(dir);
-    await overlayTheme(root, src);
+    if (themePackage) {
+      await overlayTheme(path.join(themePackage.dir, THEME_DIR), src, `${themePackage.name}/${THEME_DIR}`);
+    }
+    await overlayTheme(path.join(root, THEME_DIR), src, THEME_DIR);
     await warnUnparseableTsconfig(root);
   } else {
     // No overlay ever touches a caller-supplied `srcDir` (see above), so
@@ -730,7 +764,9 @@ async function stageInto(
 
   const staticDir = path.join(dir, "public");
   await fs.mkdir(staticDir, { recursive: true });
-  for (const layer of [DEFAULT_PUBLIC_DIR, path.join(root, "public"), outDir]) {
+  const layers = [DEFAULT_PUBLIC_DIR, path.join(root, "public"), outDir];
+  if (themePackage) layers.splice(1, 0, path.join(themePackage.dir, "public"));
+  for (const layer of layers) {
     // ponytail: copy, not rename — an index's data is kilobytes plus logos.
     if (await exists(layer)) await fs.cp(layer, staticDir, { recursive: true, force: true });
   }
@@ -798,7 +834,11 @@ async function resolveInputs(opts: BuildSiteOptions) {
   // Downstream of the join, because the `updated` it publishes is read off
   // the packages themselves.
   const stats = publishedStats(packages, sidecar);
-  const css = await readCustomCss(opts.root, config.customCss);
+  const themePackage = await resolveThemePackage(opts.root, config.theme);
+  // The package's sheet first, so the index's own `customCss` overrides it.
+  const css = [await readThemeCss(themePackage), await readCustomCss(opts.root, config.customCss)]
+    .filter(Boolean)
+    .join("\n");
   const loaded = loadMarketplace(opts.root, packages);
   // The page prints `logo` as a site path; the file is copied there by `stageMarketplace`.
   const marketplace = loaded && {
@@ -823,6 +863,7 @@ async function resolveInputs(opts: BuildSiteOptions) {
     config,
     packages,
     css,
+    themePackage,
     stats,
     marketplace,
     marketplaceFiles: loaded?.files ?? new Map(),
@@ -957,7 +998,7 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
     );
   }
   // Same route as `stats.json`: `outDir` is `stage`'s last `public/` layer.
-  const staged = await stage(opts.root, opts.outDir, undefined, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""));
+  const staged = await stage(opts.root, opts.outDir, undefined, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
   const astro = inlineConfig(opts, staged, inputs);
 
   // Astro routes its server build through `<cwd>/.astro/` whenever `outDir`
@@ -1242,7 +1283,7 @@ export function urlHost(address: string): string {
 
 export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
   const inputs = await resolveInputs(opts);
-  const staged = await stage(opts.root, opts.outDir, opts.srcDir, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""));
+  const staged = await stage(opts.root, opts.outDir, opts.srcDir, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
   const astro = inlineConfig(opts, staged, inputs);
   const cwd = process.cwd();
   process.chdir(staged.dir);

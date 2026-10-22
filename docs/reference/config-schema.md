@@ -142,6 +142,7 @@ trust](../explanation/security-and-trust-model.md).
 | Key | Type | Default | Effect |
 |---|---|---|---|
 | `customCss` | string \| null | `null` | Path to a CSS file, relative to the index root. Inlined unlayered and last |
+| `theme` | string \| null | `null` | npm package name of a theme, resolved from the index root. Its `theme/`, `public/` and `theme.css` sit below the index's own. See [Theme packages](theme-overlay.md#theme-packages) |
 
 The path is contained to the index root: a public index takes contribution PRs
 and `grim-indexer validate` builds them, so an unconstrained path would let a
