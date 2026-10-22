@@ -22,6 +22,7 @@ export default tseslint.config(
       "coverage/**",
       "node_modules/**",
       ".dev/**",
+      ".bench/**",
       "site/**",
       ".agents/worktrees/**",
       // `task quality:web` artifacts — two generated catalog sites and the
