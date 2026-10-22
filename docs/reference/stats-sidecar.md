@@ -7,6 +7,12 @@ often the artifact was pulled; and `updated`, when that artifact last moved. It
 is the read contract every client shares: `grim`, this renderer, and the VS Code
 extension all read the same file, and none of them writes it.
 
+The build publishes the document twice. `stats.json` is the frozen path, and it
+exists while `sync.legacy` is true. The same bytes also sit in a gzip blob at
+`c/f/sha256/<digest>.json.gz`. `c/root.json` names it in its `stats` field, with
+the digest and size of the inflated JSON. The root's `stats` is `null` when the
+build has no stats. See [Output layout](output-layout.md#the-root).
+
 ```json
 {
   "schema_version": 1,
@@ -38,7 +44,7 @@ extension all read the same file, and none of them writes it.
 | Key | Type | Meaning |
 |---|---|---|
 | `schema_version` | int | Monotonic. Currently `1`. |
-| `generated_at` | string | RFC 3339, UTC. |
+| `generated_at` | string | RFC 3339, UTC. When no ratings job ran, the newest `updated` across the index's packages, or the Unix epoch when none of them parses. |
 | `providers` | object | Which backend produced each signal, keyed by stat name. `providers.rating` is `"github"` or `"gitlab"`. |
 | `providers.rating_host` | string | The forge host those threads live on — host authority only (`host` or `host:port`), no scheme and no path. Derived from the GraphQL endpoint the tally run actually used, so a GHES or self-managed GitLab index publishes its own instance with no extra configuration. Absent ⇒ the consumer's built-in default for `providers.rating`. |
 | `entries` | object | Keyed by artifact ref, **exactly as that ref appears in `all.json`**. |
@@ -190,12 +196,33 @@ error, which is indistinguishable from "nothing has been pulled yet" — so the
 collector cross-checks `GET /api/repositories` and fails the run rather than
 publishing a zero that looks like a fact.
 
-Re-rendering with either block present adds one job to the generated pipeline
-(`stats` on GitHub, `grim-indexer:stats` on GitLab), an hourly schedule, and a
-seed step in the deploy. The seed step is what keeps a failed collector from
-emptying a published stat: it reads the currently published `stats.json` and
-carries it forward per stat key, and it fails the job rather than treating an
-unreadable seed as an empty one.
+Re-rendering with either block present adds a job to the generated pipeline
+(`stats` on GitHub, `grim-indexer:stats` on GitLab). It also adds an hourly
+schedule and a seed step in the deploy. The seed step is what keeps a failed
+collector from emptying a published stat. It runs `grim-indexer stats-seed`,
+which reads the stats the site currently publishes and carries them forward per
+stat key. It fails the job rather than treating an unreadable seed as an empty
+one.
+
+### Seeds read through the root
+
+Every seed reads `<site>/c/root.json` first, then the stats blob it names, and
+checks the blob's digest and size over the inflated bytes. The `ratings` and
+`downloads` collectors seed the same way, so a site with `sync.legacy: false`,
+which serves no `stats.json`, seeds too. A shell fetch of `/stats.json` would
+read that 404 as a first run and publish with every rating gone.
+
+| What the seed finds | Result |
+|---|---|
+| A root that names a stats blob | The blob is the seed. A blob that cannot be read fails the seed with exit 69. One that does not inflate, verify or parse fails it with exit 65 |
+| A root 404, or a valid root with `stats: null` | The seed falls back to `<site>/stats.json`. A 404 there too means nothing is published yet, and the seed is empty |
+| A root that cannot be read by any answer but 404 | The seed fails with exit 69 and publishes nothing |
+| A 200 answer that is not a valid root | The seed fails with exit 65 |
+
+An on-disk `.stats.json` from an earlier producer in the same job still wins.
+Each collector writes a whole fresh document, so the second one seeds from the
+file the first left, never from the site. See
+[`stats-seed`](cli.md#grim-indexer-stats-seed) for the flags and exit codes.
 
 **One job for both collectors, not one each**, and that is correctness rather
 than thrift. Each collector writes a *whole fresh* document seeded from the
@@ -218,31 +245,33 @@ republishes a `stats.json` carrying `updated` and nothing else. The sidecar is
 never committed — it is a build input the deploy publishes — so there is no
 history to unwind either way.
 
-## The enrichment checkpoint
+## The enrichment state
 
-`enrich` skips work by digest, and every one of those comparisons reads
-`enrich/<namespace>/<name>/data.json` off disk. The scaffolded CI never has
-that file — the sidecars live only in the deploy job's workspace and are
-committed nowhere — so without help every deploy re-downloads every README,
-changelog, logo and payload, and re-dates every artifact that carries no
-`created` of its own.
+`enrich` skips work by digest. Every comparison reads a package's entry from
+the enrich plane. The scaffolded CI commits nothing, so `enrich/` is empty on
+every run. Without the plane, every deploy would download every README,
+changelog, logo and payload again. It would also re-date every artifact that
+carries no `created` of its own.
 
-So `build` publishes `enrich.json` beside `all.json`, and
-`grim-indexer enrich --seed` reads it back from `<site>/enrich.json` before
-refreshing. The live site is the checkpoint, the same arrangement the ratings
-sidecar already uses. The generated CI passes `--seed`; re-render with
-`npm run ci` to pick it up.
+So `enrich` starts from the plane the live site publishes. It reads
+`<site>/c/root.json` and takes `planes.enrich`. It loads the plane index and the
+shards from the blob store in `.grim-index-state/b` when that holds the digest.
+Otherwise it fetches them from `<site>/c/p/` and `<site>/c/s/`. Every file is
+checked by sha256 and size. `build` publishes the plane `enrich` hands off, so
+the next run finds it.
 
 Unlike `stats.json`, **this is not a read contract.** Nothing outside this
-package reads it, its shape may change without notice, and no client should
-code against it.
+package reads the plane. Its shape may change without notice, and no client
+should code against it.
 
-Failure is never fatal: an unreachable, oversized, unparseable or
-unrecognised checkpoint warns and seeds nothing, and the run does the full
-download it would have done anyway. A checkpoint that disagrees with itself —
-claiming a README it does not carry — has the digest that guards that file
-dropped, so the next run fetches it rather than trusting a stale flag.
+Failure is never fatal. A shard that is missing or fails its check makes only
+its bucket cold, and its packages are enriched in full. A root that cannot be
+read, or a `site` that is unset or not https, makes the whole run cold. A cold
+run does the full download it would have done anyway. A package whose stored
+files are missing from the blob store is enriched in full too. A stale flag
+therefore never stands in for a file that is gone.
 
-`describe` still runs once per package and is never skipped, so CI still
-installs `grim` and still makes one round trip each. The checkpoint saves the
-downloads, not the probe.
+A warm run makes two probe calls per due package. A new or cold package costs
+three calls. A changed warm package costs five: its two probes, then three more
+for the full path. See [`enrich`](cli.md#grim-indexer-enrich) for the buckets,
+the backoff and the time budget.

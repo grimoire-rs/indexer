@@ -40,9 +40,9 @@ see [Reuse shipped components](reuse-components.md).
 site logo.
 
 Every page carries a hash-based Content-Security-Policy. An inline `<script>`
-or `<style>` block you write runs, but a `style=""` attribute or an `onclick=""`
-handler is blocked: use a class, and `addEventListener` in a script. Scripts and
-stylesheets must come from the site's own origin.
+or `<style>` block you write runs. A `style=""` attribute or an `onclick=""`
+handler is blocked, so use a class, and `addEventListener` in a script. Scripts
+and stylesheets must come from the site's own origin.
 
 ## Link it
 

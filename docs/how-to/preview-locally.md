@@ -8,6 +8,10 @@ npm run dev
 what you see is what deploys. It is the review loop for an entry, a branding
 change, or a page you added.
 
+`dev` makes no network request. It reads the hand-off that `enrich` left in
+`.grim-index-state/`, and it never removes `/all.json`, whatever `sync.legacy`
+says.
+
 ## What reloads
 
 | Change | Reloads |

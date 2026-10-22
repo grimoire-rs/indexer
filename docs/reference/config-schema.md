@@ -12,7 +12,7 @@ pointing at `grimoire-rs/index`) and `registry` (which handed out a working
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `site` | string | `https://index.grimoire.rs` | Canonical deployment URL. Its path becomes the site's base prefix, so a project-Pages subpath belongs here. Also the ratings seed origin |
+| `site` | string | `https://index.grimoire.rs` | Canonical deployment URL. Its path becomes the site's base prefix, so a project-Pages subpath belongs here. Also the origin `enrich`, `state-key` and the stats seeds read the published root from |
 | `brand` | string | `grim package index` | Header text, `<title>`, landing `<h1>` |
 | `brandMark` | string | `grim` | Accent-styled monospace prefix of `brand`. Applies only when it really is the leading run |
 | `description` | string | *(see source)* | `<meta name="description">` |
@@ -23,6 +23,17 @@ pointing at `grimoire-rs/index`) and `registry` (which handed out a working
 `site` is the strictest URL key, deliberately: it is the only one that is
 *fetched* as well as published. No userinfo (`https://real@evil/` reads as one
 host and fetches another), no query, no fragment, lowercase scheme.
+
+`enrich` and `state-key` read `<site>/c/root.json`. `stats-seed`, `ratings` and
+`downloads` read the stats blob that root names. All of them need a `site` that
+`index.config.json` sets itself, because the built-in default names another
+index. The commands differ in what they accept:
+
+| Command | `site` unset or not usable |
+|---|---|
+| `enrich` | Warns and builds cold. Plain `http` is accepted for a loopback host only |
+| `state-key` | Exits 65 and prints nothing, so CI builds cold and saves nothing |
+| `stats-seed`, `ratings`, `downloads` | Exit 65. They accept `https` only |
 
 ## Navigation
 
@@ -175,6 +186,90 @@ token key — the credential comes from the job, never from a committed file.
 [The `stats.json` sidecar](stats-sidecar.md) for both blocks in full, for the
 published shape, and for why the two collectors share one CI job.
 
+## Sync
+
+How the index publishes its catalog, and how often `enrich` checks the
+registry. The block is optional, and so is every key in it.
+
+```json
+{ "sync": { "layout": "flat", "legacy": true, "revalidate": "1h" } }
+```
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `sync.layout` | `"flat"` \| `"anchored"` | `"flat"` | Whether `c/root.json` names the catalog file |
+| `sync.legacy` | boolean | `true` | Also publish `/all.json` and `/stats.json` at their frozen paths. `false` publishes only `c/`. The `true` default is deprecated; see [Upgrade notes](../ops/upgrade-notes.md#legacy-default) |
+| `sync.revalidate` | string | `"1h"` | How often `enrich` checks each bucket of packages against the registry. `<n>m`, `<n>h` or `<n>d`, from `15m` to `7d` |
+
+Every layout publishes [`c/root.json`](output-layout.md#the-root) and, once
+`enrich` has run, the [enrich plane](output-layout.md#the-enrich-plane). The
+layouts differ in one file.
+
+| `layout` | The root's `flat` | `c/f/` holds |
+|---|---|---|
+| `flat` | `null` | The stats blob, when the build has stats |
+| `anchored` | The catalog blob | The catalog blob and the stats blob |
+
+Under `flat`, clients keep reading `/all.json`. Under `anchored`, a client that
+reads the root fetches the catalog from `c/f/` and downloads it again only when
+its digest changes. Clients that do not read the root are unaffected. The blob
+adds about 7 MB to the site at 20,000 entries. Set `flat` again and the root's
+`flat` goes back to `null` on the next deploy. `tree` is reserved: it is not a
+valid value yet.
+
+### `legacy: false`
+
+`false` needs `layout: "anchored"`. After the site step the build removes
+`dist/all.json`, `dist/stats.json` and their `.gz` siblings, and the footer no
+longer links to `/all.json`. The `/p/<namespace>/<name>/` pages are site output
+and stay. `true` returns the files on the next deploy.
+
+What `false` costs:
+
+- **Older `grim` cannot read the index.** `grim` 0.15.0 and older read only
+  `/all.json` and never request `c/`. Once the file is gone they cannot refresh
+  the index, and a cold install shows no packages. `grim` 0.15.0 keeps what it
+  cached. `grim` 0.14.3 and older lose the index's rows once their one-hour
+  cache expires. Set `false` only when none of them remains.
+- **The site's own search degrades.** The catalog page fetches `/all.json` the
+  first time a reader types. With that file gone, the fetch fails and the page
+  filters by plain substring. It searches the fields each card carries: name,
+  description, namespace, kind, ref, summary and keywords. The marketplace
+  search reads `/marketplace/all.json` and is unaffected.
+- **The stats seeds read through the root.** `stats-seed`, `ratings` and
+  `downloads` take the previous stats from the blob the root names. A site with
+  no `/stats.json` therefore seeds as before. See [the sidecar
+  reference](stats-sidecar.md#producing-it).
+- **Retention matters.** With `site` unset or `ci.enrich: false`, nothing keeps
+  the previous root's files. The build warns that a stale-edge root can name a
+  pruned blob and fail a refresh.
+
+### Sync errors
+
+Each case below fails the build with exit 65, naming the key. The message
+starts with `index.config.json:`.
+
+| Input | Message |
+|---|---|
+| `sync` is not an object | `sync must be an object` |
+| `layout` is anything but `flat` or `anchored`, `tree` included | `sync.layout must be "flat" or "anchored"`, with `("tree" is reserved)` appended for `tree` |
+| `legacy` is not a boolean | `sync.legacy must be a boolean` |
+| `legacy: false` with `layout: flat` | `sync.legacy: false needs sync.layout: "anchored"`, because `flat` would publish no catalog file |
+| `revalidate` is not a whole number of 1 or more followed by `m`, `h` or `d`, or lies outside `15m` to `7d` | `sync.revalidate must be a whole number of m, h or d between 15m and 7d` |
+
+A key inside `sync` that nothing reads is a warning, not a failure, and names
+`sync.<key>`. An indexer that predates the block warns that nothing reads
+`sync` and builds flat.
+
+### `revalidate`
+
+`enrich` checks each of 256 buckets of pointers once per window, staggered so
+the buckets do not fall due together. A longer window means fewer registry calls
+and a release that reaches the site up to one window later. Each bucket also
+gets a full pass once per rotation: seven windows, capped at seven days. A
+failing ref waits one window before its next attempt. See
+[`enrich`](cli.md#grim-indexer-enrich).
+
 ## Structure
 
 Not a config key: `theme/` is a directory, not a setting. See
@@ -182,8 +277,8 @@ Not a config key: `theme/` is a directory, not a setting. See
 
 ## Errors
 
-A malformed config is a user data problem, not a bug — the build fails with a
-message naming the key. `index.config.json` missing entirely is not an error:
+A malformed config is a user data problem, not a bug — the build fails with exit
+65 and a message naming the key. `index.config.json` missing entirely is not an error:
 an index that wants the defaults ships no config at all.
 
 A top-level key nothing reads is a warning, not a failure:
