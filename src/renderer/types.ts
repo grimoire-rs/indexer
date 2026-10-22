@@ -10,6 +10,7 @@
 import type { IndexRecord } from "../data/index.js";
 import type { ResolvedSiteConfig } from "../config.js";
 import type { LocalMarketplace, SiteMode } from "../marketplace/read.js";
+import type { BlobRef } from "../emit/root.js";
 
 /**
  * A record from `all.json` viewed through the fields the catalog renders.
@@ -136,4 +137,26 @@ export interface GrimoireData {
    * unchanged index. `all.json` — the frozen byte contract — is untouched.
    */
   builtAt: string;
+  /**
+   * SHA-256 of the published search file and stats blob, `null` when this
+   * build published none. Inlined into the page so the island can name the
+   * immutable URL it fetches.
+   */
+  digests: { search: string | null; stats: string | null };
+  /** Whether the page inlines every card instead of the first screenful. */
+  inlineCatalog: boolean;
 }
+
+/** What `prepareSiteSearch` published; `null` where nothing was. */
+export type SiteDigests = { search: BlobRef | null; stats: BlobRef | null };
+
+/** What `capPages` did to the package pages. */
+export type PageCapReport = { cut: number; hardCut: number; overCap: string[] };
+
+/** What one `buildSite` run produced and measured. */
+export type SiteFacts = SiteDigests & {
+  astroMs: number;
+  /** Bytes under the staged `.astro/` just before it is removed. */
+  astroDirBytes: number;
+  pages: PageCapReport;
+};

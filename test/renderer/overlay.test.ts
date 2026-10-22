@@ -14,7 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "parse5";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { buildSite, indexerVersion, RenderInputError } from "../../src/renderer/index.js";
+import { buildSite, indexerVersion, overlayTheme, RenderInputError } from "../../src/renderer/index.js";
 import type { SiteConfig } from "../../src/config.js";
 import { attr, cspPolicy, elements, type Element } from "./html.js";
 
@@ -570,6 +570,60 @@ describe("the overlay deny-list", () => {
     const html = await denyRead("index.html");
     expect(html).toContain('data-testid="wrapped-field"');
     expect(html).toContain("data-copy-name");
+  });
+});
+
+// C-014. `overlayTheme` is called on its own: what it reports is the flag the
+// build threads into `__GRIMOIRE_DATA__`, and a build is not needed to see it.
+describe("replacing what the home page's card list depends on", () => {
+  const INLINE_NOTE = "the home page inlines every card while this file is replaced";
+
+  /** Overlay a theme holding `files` and return the flag and the stderr lines. */
+  async function overlay(files: string[]): Promise<{ inlines: boolean; stderr: string[] }> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "index-inline-"));
+    try {
+      for (const rel of files) {
+        const file = path.join(dir, "theme", rel);
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await fs.writeFile(file, "\n");
+      }
+      const stderr: string[] = [];
+      const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+        stderr.push(args.map(String).join(" "));
+      });
+      try {
+        const inlines = await overlayTheme(path.join(dir, "theme"), path.join(dir, "src"), "theme");
+        return { inlines, stderr };
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it.each(["components/Catalog.tsx", "pages/index.astro"])(
+    "says so once, right after the replacement line, for %s",
+    async (rel) => {
+      const { inlines, stderr } = await overlay([rel]);
+      expect(inlines).toBe(true);
+      expect(stderr).toEqual([
+        `theme/${rel}: replaces a file shipped by grimoire-indexer ${indexerVersion()}`,
+        `theme/${rel}: ${INLINE_NOTE}`,
+      ]);
+    },
+  );
+
+  it("stays quiet for any other replaced component", async () => {
+    const { inlines, stderr } = await overlay(["components/PackageCard.tsx"]);
+    expect(inlines).toBe(false);
+    expect(stderr.filter((l) => l.includes(INLINE_NOTE))).toEqual([]);
+  });
+
+  it("stays quiet for a page that only adds a file", async () => {
+    const { inlines, stderr } = await overlay(["pages/setup.astro"]);
+    expect(inlines).toBe(false);
+    expect(stderr).toEqual([]);
   });
 });
 

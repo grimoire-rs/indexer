@@ -37,10 +37,13 @@ import {
   type LoadedMarketplace,
 } from "../marketplace/read.js";
 import { navFor } from "./astro/lib/nav.js";
-import type { CatalogPackage } from "./types.js";
+import type { CatalogPackage, GrimoireData, SiteDigests, SiteFacts } from "./types.js";
 import { SHIKI_CLASSES, SHIKI_THEMES } from "./astro/lib/code.js";
 import { markdownProcessor } from "./markdown.js";
 import { postProcessSite } from "./postprocess.js";
+import { capPages } from "./pagecap.js";
+import { prepareSiteSearch } from "./site-search.js";
+import { writeSitemap } from "./sitemap.js";
 
 export interface BuildSiteOptions {
   /** Index repo root. Astro's root; `enrich/` and `public/` resolve here. */
@@ -242,26 +245,25 @@ function overlayFilter(
 }
 
 /**
- * Lay one theme directory over the staged sources — a theme package's
- * `theme/`, then `<root>/theme`. Absent is the normal case. `label` is how
- * the directory is named on stderr: `theme` or `<package>/theme`.
- *
- * `force` is half the mechanism: an overlaid file that names a shipped path
- * wins, and one that names a new path is simply added. `overlayFilter` is
- * the other half — a path in `OVERLAY_DENY` is not copied at all, here or
- * in `watchTheme`.
- *
- * Two kinds of line reach stderr, and they are disjoint by construction. A
- * denied path is named once, by the filter, as it is refused. A path that
- * survives the filter *and* names a file the renderer ships is named once
- * more, with the version that shipped it — which is what makes the Unstable
- * tier honest about what moved underneath a pinned `^0.4.x`. A denied path
- * earns no replacement line however many shipped files it names: it was not
- * overlaid, so the claim would simply be false. A path that only adds a file
- * earns neither, because adding one is no compatibility risk.
+ * The shipped files that, replaced, send the home page back to inlining
+ * every card (`GrimoireData.inlineCatalog`). The shipped pair renders the
+ * first screenful and loads one search file on first interaction; a
+ * replacement of either may know nothing of that split.
  */
-async function overlayTheme(theme: string, src: string, label: string): Promise<void> {
-  if (!(await exists(theme))) return;
+const INLINING_PATHS = ["components/Catalog.tsx", "pages/index.astro"];
+
+/**
+ * Lay one theme directory over the staged sources — a theme package's
+ * `theme/`, then `<root>/theme`. Absent is the normal case. `label` names the
+ * directory on stderr: `theme` or `<package>/theme`.
+ *
+ * `force` lets an overlaid file win over a shipped path; `overlayFilter` keeps
+ * a path in `OVERLAY_DENY` from being copied, here or in `watchTheme`. A denied
+ * path is named once as refused, a replaced shipped path once more. Returns
+ * whether a file in `INLINING_PATHS` was replaced, so the home page inlines every card.
+ */
+export async function overlayTheme(theme: string, src: string, label: string): Promise<boolean> {
+  if (!(await exists(theme))) return false;
   await fs.cp(theme, src, {
     recursive: true,
     force: true,
@@ -271,11 +273,16 @@ async function overlayTheme(theme: string, src: string, label: string): Promise<
       );
     }),
   });
+  let inlines = false;
   for (const rel of await replacedShippedPaths(theme)) {
     console.error(
       `${label}/${rel}: replaces a file shipped by grimoire-indexer ${indexerVersion()}`,
     );
+    if (!INLINING_PATHS.includes(rel)) continue;
+    inlines = true;
+    console.error(`${label}/${rel}: the home page inlines every card while this file is replaced`);
   }
+  return inlines;
 }
 
 /**
@@ -744,7 +751,7 @@ async function stage(
   /** The site's base path without a trailing slash (`""` at a domain root). */
   base = "",
   themePackage: ThemePackage | null = null,
-): Promise<{ dir: string; src: string; original: string }> {
+): Promise<{ dir: string; src: string; original: string; inlineCatalog: boolean }> {
   const dir = await fs.mkdtemp(path.join(root, ".index-"));
   try {
     return await stageInto(dir, root, outDir, srcDir, marketplaceFiles, base, themePackage);
@@ -763,7 +770,7 @@ async function stageInto(
   marketplaceFiles: LoadedMarketplace["files"],
   base: string,
   themePackage: ThemePackage | null,
-): Promise<{ dir: string; src: string; original: string }> {
+): Promise<{ dir: string; src: string; original: string; inlineCatalog: boolean }> {
   // A caller-supplied `srcDir` is used in place of the staged copy: Vite
   // watches `srcDir` directly, so dev edits in the working tree hot-reload.
   // A copy would freeze the templates at server start.
@@ -773,6 +780,7 @@ async function stageInto(
   // repo's theme into it would edit the renderer's sources under the
   // author's feet. `scripts/dev.mjs` is the only caller that passes one.
   let original: string;
+  let inlineCatalog = false;
   if (!srcDir) {
     await fs.cp(ASTRO_SRC_DIR, src, { recursive: true });
     // Taken *before* the overlay's `force` copy can replace anything, so
@@ -780,9 +788,9 @@ async function stageInto(
     // file even once `overlayTheme` has replaced it under `src`.
     original = await stagePristineCopy(dir);
     if (themePackage) {
-      await overlayTheme(path.join(themePackage.dir, THEME_DIR), src, `${themePackage.name}/${THEME_DIR}`);
+      inlineCatalog = await overlayTheme(path.join(themePackage.dir, THEME_DIR), src, `${themePackage.name}/${THEME_DIR}`);
     }
-    await overlayTheme(path.join(root, THEME_DIR), src, THEME_DIR);
+    inlineCatalog = (await overlayTheme(path.join(root, THEME_DIR), src, THEME_DIR)) || inlineCatalog;
     await warnUnparseableTsconfig(root);
   } else {
     // No overlay ever touches a caller-supplied `srcDir` (see above), so
@@ -832,7 +840,7 @@ async function stageInto(
     if (await exists(layer)) await fs.cp(layer, staticDir, { recursive: true, force: true });
   }
   await stageMarketplace(dir, marketplaceFiles, base);
-  return { dir, src, original };
+  return { dir, src, original, inlineCatalog };
 }
 
 /** Where a plugin's logo is served, before the site's base path. */
@@ -944,7 +952,9 @@ async function resolveInputs(opts: BuildSiteOptions) {
 function inlineConfig(
   opts: BuildSiteOptions,
   staged: Awaited<ReturnType<typeof stage>>,
-  { config, packages, css, marketplace, siteMode, builtAt, base }: Awaited<ReturnType<typeof resolveInputs>>,
+  {
+    config, packages, css, marketplace, siteMode, builtAt, base, digests,
+  }: Awaited<ReturnType<typeof resolveInputs>> & Pick<GrimoireData, "digests">,
   dev: boolean,
 ) {
   return {
@@ -973,7 +983,9 @@ function inlineConfig(
     },
     vite: {
       define: {
-        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, marketplace, siteMode, builtAt, legacy: opts.config.sync?.legacy ?? true }),
+        // Dev serves no stats blob, so a windowed catalog would sort by rating
+        // from rows that carry none: dev inlines every card.
+        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, marketplace, siteMode, builtAt, legacy: opts.config.sync?.legacy ?? true, digests, inlineCatalog: dev || staged.inlineCatalog }),
         __GRIMOIRE_BASE__: JSON.stringify(base),
         __GRIMOIRE_DEV__: JSON.stringify(dev),
       },
@@ -1063,7 +1075,31 @@ function keepAstroOffline(): void {
   process.env.ASTRO_DISABLE_UPDATE_CHECK = "true";
 }
 
-export async function buildSite(opts: BuildSiteOptions): Promise<void> {
+/** The hashes the page names; the sizes stay with `SiteFacts`. */
+const digestsOf = (d: SiteDigests): GrimoireData["digests"] => ({
+  search: d.search?.sha256 ?? null,
+  stats: d.stats?.sha256 ?? null,
+});
+
+/** Total bytes of the files under `dir`; 0 when it does not exist. */
+async function dirBytes(dir: string): Promise<number> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(dir, { recursive: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw err;
+  }
+  const sizes = await Promise.all(
+    entries.map(async (e) => {
+      const st = await fs.lstat(path.join(dir, e));
+      return st.isFile() ? st.size : 0;
+    }),
+  );
+  return sizes.reduce((a, b) => a + b, 0);
+}
+
+export async function buildSite(opts: BuildSiteOptions): Promise<SiteFacts> {
   keepAstroOffline();
   const inputs = await resolveInputs(opts);
   // Before `stage`, and that is the whole trick: `outDir` is its last
@@ -1071,15 +1107,12 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
   // Astro emptying `outDir` — the same route `all.json` already takes.
   // Upstream of here, `compileIndex` has already `rmSync`'d `outDir`, so
   // publishing any earlier writes into a directory about to be deleted.
-  if (inputs.stats) {
-    await fs.writeFile(
-      path.join(opts.outDir, STATS_PUBLISHED),
-      `${JSON.stringify(inputs.stats)}\n`,
-    );
-  }
+  const statsBytes = inputs.stats ? Buffer.from(`${JSON.stringify(inputs.stats)}\n`) : null;
+  if (statsBytes) await fs.writeFile(path.join(opts.outDir, STATS_PUBLISHED), statsBytes);
+  const published = prepareSiteSearch(opts.outDir, inputs.packages, statsBytes, inputs.siteMode);
   // Same route as `stats.json`: `outDir` is `stage`'s last `public/` layer.
   const staged = await stage(opts.root, opts.outDir, undefined, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
-  const astro = inlineConfig(opts, staged, inputs, false);
+  const astro = inlineConfig(opts, staged, { ...inputs, digests: digestsOf(published) }, false);
   // The registry is per process: without this, a second build in the same
   // process ships the first one's rules and a different sheet hash.
   SHIKI_CLASSES.clearRegistry();
@@ -1091,8 +1124,13 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
   // repo that has none. Running from the staged dir puts it there.
   const cwd = process.cwd();
   process.chdir(staged.dir);
+  let astroMs = 0;
+  let astroDirBytes = 0;
   try {
+    const t0 = performance.now();
     await build(astro);
+    astroMs = performance.now() - t0;
+    astroDirBytes = await dirBytes(path.join(staged.dir, ".astro"));
   } finally {
     process.chdir(cwd);
     await fs.rm(staged.dir, { recursive: true, force: true });
@@ -1103,6 +1141,7 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
     await fs.rm(path.join(opts.outDir, "marketplace", "index.html"), { force: true });
   }
   await postProcessSite(opts.outDir, inputs.base);
+  const pages = await capPages(opts.outDir, inputs.packages);
   // After the build, and outside the `finally`: there is nothing to check
   // against until the routes exist, and a build that threw has a real error
   // to report rather than a list of links that were never emitted.
@@ -1113,69 +1152,17 @@ export async function buildSite(opts: BuildSiteOptions): Promise<void> {
     ],
     opts.outDir,
   );
-  await writeSitemap(inputs, opts.outDir);
-}
-
-/**
- * `sitemap.xml` and `robots.txt`, listing every package page (and the
- * `/marketplace/` page when one is configured).
- *
- * The catalog builds a viewport's worth of cards and grows as the reader
- * scrolls (see `Catalog.tsx`), so the landing page's markup names 48 packages
- * rather than all of them. That is what makes it fast, and on its own it
- * would have made the landing page a much thinner path to the detail pages
- * than it used to be — the only path a crawler had, since this site emitted
- * no sitemap at all.
- *
- * A sitemap is the standard answer and a better one than the page ever was:
- * every route, stated once, with no crawler obliged to render an island or
- * scroll it. Written here rather than through `@astrojs/sitemap` because the
- * route set is `packages` plus the index — already in hand, exactly, with no
- * integration to configure and no dependency to carry.
- *
- * Absolute URLs, because the sitemap protocol requires them; `config.site`
- * is the origin and already carries any project-Pages path segment.
- */
-async function writeSitemap(
-  inputs: Awaited<ReturnType<typeof resolveInputs>>,
-  outDir: string,
-): Promise<void> {
-  const site = inputs.config.site.replace(/\/$/, "");
-  const base = inputs.base.replace(/\/$/, "");
-  // `site` already ends in the base path when one is configured, so the
-  // per-package path must not repeat it.
-  const origin = base && site.endsWith(base) ? site.slice(0, -base.length) : site;
-  const urls = [
-    `${site}/`,
-    // `/marketplace/` exists only in `both` mode (C-010); in `marketplace`
-    // mode `/` is the marketplace. Plugin pages exist in both modes.
-    ...(inputs.siteMode === "both" ? [`${site}/marketplace/`] : []),
-    ...inputs.packages.map(
-      (p) => `${origin}${base}/p/${p.namespace}/${p.name}/`,
-    ),
-    ...inputs.listedPlugins.map((name) => `${origin}${base}/marketplace/${name}/`),
-  ];
-  const xml =
-    '<?xml version="1.0" encoding="UTF-8"?>\n' +
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    urls.map((u) => `  <url><loc>${escapeXml(u)}</loc></url>`).join("\n") +
-    "\n</urlset>\n";
-  await fs.writeFile(path.join(outDir, "sitemap.xml"), xml);
-  await fs.writeFile(
-    path.join(outDir, "robots.txt"),
-    `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`,
+  await writeSitemap(
+    {
+      site: inputs.config.site,
+      base: inputs.base,
+      siteMode: inputs.siteMode,
+      packages: inputs.packages,
+      listedPlugins: inputs.listedPlugins,
+    },
+    opts.outDir,
   );
-}
-
-/** The five predefined XML entities. A package name is not free text, but a
- *  `site` URL can carry a query string, and one `&` would break the file. */
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+  return { ...published, astroMs, astroDirBytes, pages };
 }
 
 /**
@@ -1369,7 +1356,7 @@ export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
   keepAstroOffline();
   const inputs = await resolveInputs(opts);
   const staged = await stage(opts.root, opts.outDir, opts.srcDir, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
-  const astro = inlineConfig(opts, staged, inputs, true);
+  const astro = inlineConfig(opts, staged, { ...inputs, digests: { search: null, stats: null } }, true);
   const cwd = process.cwd();
   process.chdir(staged.dir);
   try {
