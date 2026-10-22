@@ -1,0 +1,560 @@
+[
+ {
+  "schema": 1,
+  "name": "bare",
+  "kind": "mcp",
+  "ref": "registry.example/acme/bare",
+  "description": "A pointer and nothing else.",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "bean-counter",
+  "summary": "Count what the build produced.",
+  "version": "0.1.0",
+  "keywords": [
+   "metrics",
+   "quality"
+  ],
+  "tags": [
+   "latest",
+   "0",
+   "0.1",
+   "0.1.0"
+  ],
+  "deprecated": null,
+  "created": "2026-08-11T07:15:00+00:00",
+  "updated": "2026-08-11T07:15:00+00:00",
+  "hasReadme": true,
+  "schema": 1,
+  "name": "bean-counter",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/bean-counter",
+  "description": "Count what the build produced.",
+  "repository": "https://github.com/acme/bean-counter",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "changelog-only",
+  "summary": "Ships history and no introduction.",
+  "version": "2.2.0",
+  "keywords": [
+   "fixture",
+   "docs"
+  ],
+  "tags": [
+   "latest",
+   "2",
+   "2.2",
+   "2.2.0"
+  ],
+  "deprecated": null,
+  "created": "2026-06-06T06:06:00+00:00",
+  "updated": "2026-06-06T06:06:00+00:00",
+  "hasReadme": false,
+  "hasChangelog": true,
+  "schema": 1,
+  "name": "changelog-only",
+  "kind": "agent",
+  "ref": "ghcr.io/acme/changelog-only",
+  "description": "Ships history and no introduction.",
+  "repository": "https://github.com/acme/changelog-only",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "code-review",
+  "summary": "Review a diff against the team's checklist.",
+  "version": "1.2.3",
+  "license": "Apache-2.0",
+  "keywords": [
+   "review",
+   "diff",
+   "quality"
+  ],
+  "tags": [
+   "latest",
+   "1",
+   "1.2",
+   "1.2.3",
+   "1.1.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-01T10:00:00+00:00",
+  "updated": "2026-07-01T10:00:00+00:00",
+  "revision": "3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39",
+  "authors": "The Acme Authors",
+  "vendor": "Acme",
+  "url": "https://acme.example/code-review",
+  "documentation": "https://docs.acme.example/code-review",
+  "compatibility": "claude-code, cursor",
+  "support": {
+   "issues": "https://github.com/acme/code-review/issues",
+   "chat": "https://acme.example/chat",
+   "contact": "support@acme.example",
+   "security": "https://github.com/acme/code-review/security/policy"
+  },
+  "hasReadme": true,
+  "hasChangelog": true,
+  "logo": "/logos/github.com/acme/code-review.png",
+  "schema": 1,
+  "name": "code-review",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/code-review",
+  "description": "Review a diff against the team's checklist.",
+  "repository": "https://github.com/acme/code-review",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "context7",
+  "summary": "Docs lookup over stdio.",
+  "version": "3.1.0",
+  "license": "MIT",
+  "keywords": [
+   "mcp",
+   "docs",
+   "cli"
+  ],
+  "tags": [
+   "latest",
+   "3",
+   "3.1",
+   "3.1.0"
+  ],
+  "deprecated": null,
+  "created": "2026-05-05T16:45:00+00:00",
+  "updated": "2026-05-05T16:45:00+00:00",
+  "support": {
+   "issues": "https://github.com/acme/context7/issues"
+  },
+  "hasReadme": true,
+  "logo": "/logos/github.com/acme/context7.png",
+  "schema": 1,
+  "name": "context7",
+  "kind": "mcp",
+  "ref": "ghcr.io/acme/context7",
+  "description": "Docs lookup over stdio.",
+  "repository": "https://github.com/acme/context7",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "enterprise-compliance-policy-pack",
+  "summary": "A single rule set covering retention, provenance, third-party review, export control and the annual attestation, written so an auditor can follow it without reading the code it governs. It states what each control is for before it states what the control is, names the evidence that satisfies it, and says plainly which clauses are advisory and which block a release — so a reviewer with no context can tell a finding from a preference on the first pass.",
+  "version": "12.4.0-rc.3",
+  "license": "BUSL-1.1",
+  "keywords": [
+   "compliance",
+   "governance",
+   "retention",
+   "provenance",
+   "audit",
+   "export-control",
+   "attestation",
+   "policy",
+   "security",
+   "privacy",
+   "legal",
+   "enterprise"
+  ],
+  "tags": [
+   "latest",
+   "12",
+   "12.4",
+   "12.4.0-rc.3"
+  ],
+  "deprecated": null,
+  "created": "2026-03-30T09:00:00+00:00",
+  "updated": "2026-08-25T09:00:00+00:00",
+  "vendor": "Acme Compliance Services International",
+  "authors": "The Acme Compliance Working Group",
+  "hasReadme": true,
+  "logo": "/logos/github.com/acme/enterprise-compliance-policy-pack.png",
+  "schema": 1,
+  "name": "enterprise-compliance-policy-pack",
+  "kind": "rule",
+  "ref": "ghcr.io/acme/enterprise-compliance-policy-pack",
+  "description": "A single rule set covering retention, provenance, third-party review, export control and the annual attestation, written so an auditor can follow it without reading the code it governs. It states what each control is for before it states what the control is, names the evidence that satisfies it, and says plainly which clauses are advisory and which block a release — so a reviewer with no context can tell a finding from a preference on the first pass.",
+  "repository": "https://github.com/acme/enterprise-compliance-policy-pack",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "ghost-logo",
+  "summary": "Declares a logo it does not ship.",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "keywords": [
+   "fixture",
+   "logo",
+   "docs"
+  ],
+  "tags": [
+   "latest",
+   "1",
+   "1.0",
+   "1.0.0"
+  ],
+  "deprecated": null,
+  "created": "2026-08-02T11:00:00+00:00",
+  "updated": "2026-08-02T11:00:00+00:00",
+  "hasReadme": true,
+  "logo": "/logos/github.com/acme/ghost-logo.png",
+  "schema": 1,
+  "name": "ghost-logo",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/ghost-logo",
+  "description": "Declares a logo it does not ship.",
+  "repository": "https://github.com/acme/ghost-logo",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "schema": 1,
+  "name": "hex-plan",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/hex-plan",
+  "description": "Plan a feature as a contract-first, test-first task graph.",
+  "repository": "https://github.com/acme/hex-plan",
+  "keywords": [
+   "planning",
+   "swarm"
+  ],
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "many-versions",
+  "summary": "Published often, and it shows.",
+  "version": "5.7.2",
+  "license": "Apache-2.0",
+  "keywords": [
+   "versions",
+   "rust",
+   "cli"
+  ],
+  "tags": [
+   "latest",
+   "5",
+   "5.7",
+   "5.7.2",
+   "5.7.1",
+   "5.7.0",
+   "5.6",
+   "5.5",
+   "5.4",
+   "5.3",
+   "5.2",
+   "5.1",
+   "5.0",
+   "4",
+   "4.9",
+   "5.6.4",
+   "5.6.3",
+   "5.6.2",
+   "5.6.1",
+   "5.6.0",
+   "5.5.0",
+   "5.4.3",
+   "5.4.2",
+   "5.4.1",
+   "5.4.0",
+   "5.3.1",
+   "5.3.0",
+   "5.2.0",
+   "5.1.0",
+   "5.0.0",
+   "4.9.9",
+   "4.9.8",
+   "4.8.1",
+   "4.8.0",
+   "4.7.0",
+   "4.6.2",
+   "4.6.1",
+   "4.6.0",
+   "4.5.0",
+   "4.0.0"
+  ],
+  "deprecated": null,
+  "created": "2026-04-02T13:30:00+00:00",
+  "updated": "2026-08-27T13:30:00+00:00",
+  "hasReadme": true,
+  "hasChangelog": true,
+  "logo": "/logos/github.com/acme/many-versions.png",
+  "schema": 1,
+  "name": "many-versions",
+  "kind": "skill",
+  "ref": "ghcr.io/acme/many-versions",
+  "description": "Published often, and it shows.",
+  "repository": "https://github.com/acme/many-versions",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "old-helper",
+  "summary": "Superseded by code-review.",
+  "version": "0.2.0",
+  "keywords": [
+   "deprecated"
+  ],
+  "tags": [
+   "latest",
+   "0",
+   "0.2",
+   "0.2.0"
+  ],
+  "deprecated": "unmaintained since 2026-06; the checklist it enforced moved into code-review",
+  "replacedBy": "ghcr.io/acme/code-review",
+  "created": "2026-01-09T12:00:00+00:00",
+  "updated": "2026-06-01T12:00:00+00:00",
+  "hasReadme": true,
+  "schema": 1,
+  "name": "old-helper",
+  "kind": "rule",
+  "ref": "ghcr.io/acme/old-helper",
+  "description": "Superseded by code-review.",
+  "repository": "https://github.com/acme/old-helper",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "rust-style",
+  "summary": "House Rust style, the parts rustfmt cannot express.",
+  "version": "0.4.1",
+  "license": "Apache-2.0",
+  "keywords": [
+   "rust",
+   "style",
+   "quality"
+  ],
+  "tags": [
+   "latest",
+   "0",
+   "0.4",
+   "0.4.1"
+  ],
+  "deprecated": null,
+  "created": "2026-06-18T14:05:00+00:00",
+  "updated": "2026-06-18T14:05:00+00:00",
+  "support": {
+   "security": "https://github.com/acme/rust-style/security/policy"
+  },
+  "hasReadme": true,
+  "hasChangelog": true,
+  "schema": 1,
+  "name": "rust-style",
+  "kind": "rule",
+  "ref": "ghcr.io/acme/rust-style",
+  "description": "House Rust style, the parts rustfmt cannot express.",
+  "repository": "https://github.com/acme/rust-style",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "starter-pack",
+  "summary": "Everything a new repository needs on day one.",
+  "version": "2.0.0",
+  "license": "MIT",
+  "keywords": [
+   "bundle",
+   "starter",
+   "docs"
+  ],
+  "tags": [
+   "latest",
+   "2",
+   "2.0",
+   "2.0.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-20T09:30:00+00:00",
+  "updated": "2026-07-20T09:30:00+00:00",
+  "vendor": "Acme",
+  "hasReadme": true,
+  "logo": "/logos/github.com/acme/starter-pack.png",
+  "schema": 1,
+  "name": "starter-pack",
+  "kind": "bundle",
+  "ref": "ghcr.io/acme/starter-pack",
+  "description": "Everything a new repository needs on day one.",
+  "repository": "https://github.com/acme/starter-pack",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "sunset-agent",
+  "summary": "Retired with nothing to point at.",
+  "version": "1.4.0",
+  "keywords": [
+   "deprecated"
+  ],
+  "tags": [
+   "latest",
+   "1",
+   "1.4",
+   "1.4.0"
+  ],
+  "deprecated": "the hosted model it drove was retired; nothing replaces it",
+  "created": "2026-02-14T08:20:00+00:00",
+  "updated": "2026-08-01T08:20:00+00:00",
+  "hasReadme": true,
+  "schema": 1,
+  "name": "sunset-agent",
+  "kind": "agent",
+  "ref": "ghcr.io/acme/sunset-agent",
+  "description": "Retired with nothing to point at.",
+  "repository": "https://github.com/acme/sunset-agent",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "test-writer",
+  "summary": "Write the failing test before the fix.",
+  "version": "0.9.0",
+  "keywords": [
+   "testing",
+   "tdd",
+   "quality"
+  ],
+  "tags": [
+   "latest",
+   "0",
+   "0.9",
+   "0.9.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-12T08:00:00+00:00",
+  "updated": "2026-07-12T08:00:00+00:00",
+  "documentation": "https://docs.acme.example/test-writer",
+  "hasReadme": true,
+  "schema": 1,
+  "name": "test-writer",
+  "kind": "agent",
+  "ref": "ghcr.io/acme/test-writer",
+  "description": "Write the failing test before the fix.",
+  "repository": "https://github.com/acme/test-writer",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "tool-guard",
+  "summary": "Blocks a shell command before the agent runs it.",
+  "version": "0.1.0",
+  "keywords": [
+   "cli"
+  ],
+  "tags": [
+   "latest",
+   "0",
+   "0.1",
+   "0.1.0"
+  ],
+  "deprecated": null,
+  "created": "2026-10-01T09:00:00+00:00",
+  "updated": "2026-10-01T09:00:00+00:00",
+  "hasReadme": true,
+  "schema": 1,
+  "name": "tool-guard",
+  "kind": "hook",
+  "ref": "ghcr.io/acme/tool-guard",
+  "description": "Blocks a shell command before the agent runs it.",
+  "repository": "https://github.com/acme/tool-guard",
+  "owner": {
+   "github": "acme",
+   "id": 1
+  },
+  "namespace": "github.com/acme"
+ },
+ {
+  "title": "mirror",
+  "summary": "Lives in a second namespace, on a second forge.",
+  "version": "0.3.0",
+  "keywords": [
+   "mirror",
+   "gitlab",
+   "cli"
+  ],
+  "tags": [
+   "latest",
+   "0",
+   "0.3",
+   "0.3.0"
+  ],
+  "deprecated": null,
+  "created": "2026-07-28T15:00:00+00:00",
+  "updated": "2026-07-28T15:00:00+00:00",
+  "hasReadme": true,
+  "schema": 1,
+  "name": "mirror",
+  "kind": "rule",
+  "ref": "registry.gitlab.example/team/mirror",
+  "description": "Lives in a second namespace, on a second forge.",
+  "repository": "https://gitlab.example/team/mirror",
+  "owner": {
+   "login": "team",
+   "id": 77
+  },
+  "namespace": "gitlab.com/team"
+ },
+ {
+  "schema": 1,
+  "name": "long-address",
+  "kind": "rule",
+  "ref": "registry.internal.enterprise-platform.example/developer-experience-guild/long-address",
+  "description": "A namespace far wider than the card, so the address line has something to trim.",
+  "repository": "https://registry.internal.enterprise-platform.example/developer-experience-guild/long-address",
+  "keywords": [
+   "cli",
+   "rule"
+  ],
+  "owner": {
+   "login": "developer-experience-guild",
+   "id": 91
+  },
+  "namespace": "registry.internal.enterprise-platform.example/developer-experience-guild"
+ }
+]

@@ -1,0 +1,33 @@
+{
+  "base": "11526305370e5d17c807e6b2d7c4d5a432acdb0a",
+  "now": "2026-09-01T00:00:00.000Z",
+  "files": {
+    "_astro/Catalog.DPuJjvSy.js": "2b8dc29561d17f302647ff035deae848a3c0e712f4485c66cb16f382b495c384",
+    "_astro/CommandBar.C3sbY0aP.css": "679191c651c66fe19250c482709755bedb33e00aec291ced9786a46cc1a782d8",
+    "_astro/PackageDetail.DD8mUud-.css": "0ac4d219bfc0f8c779c00fca44aba3ab859e54697fba08828cbcc9f9c8246780",
+    "_astro/client.CCL8jKoR.js": "51327247ff76b7b0d1cee57cb80533b52a157a5879c96fd28fb4b75daf070b23",
+    "_astro/hooks.module.BuqvMZja.js": "1babbaf99a6cbe26dc684c03ad1a038fa76b76775133741e18adccb35b4e1b6d",
+    "_astro/preload-helper.BV7HJXsG.js": "c0e50b80d6ea8a3dbc5390910d54f1a3def789a2f89381d3a2039d4fe9fba85e",
+    "_astro/search.CrAKYjJR.js": "485202187b60a360b45f5dad9ca920195f9d8a7f7ba647f89ea18237ab078c39",
+    "_astro/shiki.c8e19971.css": "c8e1997126d7bb098152883b90a111b0d536a10a47ba3359dac89877e08095c5",
+    "_astro/signals.module.DHabyUDY.js": "031b1ac670b729c87891f08a037baecfff0730be70c7081cfa93aa74eef204e7",
+    "all.json": "4079aea1ef6cd62a77d2865576f1b40d039a9a272bc060cd22a33b1d7593787e",
+    "enrich.json": "38003ecbbed1e2014e28626f5f7dcbc4382ca96b4cc6289fd76e2d72747a879a",
+    "favicon.svg": "f2e827606b6d7a11080734e3785d1dfd59d0f801ce35dc52f87b4833a69e39f2",
+    "logo.svg": "4e50a6528cd481a7277fa4cd964ead54286e9750e04bf7107f184873932ae789",
+    "p/github.com/acme/code-review/index.html": "3d546a286d5add9d23ec1edfa8ec82ae54bbb89ff03d56dcc90ffe5250590370",
+    "p/github.com/acme/old-helper/index.html": "fec88b49d3d1113788f384866fd1c1f9adcdcd5e6e0932db5aae7e2098aab3e6",
+    "p/github.com/acme/rust-style/index.html": "cb1cc82ce93002caf4b0617192580bb819d273816816d41efee5ee475f3bb94b",
+    "p/github.com/acme/starter-pack/index.html": "60d120a11e4dae14602644c9aa791416cfed8330a46cb6de9722c04edbbc204f",
+    "p/github.com/acme/test-writer/index.html": "93235a253db80811cdaa1cacb0569ba70c905411435d42b7e118828535b4625c",
+    "p/github.com/acme/tool-guard/index.html": "3623c97ab08a4ebd4cbd48f7ba88deac0c33e01ef66c158c7a101a4516345b69",
+    "p/registry.example/team/bare/index.html": "de638f5d7e618196ab899784ef0765d70e838dde51a8b1e9af51deacdfc4a1c9",
+    "robots.txt": "0a09cdde22334b62729f42cf685bf21dfd4873cc7ef9af6a4cdfe53ba9c76c44",
+    "sitemap.xml": "6d054745c144083a65a9d102746eb3015e30a14a6fae06a901c05ce8a9c99bdc",
+    "stats.json": "a3dfe5b0602d3c001d0f213327630189690c1d675366ae17775ee1b57eed0547"
+  },
+  "masked": {
+    "index.html": "727367e9ee10731569afd766272c05e87eaa24ea350db89676c9191d14eecf06"
+  },
+  "excluded": {}
+}
