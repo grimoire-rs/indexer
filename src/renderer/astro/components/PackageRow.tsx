@@ -74,14 +74,10 @@ export function PackageRow({ pkg: p, hasRatings, hasDownloads, href, onKeyDown }
           const label = p.deprecated ? `${p.kind}, deprecated` : p.kind;
           return (
             <span
-              class="t-kind"
+              class={p.deprecated ? "t-kind deprecated" : "t-kind"}
               data-slot="package-kind"
+              data-kind={p.kind}
               title={label}
-              style={{
-                color: p.deprecated
-                  ? "var(--grim-color-deprecated)"
-                  : `var(--grim-color-kind-${p.kind}, var(--grim-color-muted))`,
-              }}
             >
               {mark ? (
                 <KindMark

@@ -28,7 +28,7 @@
 import { Code } from "astro:components";
 import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.tsx";
-import { SHIKI_THEMES } from "../lib/code";
+import { SHIKI_CLASSES, SHIKI_THEMES } from "../lib/code";
 
 interface Props {
   /** The snippet, verbatim. What the copy button copies. */
@@ -58,7 +58,7 @@ const {
 ---
 
 <div class="code-block" data-slot="code-block" data-copy-name={name}>
-  <Code code={code} lang={lang} themes={SHIKI_THEMES} />
+  <Code code={code} lang={lang} themes={SHIKI_THEMES} transformers={[SHIKI_CLASSES]} />
   {/* Present even when empty: it is where `Base.astro` puts the copy button,
       and a block that renders one before the script runs would flash a second
       one after it. */}

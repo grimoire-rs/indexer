@@ -218,6 +218,10 @@ if (values.smoke) {
         // The vote badge reaches the detail page too, with both halves live —
         // it was missing here long after the cards had it.
         [at(detail), 'class="rating-vote"'],
+        // An mcp package's config snippet is a highlighted block. The build
+        // links the Shiki classes' sheet from a file; the dev server has no
+        // such step, so the page itself must carry it.
+        [at("p/github.com/acme/context7/"), "@layer grimoire{.__shiki_"],
         // `both` mode: the tab, the catalog of plugins, and a Contents member
         // linking to its package page.
         [server.url, 'href="/marketplace/"'],
