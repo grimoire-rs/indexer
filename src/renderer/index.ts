@@ -1316,7 +1316,9 @@ export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
         await themeWatcher?.close();
         await server.stop();
         process.chdir(cwd);
-        await fs.rm(staged.dir, { recursive: true, force: true });
+        // Vite's dep optimizer can still be writing `.vite/deps_temp_*` after
+        // `server.stop()`; without retries the rm fails ENOTEMPTY and so does `stop()`.
+        await fs.rm(staged.dir, { recursive: true, force: true, maxRetries: 5 });
       },
     };
   } catch (err) {

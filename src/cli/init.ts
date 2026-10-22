@@ -817,13 +817,13 @@ async function resolveAnswers(dir: string, flags: InitFlags): Promise<InitAnswer
 }
 
 /** Unwrap a clack prompt, turning Ctrl-C into a clean non-error abort. */
-async function ask<T>(pending: Promise<T | symbol>): Promise<T> {
+async function ask<T>(pending: Promise<T>): Promise<Exclude<T, symbol>> {
   const value = await pending;
   if (prompts.isCancel(value)) {
     prompts.cancel("Cancelled — nothing written.");
     throw new CliError("cancelled", EXIT.ok);
   }
-  return value as T;
+  return value as Exclude<T, symbol>;
 }
 
 function json(value: unknown): string {
