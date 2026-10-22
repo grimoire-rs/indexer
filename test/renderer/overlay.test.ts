@@ -681,6 +681,39 @@ describe("a theme package", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  // `theme` is an npm package name, joined onto each `node_modules` on the way
+  // up from the index root. Anything that is not one would walk out of those
+  // directories to a folder holding a `package.json` of its own.
+  it.each(["../outside", "@acme/../../outside", "./outside", "..\\outside", "/outside", "@acme", "acme/theme"])(
+    "refuses the theme %j, which is not an npm package name",
+    async (name) => {
+      const parent = await fs.mkdtemp(path.join(os.tmpdir(), "index-theme-escape-"));
+      const root = path.join(parent, "index");
+      const outDir = path.join(root, "dist");
+      // Planted where each escaping name lands, so a missing check builds the site instead of failing on a missing package.
+      for (const dir of [path.join(parent, "outside"), path.join(root, "outside")]) {
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, "package.json"), JSON.stringify({ name: "outside" }));
+        await fs.writeFile(path.join(dir, "theme.css"), ".escaped-sheet{}\n");
+      }
+      await fs.cp(FIXTURE, root, { recursive: true });
+      await fs.mkdir(outDir, { recursive: true });
+      await fs.rename(path.join(root, "all.json"), path.join(outDir, "all.json"));
+      try {
+        const err: unknown = await buildSite({ root, outDir, config: { ...config, theme: name } }).then(
+          () => null,
+          (e: unknown) => e,
+        );
+        expect(err).toBeInstanceOf(RenderInputError);
+        expect(String(err)).toContain("not an npm package name");
+        expect((await fs.readdir(root)).filter((n) => n.startsWith(".index-"))).toEqual([]);
+      } finally {
+        await fs.rm(parent, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
 });
 
 // An operator's markdown page without a layout renders as a bare fragment, so

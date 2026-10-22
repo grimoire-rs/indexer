@@ -109,7 +109,9 @@ it in `index.config.json` and install it:
 
 The package is found the way Node finds any dependency of the index root, so
 `npm`, `pnpm` and `yarn` installs all work. It needs no JS entry and its
-`exports` map may hide `package.json`. Its layout:
+`exports` map may hide `package.json`. The value must be an npm package name
+(`name` or `@scope/name`); a path or a name containing `..` is refused. Its
+layout:
 
 ```
 @acme/grimoire-index-theme/
