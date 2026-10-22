@@ -1,0 +1,25 @@
+
+  # The job's own `cache:` replaces `default:`, so the npm cache is repeated
+  # by alias rather than lost. The state cache is written by this job alone,
+  # and only when it succeeds, so a failed run cannot replace a good entry.
+  # No fallback key and no opting out of protection: the fixed key is the
+  # whole of the lookup.
+  #
+  # `pull-push` saves from every pipeline this job runs in, so the job runs on
+  # the default branch alone (see `rules:`), and the project must keep
+  # "Use separate caches for protected branches" on with that branch
+  # protected: the setting is what keeps a pipeline on any other ref from
+  # reading or writing this key.
+  #
+  # The key cannot carry an epoch, so `fresh` and `purge` do not retire an
+  # entry; "Clear runner caches" in the project's CI settings does, and is the
+  # step for a bad entry. A runner mounting one cache volume for every project
+  # is not a single writer: use a project-dedicated runner or a distributed
+  # cache.
+  cache:
+    - *npm_cache
+    - key: grim-index-state-v1
+      paths:
+        - {{stateBlobPath}}
+      policy: pull-push
+      when: on_success

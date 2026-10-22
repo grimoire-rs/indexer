@@ -1,0 +1,10 @@
+
+    inputs:
+      fresh:
+        description: "Start a new build-state epoch: discard the cached blobs and enrich every artifact again"
+        type: boolean
+        default: false
+      purge:
+        description: "Drop one artifact from the carried-forward state: a registry reference, or a sha256 digest"
+        type: string
+        default: ""

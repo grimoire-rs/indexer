@@ -1,0 +1,15 @@
+
+
+      # The one place the build state is written. Last in the job so a failed
+      # build saves nothing, and on the default branch only: a pull request or
+      # a dispatch from another branch must not seed what the next deploy
+      # restores. `success()` is spelled out and no status override is
+      # allowed here, so a half-finished run never replaces a good entry. The
+      # key names the content, so an entry is written once; the lookup step
+      # skips the upload when one already exists.
+      - name: Save the build state
+        if: success() && github.ref == 'refs/heads/{{defaultBranch}}' && steps.state-next.outputs.key != '' && steps.state-lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: {{stateBlobPath}}
+          key: grim-index-state-v1-${{ steps.state-next.outputs.key }}
