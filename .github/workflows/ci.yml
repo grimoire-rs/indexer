@@ -89,3 +89,36 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - uses: ocx-sh/setup-ocx@de8e3366f812941423985eaccae28663ef192e8b # v1.3.0
       - run: ocx run -- task lint:workflows
+
+  # Diffs the tree the emitters write against grim's checked-in copy at the
+  # commit test/conformance/GRIM_REF pins. Red until that grim commit is on
+  # GitHub. Outside `task check`: it needs a second repository on disk.
+  conformance:
+    name: conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: pin
+        run: |
+          sha=$(<test/conformance/GRIM_REF)
+          [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "::error::test/conformance/GRIM_REF is not one 40-character lowercase hex SHA" >&2; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: grimoire-rs/grimoire
+          ref: ${{ steps.pin.outputs.sha }}
+          path: .grim
+          sparse-checkout: test/data/conformance
+          persist-credentials: false
+      - uses: ocx-sh/setup-ocx@de8e3366f812941423985eaccae28663ef192e8b # v1.3.0
+        with:
+          groups: default,node24
+      - run: ocx run -g default,node24 -- npm ci
+      - run: ocx run -g default,node24 -- npm run conformance:check
+        env:
+          GRIM_CHECKOUT: .grim
