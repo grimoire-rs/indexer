@@ -187,8 +187,8 @@ export function validateCi(raw: unknown): CiConfig {
   return ci as CiConfig;
 }
 
-/** Read the `ci` block out of `index.config.json`. A missing file means defaults. */
-export async function loadCiConfig(root: string): Promise<CiConfig> {
+/** `index.config.json` as a bare object. A missing file means defaults. */
+async function readConfigObject(root: string): Promise<Record<string, unknown>> {
   let text: string;
   try {
     text = await fs.readFile(path.join(root, CONFIG_FILE), "utf8");
@@ -205,7 +205,56 @@ export async function loadCiConfig(root: string): Promise<CiConfig> {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new SiteConfigError(`${CONFIG_FILE}: must contain a JSON object`);
   }
-  return validateCi((parsed as Record<string, unknown>).ci);
+  return parsed as Record<string, unknown>;
+}
+
+/** Read the `ci` block out of `index.config.json`. A missing file means defaults. */
+export async function loadCiConfig(root: string): Promise<CiConfig> {
+  return validateCi((await readConfigObject(root)).ci);
+}
+
+/**
+ * The two site URLs that say where an index is hosted, as written.
+ *
+ * Read leniently and never defaulted: the site config owns their validation,
+ * and a value this cannot read is "unknown", which [`onGithubCom`] treats as
+ * not github.com. Defaulting `site` would put the first-party index's host
+ * into every config that omits it.
+ */
+export interface IndexHosts {
+  site?: string;
+  repoUrl?: string;
+}
+
+export async function loadIndexHosts(root: string): Promise<IndexHosts> {
+  const config = await readConfigObject(root);
+  return {
+    ...(typeof config.site === "string" ? { site: config.site } : {}),
+    ...(typeof config.repoUrl === "string" ? { repoUrl: config.repoUrl } : {}),
+  };
+}
+
+function hostnameOf(url: string | undefined): string | undefined {
+  if (url === undefined) return undefined;
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether the config positively places this index on github.com: its
+ * repository is there, or its site is served from github.io.
+ *
+ * Positive on purpose. `cache-mode` is rendered from this, GitHub Enterprise
+ * Server does not know the key, and a workflow that names an unknown key does
+ * not load - so a host that cannot be told apart from GHES must read as "no".
+ * The cost is that a custom domain with no `repoUrl` renders without the key,
+ * which is the pipeline it had before the key existed.
+ */
+export function onGithubCom({ site, repoUrl }: IndexHosts): boolean {
+  return hostnameOf(repoUrl) === "github.com" || (hostnameOf(site)?.endsWith(".github.io") ?? false);
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
@@ -296,12 +345,23 @@ export function renderCi(
   ci: ResolvedCiConfig,
   ratings?: RatingsConfig,
   downloads?: DownloadsConfig,
+  hosts: IndexHosts = {},
 ): Map<string, string> {
+  const githubCom = onGithubCom(hosts);
   const base: Record<string, string> = {
     nodeVersion: ci.nodeVersion,
     defaultBranch: ci.defaultBranch,
     grimVersion: ci.grimVersion,
     grimReleaseBase: grimReleaseBase(ci.grimVersion),
+    // Only `build` in pages.yml may save the Actions cache; every other job
+    // turns it off. Empty off github.com: Enterprise Server rejects the key.
+    githubCacheMode: githubCom
+      ? "\n\n# No job in this file restores or saves the Actions cache. The one that does\n" +
+        "# is `build` in pages.yml, so a build restores only what an earlier build\n" +
+        "# saved, never what a pull request or a collector left behind.\n" +
+        "cache-mode: none"
+      : "",
+    githubCacheModeJob: githubCom ? "\n    # The Actions cache is for `build` alone.\n    cache-mode: none" : "",
   };
   // Rendered first: `render` is single-pass, so a block handed in as a value
   // must already have its own placeholders resolved. The trailing newline is
@@ -548,7 +608,8 @@ export function driftError(outcomes: CiOutcome[]): CliError {
   const bad = outcomes.filter((outcome) => outcome.status !== "ok");
   return new CliError(
     `${bad.length} generated CI file(s) do not match ${CONFIG_FILE} — ` +
-      `re-run \`${RE_RENDER_COMMAND}\` and commit the result`,
+      `re-run \`${RE_RENDER_COMMAND}\` and commit the result; a newer @grimoire-rs/indexer in ` +
+      `package-lock.json renders new CI, so the same goes after every upgrade`,
     EXIT.data,
   );
 }

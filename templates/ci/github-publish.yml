@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 # Default-deny at the top; the job pays for exactly what it needs.
-permissions: {}
+permissions: {}{{githubCacheMode}}
 
 # Serialized against itself. Two publishes racing would both read the same
 # "already published?" answer and both push.

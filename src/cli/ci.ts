@@ -11,6 +11,7 @@ import {
   checkCi,
   driftError,
   loadCiConfig,
+  loadIndexHosts,
   renderCi,
   RE_RENDER_COMMAND,
   resolveCi,
@@ -35,13 +36,14 @@ export async function ci(root: string, flags: CiFlags): Promise<ExitCode> {
   const rootDir = path.resolve(root);
   const resolved = resolveCi(await loadCiConfig(rootDir));
   // Read separately from the `ci` block, and each by the block's own reader —
-  // the render and the `--check` re-render must see the same three answers, or
+  // the render and the `--check` re-render must see the same four answers, or
   // an index that turned a collector on would fail its own drift guard on
   // every push.
   const files = renderCi(
     resolved,
     await loadRatingsConfig(rootDir),
     await loadDownloadsConfig(rootDir),
+    await loadIndexHosts(rootDir),
   );
 
   if (flags.check) {

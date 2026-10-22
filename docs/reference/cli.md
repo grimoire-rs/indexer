@@ -137,6 +137,17 @@ Render this repo's CI from the `ci` block of `index.config.json`.
 `--check` is what the generated `verify-ci` job runs on every push, and it is
 what keeps a hand-edit from silently forking the pipeline.
 
+The `@grimoire-rs/indexer` version in `package-lock.json` decides which CI is
+rendered. A new release reaches an index only when you bump the lock, run
+`npm run ci` and commit the result, and until then `--check` passes.
+
+Only the Pages `build` job uses the Actions cache. On github.com every other
+job sets `cache-mode: none`. The renderer reads that from `repoUrl` (a
+github.com repository) or `site` (a `github.io` address). Any other host gets
+no `cache-mode` line, because GitHub Enterprise Server does not know the key.
+On GitLab, merge request jobs run with `cache: []` and every job times out
+after two hours.
+
 ## `grim-indexer ratings`
 
 Tally the forge's upvote counters into `.stats.json`. Needs the `ratings`

@@ -4,6 +4,8 @@
 # `npm run ci` locally and committing the result.
 grim-indexer:verify-ci:
   stage: test
+  # No cache on a merge request pipeline: see the gate job.
+  cache: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

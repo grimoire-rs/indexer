@@ -13,12 +13,14 @@ import * as prompts from "@clack/prompts";
 import {
   FORGES,
   loadCiConfig,
+  loadIndexHosts,
   PUBLISH_TRIGGERS,
   renderCi,
   resolveCi,
   staleCi,
   type CiConfig,
   type Forge,
+  type IndexHosts,
   type PublishTrigger,
 } from "../ci.js";
 import { CONFIG_FILE, validateSite, validateUrlShape } from "../config.js";
@@ -890,12 +892,14 @@ function indexPolicy(answers: InitAnswers): string {
  * the answers while the config kept its own values produced a tree whose
  * committed CI did not match its committed config — and `ci --check`, which
  * reads only the config, then failed on a tree `init` had just reported as
- * successful.
+ * successful. `hosts` is the same story for the site and repository URLs,
+ * which decide whether the workflows carry `cache-mode`.
  */
 function plan(
   answers: InitAnswers,
   version: string,
   ci: CiConfig,
+  hosts: IndexHosts,
 ): Array<{ path: string; content: string }> {
   const vars: Record<string, string> = {
     name: answers.name,
@@ -939,7 +943,7 @@ function plan(
   // The same renderer `grim-indexer ci` uses, driven by the `ci` block that
   // will be on disk — so the scaffold is drift-free by construction and the
   // guard it emits passes on the first push.
-  for (const [dest, content] of renderCi(resolveCi(ci))) {
+  for (const [dest, content] of renderCi(resolveCi(ci), undefined, undefined, hosts)) {
     files.push({ path: dest, content });
   }
 
@@ -1088,7 +1092,11 @@ export async function init(dir: string, flags: InitFlags, version: string): Prom
         ...(answers.publish === "never" ? {} : { publish: answers.publish }),
       };
 
-  const files = write(target, plan(answers, version, ci), flags.force ?? false);
+  const hosts: IndexHosts = keepsExistingConfig
+    ? await loadIndexHosts(target)
+    : { site: answers.baseUrl, repoUrl: answers.repoUrl };
+
+  const files = write(target, plan(answers, version, ci, hosts), flags.force ?? false);
   const gitInitialized = answers.git ? initGit(target) : false;
   const installed = answers.install ? npmInstall(target) : false;
   const result: InitResult = { dir: target, files, gitInitialized, installed };

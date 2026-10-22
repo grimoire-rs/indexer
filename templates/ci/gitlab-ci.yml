@@ -7,8 +7,12 @@ stages:
 
 # `npm ci` installs exactly package-lock.json, so which renderer runs is a
 # reviewed fact in this repository rather than a resolution on the runner.
+#
+# `timeout` is the ceiling for every job, so a hung install or a wedged
+# collector ends in two hours rather than whatever the project allows.
 default:
   image: node:{{nodeVersion}}-alpine
+  timeout: 2h
   cache:
     key:
       files:
@@ -49,6 +53,9 @@ default:
 # branch's copy of the workflow, against the base checkout.
 grim-indexer:validate:
   stage: test
+  # No cache on a merge request pipeline: it is the contributor's, and a cache
+  # it saves is one a later pipeline restores.
+  cache: []
   variables:
     GIT_DEPTH: 0
   rules:
