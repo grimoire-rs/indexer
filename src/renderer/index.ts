@@ -16,7 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, dev } from "astro";
 import preact from "@astrojs/preact";
-import { resolveConfig, type NavLink, type SiteConfig } from "../config.js";
+import { resolveConfig, type NavLink, type SiteConfig, type SyncConfig } from "../config.js";
 // The per-key merge, shared with the ratings producer rather than restated:
 // both write the same file and both have to leave the other's key alone.
 import {
@@ -47,7 +47,8 @@ export interface BuildSiteOptions {
   root: string;
   /** Holds `all.json` on entry; holds the rendered site on return. */
   outDir: string;
-  config: SiteConfig;
+  /** `sync` is the loaded block; a hand-built config without it renders as `legacy: true`. */
+  config: SiteConfig & { sync?: SyncConfig };
 }
 
 export interface DevSiteOptions extends BuildSiteOptions {
@@ -972,7 +973,7 @@ function inlineConfig(
     },
     vite: {
       define: {
-        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, marketplace, siteMode, builtAt }),
+        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, marketplace, siteMode, builtAt, legacy: opts.config.sync?.legacy ?? true }),
         __GRIMOIRE_BASE__: JSON.stringify(base),
         __GRIMOIRE_DEV__: JSON.stringify(dev),
       },

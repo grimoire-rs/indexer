@@ -10,15 +10,18 @@
 // replacement, because a `rating` run must not drop a `downloads` key it never
 // computed.
 //
-// The status branching in [`loadSeed`] is the whole of it, and `|| true` is
-// forbidden: a corrupted or unreachable seed is indistinguishable from an
-// empty one, and treating it as empty is exactly how a published rating set
-// gets silently replaced with nothing. So a fetch that did not clearly say
-// "there is nothing here" fails the run instead.
+// The status branching in [`fetchPublishedStats`] and the two reads under it is
+// the whole of it, and `|| true` is forbidden: a corrupted or unreachable seed is
+// indistinguishable from an empty one, and treating it as empty is exactly how
+// a published rating set gets silently replaced with nothing. So a fetch that
+// did not clearly say "there is nothing here" fails the run instead.
 import fs from "node:fs/promises";
 
 import { CliError, EXIT } from "../cli/exit.js";
-import { request } from "../validate/adapters/http.js";
+import type { BlobRef } from "../emit/root.js";
+import { readRootStrict } from "../state/anchor.js";
+import { fetchByDigest } from "../state/fetch.js";
+import { describeStatus, request } from "../validate/adapters/http.js";
 
 /** The `stats.json` version this producer writes. */
 export const SCHEMA_VERSION = 1;
@@ -55,42 +58,134 @@ export interface StatsDocument extends StatsSeed {
 /** The first run's seed, and the only shape a genuine 404 may produce. */
 export const EMPTY_SEED: StatsSeed = { providers: {}, entries: {} };
 
+/** A stats blob is capped at 128 MiB inflated, and its download at the same figure (spec §5.1). */
+export const STATS_BLOB_CAP = 128 * 1024 * 1024;
+
 /**
- * Fetch the currently published `stats.json` to merge over.
- *
- * | Outcome | Behaviour |
- * |---|---|
- * | 404 | empty seed — the first run, and the normal case |
- * | 2xx that parses | merge base |
- * | 2xx that does not parse | **throws** (65) |
- * | transport / TLS / 5xx / timeout / over-cap | **throws** (69) |
- *
- * `request()` maps its transport catch *and* its response-size cap to
+ * The legacy `<site>/stats.json`, or `null` on a 404: the first run, and the
+ * normal case. A 2xx is the body; transport, TLS, 5xx, timeout and over-cap all
+ * throw (69). `request()` maps its transport catch *and* its size cap to
  * `{status: 0}`, so that value is a hard error here and can never be read as
  * "the seed was fine and empty".
  */
-export async function loadSeed(url: string): Promise<StatsSeed> {
-  const response = await request(url);
+async function legacyText(url: string): Promise<string | null> {
+  // The blob's cap, not the 1 MiB default: a site with no root yet can serve a
+  // stats document past 1 MiB, and that read would fail every deploy (69).
+  const response = await request(url, {}, { maxBytes: STATS_BLOB_CAP });
 
-  if (response.status === 404) return { providers: {}, entries: {} };
+  if (response.status === 404) return null;
   if (response.status < 200 || response.status >= 300) {
     // `status: 0` lands here too, and deliberately: it is the transport catch
     // and the over-cap read, neither of which says anything about what is
     // published.
     throw new CliError(
-      `could not read the published stats.json at ${url} (HTTP ${response.status}) — ` +
+      `could not read the published stats.json at ${url} (${describeStatus(response)}) — ` +
         `refusing to publish a sidecar that would empty every rating`,
       EXIT.unavailable,
     );
   }
+  return response.body;
+}
 
-  return seedFromText(response.body, `the published stats.json at ${url}`);
+/**
+ * The stats blob `ref` names, inflated and verified. Every failure throws:
+ * unreadable (69) when nothing usable came back, invalid (65) when something
+ * did and it is not the file the root named. The digest and size name the
+ * *inflated* bytes, and a body a host or CDN already decoded is used as it is.
+ */
+async function fetchStatsBlob(site: string, ref: BlobRef): Promise<{ text: string; where: string }> {
+  const path = `c/f/sha256/${ref.sha256}.json.gz`;
+  const where = `the published stats blob at ${site}/${path}`;
+  if (ref.size > STATS_BLOB_CAP) {
+    throw new CliError(`${where} is declared ${ref.size} bytes, over the ${STATS_BLOB_CAP} byte cap`, EXIT.data);
+  }
+  // No nonce: the root that names this blob was just read through one.
+  const got = await fetchByDigest(site, path, ref, STATS_BLOB_CAP, { gz: true, bust: false });
+  if (got.kind === "missing" || got.kind === "unreachable") {
+    throw new CliError(
+      `could not read ${where} (${got.kind === "missing" ? "HTTP 404" : got.reason}) — refusing to publish a sidecar that would empty every rating`,
+      EXIT.unavailable,
+    );
+  }
+  if (got.kind === "invalid") {
+    throw new CliError(
+      got.fault === "inflate"
+        ? `${where} did not inflate to its declared ${ref.size} bytes (${got.cause}) — refusing to treat an unreadable seed as an empty one`
+        : `${where} does not match the digest and size the root names — refusing to seed from it`,
+      EXIT.data,
+    );
+  }
+  return { text: got.bytes.toString("utf8"), where };
+}
+
+/**
+ * A `site` the published stats may be read from: explicit and https. Only
+ * {@link requireHttpsSite} makes one, so no caller of {@link fetchPublishedStats}
+ * can reach the network without having passed the check.
+ */
+export type HttpsSite = string & { readonly __httpsSite: true };
+
+/**
+ * The explicit https `site` a producer seeds from, or a refusal (65) naming `verb`.
+ *
+ * Never defaulted: `DEFAULT_CONFIG.site` names the first-party index, and
+ * seeding from someone else's published stats would merge their ratings and
+ * counts into this one's sidecar. https because the seed decides every
+ * published value.
+ */
+export function requireHttpsSite(site: string | undefined, verb: string): HttpsSite {
+  if (site === undefined || !site.startsWith("https://")) {
+    throw new CliError(
+      `${verb}: index.config.json needs an explicit https \`site\` — the seed is read from the stats published at \`<site>\``,
+      EXIT.data,
+    );
+  }
+  return site as HttpsSite;
+}
+
+/** The published stats document, and the name every error about it uses. */
+export interface PublishedStats {
+  text: string;
+  where: string;
+}
+
+/**
+ * The currently published stats document, read through the root (IX-R49): the
+ * verified blob it names, else the legacy `<site>/stats.json` — but only after
+ * a root 404 or a valid root naming none. A `legacy: false` site serves no
+ * `/stats.json`, so reaching it after any other failure would read as the first
+ * run and wipe every carried rating (R-2). A 2xx that is not a root throws
+ * (65), a root that cannot be read throws (69); `null` means nothing is
+ * published.
+ */
+export async function fetchPublishedStats(site: HttpsSite): Promise<PublishedStats | null> {
+  const base = site.replace(/\/+$/, "");
+  const read = await readRootStrict(base);
+  if (read.kind === "root" && read.root.stats !== null) return fetchStatsBlob(base, read.root.stats);
+  if (read.kind === "invalid") {
+    throw new CliError(
+      `the published root at ${base}/c/root.json is not a readable root (HTTP ${read.status}) — ` +
+        `refusing to treat an unreadable seed as an empty one`,
+      EXIT.data,
+    );
+  }
+  if (read.kind === "unreadable") {
+    throw new CliError(
+      `could not read the published root at ${base}/c/root.json (${read.why}) — ` +
+        `refusing to publish a sidecar that would empty every rating`,
+      EXIT.unavailable,
+    );
+  }
+  // Absent, or a valid root that names no stats: the only two ways to the legacy file.
+  const url = `${base}/stats.json`;
+  const text = await legacyText(url);
+  return text === null ? null : { text, where: `the published stats.json at ${url}` };
 }
 
 /**
  * The seed a producer merges over when more than one producer runs in the same
  * job: an on-disk `.stats.json` an earlier producer already wrote, else the
- * published document.
+ * document published at `site` ({@link fetchPublishedStats}).
  *
  * This is what makes the producers chainable without a second artifact. Each
  * one writes a *whole fresh* document seeded from what it read, so two runs
@@ -100,21 +195,22 @@ export async function loadSeed(url: string): Promise<StatsSeed> {
  * generated CI already applies in YAML: a fresh sidecar beats the published one.
  *
  * A file that is present and does not parse is a hard error, never an empty
- * seed — the same rule {@link loadSeed} applies to an unreadable fetch.
+ * seed — the same rule {@link fetchPublishedStats} applies to an unreadable fetch.
  */
-export async function localOrPublishedSeed(file: string, url: string): Promise<StatsSeed> {
+export async function localOrPublishedSeed(file: string, site: HttpsSite): Promise<StatsSeed> {
   let text: string;
   try {
     text = await fs.readFile(file, "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return loadSeed(url);
-    throw err;
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    const published = await fetchPublishedStats(site);
+    return published === null ? { providers: {}, entries: {} } : seedFromText(published.text, published.where);
   }
   return seedFromText(text, `${file}, written by an earlier producer in this run,`);
 }
 
 /** The two carried maps out of one stats document's text. `where` names it in every error. */
-function seedFromText(text: string, where: string): StatsSeed {
+export function seedFromText(text: string, where: string): StatsSeed {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text) as unknown;

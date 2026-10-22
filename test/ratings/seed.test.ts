@@ -9,20 +9,16 @@
 // replacement. A `rating` run that drops a `downloads` key it never computed
 // is the same wipe as a failed fetch read as empty, arriving one function
 // later.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { MAX_RESPONSE_BYTES } from "../../src/validate/adapters/http.js";
 import {
   EMPTY_SEED,
   SCHEMA_VERSION,
-  loadSeed,
   mergeStats,
+  seedFromText,
   statsDocument,
   type StatsSeed,
 } from "../../src/ratings/seed.js";
-import { stubFetch } from "../validate/helpers.js";
-
-const SITE = "https://index.example.com/stats.json";
 
 const RATED = "ghcr.io/acme/code-review";
 const DOWNLOADED = "ghcr.io/acme/starter-pack";
@@ -41,101 +37,57 @@ const PUBLISHED = {
   },
 };
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+// The fetch half of R-2 (404 is empty, nothing else is) is exercised against a
+// real socket in `seed_root.test.ts`; this half is what the text becomes.
+describe("seedFromText — a document, or a refusal (C-010)", () => {
+  const read = (text: string): StatsSeed => seedFromText(text, "the published stats.json");
 
-describe("loadSeed — the four seed outcomes (C-010)", () => {
-  it("reads a 404 as an empty seed: absence is first-class and is the first run", async () => {
-    stubFetch(() => ({ status: 404 }));
-
-    await expect(loadSeed(SITE)).resolves.toEqual(EMPTY_SEED);
-  });
-
-  it("reads a 2xx that parses as the merge base", async () => {
-    stubFetch(() => ({ body: JSON.stringify(PUBLISHED) }));
-
-    await expect(loadSeed(SITE)).resolves.toEqual({
+  it("reads a document that parses as the merge base", () => {
+    expect(read(JSON.stringify(PUBLISHED))).toEqual({
       providers: PUBLISHED.providers,
       entries: PUBLISHED.entries,
     });
   });
 
-  it("fails the job on a 2xx that does not parse", async () => {
-    stubFetch(() => ({ body: "<!doctype html><title>404 · GitHub Pages</title>" }));
-
-    await expect(loadSeed(SITE)).rejects.toThrow(/parse|stats\.json/i);
+  it("fails the job on text that does not parse", () => {
+    expect(() => read("<!doctype html><title>404 · GitHub Pages</title>")).toThrow(/parse|stats\.json/i);
   });
 
-  it("fails the job on a 2xx that parses but is not a document", async () => {
-    stubFetch(() => ({ body: "[]" }));
-
-    await expect(loadSeed(SITE)).rejects.toThrow();
+  it("fails the job on text that parses but is not a document", () => {
+    expect(() => read("[]")).toThrow(/not a JSON object/);
   });
 
-  it("fails the job on a transport error, never reading it as an empty seed", async () => {
-    vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
-
-    await expect(loadSeed(SITE)).rejects.toThrow();
-  });
-
-  it("fails the job on a 5xx", async () => {
-    for (const status of [500, 502, 503, 429, 401, 301]) {
-      stubFetch(() => ({ status, body: "" }));
-      await expect(loadSeed(SITE), String(status)).rejects.toThrow();
-    }
-  });
-
-  // `request()` maps both its transport catch and its response-size cap to
-  // `{status: 0}`. Wave 1 pinned that; this pins that a producer reads it as a
-  // hard error, so an over-cap seed can never arrive here as "fine and empty".
-  it("fails the job on an over-cap body, which request() reports as status 0", async () => {
-    stubFetch(() => ({ body: "x".repeat(MAX_RESPONSE_BYTES + 1) }));
-
-    await expect(loadSeed(SITE)).rejects.toThrow();
-  });
-
-  it("treats a published document with no entries as an empty merge base, not a failure", async () => {
-    stubFetch(() => ({ body: JSON.stringify({ schema_version: 1, generated_at: "x" }) }));
-
-    await expect(loadSeed(SITE)).resolves.toEqual(EMPTY_SEED);
+  it("treats a published document with no entries as an empty merge base, not a failure", () => {
+    expect(read(JSON.stringify({ schema_version: 1, generated_at: "x" }))).toEqual(EMPTY_SEED);
   });
 });
 
-describe("loadSeed — a present key of the wrong shape is not absence", () => {
+describe("seedFromText — a present key of the wrong shape is not absence", () => {
+  const read = (doc: unknown): StatsSeed => seedFromText(JSON.stringify(doc), "the published stats.json");
+
   // Cross-model review (codex, 2026-08-18): `{"providers":[],"entries":[]}`
   // parses, is an object, and used to coerce to `{}` — an unreadable seed
   // wearing the clothes of an empty one. The next publish would then drop
   // every previously published rating, which is exactly the silent emptying
   // the parse guard one line above already refuses.
-  it("fails the job when entries is an array rather than an object", async () => {
-    stubFetch(() => ({ body: JSON.stringify({ providers: {}, entries: [] }) }));
-
-    await expect(loadSeed(SITE)).rejects.toThrow(/'entries' that is not an object/);
+  it("fails the job when entries is an array rather than an object", () => {
+    expect(() => read({ providers: {}, entries: [] })).toThrow(/'entries' that is not an object/);
   });
 
-  it("fails the job when providers is an array rather than an object", async () => {
-    stubFetch(() => ({ body: JSON.stringify({ providers: [], entries: {} }) }));
-
-    await expect(loadSeed(SITE)).rejects.toThrow(/'providers' that is not an object/);
+  it("fails the job when providers is an array rather than an object", () => {
+    expect(() => read({ providers: [], entries: {} })).toThrow(/'providers' that is not an object/);
   });
 
-  it("fails the job when a key is a scalar", async () => {
-    stubFetch(() => ({ body: JSON.stringify({ entries: "nope" }) }));
-
-    await expect(loadSeed(SITE)).rejects.toThrow(/not an object \(string\)/);
+  it("fails the job when a key is a scalar", () => {
+    expect(() => read({ entries: "nope" })).toThrow(/not an object \(string\)/);
   });
 
-  it("still reads a genuinely absent key as empty — absence stays first-class", async () => {
-    stubFetch(() => ({ body: JSON.stringify({ schema_version: 1 }) }));
-
-    await expect(loadSeed(SITE)).resolves.toEqual(EMPTY_SEED);
+  it("still reads a genuinely absent key as empty — absence stays first-class", () => {
+    expect(read({ schema_version: 1 })).toEqual(EMPTY_SEED);
   });
 
-  it("reads an explicit null key as absent, not as malformed", async () => {
-    stubFetch(() => ({ body: JSON.stringify({ providers: null, entries: null }) }));
-
-    await expect(loadSeed(SITE)).resolves.toEqual(EMPTY_SEED);
+  it("reads an explicit null key as absent, not as malformed", () => {
+    expect(read({ providers: null, entries: null })).toEqual(EMPTY_SEED);
   });
 });
 

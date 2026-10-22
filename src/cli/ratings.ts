@@ -131,19 +131,12 @@ export async function ratings(root: string): Promise<ExitCode> {
   }
 
   const { loadConfig } = await import("../config.js");
-  const site = (await loadConfig(rootDir)).site;
-  if (site === undefined || !site.startsWith("https://")) {
-    // Not defaulted. `DEFAULT_CONFIG.site` names the first-party index, and
-    // seeding from *someone else's* published stats would merge their ratings
-    // into this one's sidecar. https because the seed decides every published
-    // rating — and refused *here*, before a single thread is created, because
-    // the generated deploy job enforces the same rule far too late to help:
-    // by then the tally has already written to the forge.
-    throw new CliError(
-      "ratings: index.config.json needs an explicit https `site` — the seed is read from `<site>/stats.json`",
-      EXIT.data,
-    );
-  }
+  const { STATS_FILE, localOrPublishedSeed, mergeStats, requireHttpsSite, statsDocument } = await import(
+    "../ratings/seed.js"
+  );
+  // Refused here, before the forge is touched: the generated deploy job enforces
+  // the same rule far too late to help, once the tally has already written to it.
+  const site = requireHttpsSite((await loadConfig(rootDir)).site, "ratings");
 
   const { trustedBots } = readPolicy(rootDir);
   if (!trustedBots.some((bot) => typeof bot !== "string" && bot.id !== undefined)) {
@@ -160,17 +153,13 @@ export async function ratings(root: string): Promise<ExitCode> {
   const { findMetadataFiles } = await import("../data/index.js");
   const desired = desiredRefs(rootDir, findMetadataFiles);
 
-  const { localOrPublishedSeed, mergeStats, statsDocument, STATS_FILE } = await import("../ratings/seed.js");
   // Read before the forge work: it fails the run on anything but a genuine 404,
   // and failing before a single thread is created is the cheaper order.
   //
   // A `.stats.json` already on disk wins over the published copy — `downloads`
   // runs ahead of this in the same job, and its output is what must be carried
   // forward rather than the published document it started from.
-  const seed = await localOrPublishedSeed(
-    path.join(rootDir, STATS_FILE),
-    `${site.replace(/\/+$/, "")}/stats.json`,
-  );
+  const seed = await localOrPublishedSeed(path.join(rootDir, STATS_FILE), site);
 
   const { createRatingProvider } = await import("../ratings/provider.js");
   const { conflictWarning, logLine, reconcile } = await import("../ratings/reconcile.js");

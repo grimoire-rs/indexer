@@ -47,29 +47,17 @@ export async function downloads(root: string): Promise<ExitCode> {
   }
 
   const { loadConfig } = await import("../config.js");
-  const site = (await loadConfig(rootDir)).site;
-  if (site === undefined || !site.startsWith("https://")) {
-    // Not defaulted, for the same reason `ratings` refuses to default it: the
-    // built-in default names the first-party index, and seeding from someone
-    // else's published stats would merge their counts into this one's sidecar.
-    throw new CliError(
-      "downloads: index.config.json needs an explicit https `site` — the seed is read from `<site>/stats.json`",
-      EXIT.data,
-    );
-  }
+  const { STATS_FILE, localOrPublishedSeed, mergeStats, requireHttpsSite, statsDocument } = await import(
+    "../ratings/seed.js"
+  );
+  const site = requireHttpsSite((await loadConfig(rootDir)).site, "downloads");
 
   const { findMetadataFiles } = await import("../data/index.js");
   const refs = desiredRefs(rootDir, findMetadataFiles);
 
-  const { localOrPublishedSeed, mergeStats, statsDocument, STATS_FILE } = await import(
-    "../ratings/seed.js"
-  );
   // Read before the Artifactory work: it fails the run on anything but a
   // genuine 404, and failing early is the cheaper order.
-  const seed = await localOrPublishedSeed(
-    path.join(rootDir, STATS_FILE),
-    `${site.replace(/\/+$/, "")}/stats.json`,
-  );
+  const seed = await localOrPublishedSeed(path.join(rootDir, STATS_FILE), site);
 
   const { collectDownloads } = await import("../downloads/artifactory.js");
   const fresh = await collectDownloads({ baseUrl: cfg.baseUrl, token, refs });

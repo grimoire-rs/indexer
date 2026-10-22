@@ -113,6 +113,8 @@ export interface GrimoireData {
   packages: CatalogPackage[];
   /** Which of packages and marketplace the site serves (`siteMode`). */
   siteMode: SiteMode;
+  /** `sync.legacy`: whether `/all.json` is published. `false` drops the footer's link to it. */
+  legacy: boolean;
   /**
    * The index's own marketplace, read from `enrich/marketplace/` (validated,
    * text-only); `null` when `marketplace.toml` is absent or nothing was exported.

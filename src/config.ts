@@ -364,10 +364,11 @@ function optionalUrl(raw: Record<string, unknown>, key: string): void {
 
 /**
  * `site` is the strictest of the URL keys, deliberately: it is the only one that
- * is *fetched* as well as published. `<site>/stats.json` is the ratings seed —
- * read by `grim-indexer ratings`, and from the same checkout by the generated
- * deploy job — and whatever that fetch returns is the merge base for every
- * published rating. One policy, here, at load: the verbs, the renderer and the
+ * is *fetched* as well as published. `<site>/c/root.json` and the stats blob it
+ * names (else `<site>/stats.json`) are the ratings seed — read by
+ * `grim-indexer ratings`, and from the same checkout by the generated deploy
+ * job — and whatever that fetch returns is the merge base for every published
+ * rating. One policy, here, at load: the verbs, the renderer and the
  * generated shell must not disagree about the same key.
  *
  * No userinfo, because `https://real.example@evil.example/` reads as the real
