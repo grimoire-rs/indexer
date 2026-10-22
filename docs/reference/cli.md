@@ -113,7 +113,7 @@ a person and never parse it. The sample is illustrative, with round placeholder
 sizes.
 
 ```
-grim-indexer: built layout=anchored legacy=true generation=1792560000 flat sha256=9f2c… bytes=40000000 gzip=7000000 stats sha256=5d9e… bytes=3000000 planes enrich=77b0… retained files=262 skipped=0 probed=17143 deep=2857 calls=42857 probe_ms_p50=300 deep_ms_p50=300 budget_min=85 throttled=0 backoff_refs=0 enrich=complete failed_buckets=0
+grim-indexer: built layout=anchored legacy=true generation=1792560000 flat sha256=9f2c… bytes=40000000 gzip=7000000 stats sha256=5d9e… bytes=3000000 planes enrich=77b0… retained files=262 skipped=0 probed=17143 deep=2857 calls=42857 probe_ms_p50=300 deep_ms_p50=300 budget_min=85 throttled=0 backoff_refs=0 enrich=complete failed_buckets=0 search=4c1a… search_wire=2000000 site_bytes=700000000 site_files=100000 astro_ms=600000 astro_dir_bytes=500000000 pages_cut=2000 pages_hard_cut=20
 ```
 
 | Field | Meaning |
@@ -130,6 +130,10 @@ grim-indexer: built layout=anchored legacy=true generation=1792560000 flat sha25
 | `backoff_refs` | Refs waiting out a failure backoff |
 | `enrich` | `complete`, `budget` (the time budget ran out), or `none` (no hand-off) |
 | `failed_buckets` | Buckets left out of the plane because a shard would not fit 2 MiB |
+| `search`, `search_wire` | Digest of the site's search file and its gzip size. `none` and `0` when there is none |
+| `site_bytes`, `site_files` | Total size and number of files in `dist/` |
+| `astro_ms`, `astro_dir_bytes` | Wall time of the Astro build, and the size of its content cache |
+| `pages_cut`, `pages_hard_cut` | Package pages cut to fit the 24 KiB page cap, and those that took the hard cut |
 
 `deep_ms_p50` is the figure to read when you estimate a cold build, since a
 cold build is all full-enrichment calls.
@@ -145,6 +149,9 @@ status, which stays 0:
 - `enrich=budget`, or any `throttled` answer;
 - a budget under 85 minutes because the job timeout is short:
   "re-render required" (see [`enrich`](#grim-indexer-enrich)).
+- a search file of 6 MiB or more gzipped. At 8 MiB the line starts `error:`;
+- a site of 800,000,000 bytes or 160,000 files, which starts `error:`;
+- a package page still over its cap after the hard cut, one line each.
 
 ## `grim-indexer enrich`
 

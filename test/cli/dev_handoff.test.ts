@@ -48,7 +48,7 @@ async function runDev(): Promise<void> {
   for (const l of process.listeners("SIGTERM")) process.off("SIGTERM", l);
 }
 
-const readRoot = (): { generation: number; planes: { enrich: unknown } } =>
+const readRoot = (): { generation: number; planes: { enrich: unknown }; search: unknown } =>
   JSON.parse(fs.readFileSync(path.join(dir, "dist", "c", "root.json"), "utf8")) as ReturnType<typeof readRoot>;
 
 beforeEach(() => {
@@ -79,6 +79,19 @@ describe("dev hand-off (IX-R35, V-29)", () => {
     expect(readRoot().planes.enrich).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(grimSpawns()).toEqual([]);
+  }, 30_000);
+
+  // `dev` is never deployed, so its root names no search file: the dev page
+  // reads the digest `devSite` hands it, not the root.
+  it("IX-R15 publishes search: null and no c/q, with or without a hand-off", async () => {
+    addPackage("hello");
+    await runDev();
+    expect(readRoot().search).toBeNull();
+    expect(fs.existsSync(path.join(dir, "dist", "c", "q"))).toBe(false);
+
+    handOff(dir, new BlobStore(path.join(dir, STATE_DIR)), { now: new Date(), published: null, restored: null });
+    await runDev();
+    expect(readRoot().search).toBeNull();
   }, 30_000);
 
   it("publishes the handed-off generation and plane", async () => {

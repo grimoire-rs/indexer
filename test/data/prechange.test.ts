@@ -126,10 +126,10 @@ async function build(patch: Record<string, unknown> = {}): Promise<Built> {
   await fs.mkdir(dist);
   await fs.rename(path.join(root, "all.json"), path.join(dist, "all.json"));
   const config = await loadConfig(root);
-  await buildSite({ root, outDir: dist, config });
+  const facts = await buildSite({ root, outDir: dist, config });
   // The step `grim-indexer build` runs after the site, so the additive-set
   // assertion below binds to what the CLI publishes.
-  publishDist(dist, config.sync);
+  publishDist(dist, config.sync, null, new Date(), facts.search);
   return { compiled, dist };
 }
 
@@ -220,5 +220,6 @@ describe("the default build against the pre-change build", () => {
     expect(added).toContain("stats.json.gz");
     expect(added.filter((rel) => rel.startsWith("c/f/sha256/"))).toHaveLength(1);
     expect(added).toContain("browse/1/index.html");
+    expect(added.filter((rel) => rel.startsWith("c/q/sha256/"))).toHaveLength(1);
   });
 });

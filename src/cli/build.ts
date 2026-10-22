@@ -7,8 +7,10 @@
 // has to carry — the ratings sidecar `buildSite` publishes from the index
 // root — therefore lands in `outDir` downstream of the clear, never before.
 // The `c/` tree goes last: it is derived from the `all.json` and `stats.json`
-// the site step leaves in `outDir`, and Astro empties `outDir` once. The enrich
-// plane comes from the hand-off and nothing here touches the network.
+// the site step leaves in `outDir`, and Astro empties `outDir` once. The root
+// also names the search file `buildSite` wrote to `c/q/`, and refuses to be
+// written without it (IX-R15). The enrich plane comes from the hand-off and
+// nothing here touches the network.
 import path from "node:path";
 
 import { retainPrevious } from "../state/retention.js";
@@ -34,17 +36,17 @@ export async function build(root: string, flags: BuildFlags): Promise<ExitCode> 
 
   const config = await loadConfig(rootDir);
   const { count, namespaces } = await compileIndex({ root: rootDir, outDir });
-  await buildSite({ root: rootDir, outDir, config });
+  const site = await buildSite({ root: rootDir, outDir, config });
   // The only state this step reads: no network, whatever `enrich` left (IX-R35).
   const handoff = stageHandoff(rootDir, outDir);
   if (handoff === null) {
     console.warn("warn: no usable hand-off from `enrich` — publishing without an enrich plane");
   }
-  const published = publishDist(outDir, config.sync, handoff);
+  const published = publishDist(outDir, config.sync, handoff, undefined, site.search);
   const { applyLegacy } = await import("../emit/legacy.js");
   await applyLegacy(rootDir, outDir, config); // IX-R48: after the root, which names only the surviving blobs
   if (handoff !== null) retainPrevious(rootDir, outDir, published); // IX-R22: offline, after the root and the legacy cut
-  reportBuild({ root: rootDir, dist: outDir, sync: config.sync, published, entries: count }); // IX-R23: last, so dist/ is final
+  reportBuild({ root: rootDir, dist: outDir, sync: config.sync, published, entries: count, site }); // IX-R23: last, so dist/ is final
 
   console.log(
     `${count} package(s) across ${namespaces.length} namespace(s) -> ${path.relative(process.cwd(), outDir) || outDir}`,

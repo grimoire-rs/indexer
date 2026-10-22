@@ -71,7 +71,8 @@ export async function dev(root: string, flags: DevFlags): Promise<ExitCode> {
   const config = await loadConfig(rootDir);
   const { count, namespaces } = await compileIndex({ root: rootDir, outDir });
   // Before the server stages `outDir` as its public layer; dev has no stats.json
-  // to name, since only the build step writes one.
+  // to name, since only the build step writes one. Nor a search file: dev is
+  // never deployed, so its root keeps `search` null (IX-R15).
   publishDist(outDir, config.sync, stageHandoff(rootDir, outDir));
   const server = await devSite({ root: rootDir, outDir, config, port, host });
 
