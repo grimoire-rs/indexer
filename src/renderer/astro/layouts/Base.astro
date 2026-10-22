@@ -336,7 +336,8 @@ const builtIndex = derivedIndex(config);
       //
       // Announcing is left to the per-button status span that already exists
       // — this element is `aria-hidden`, or every copy would be read twice.
-      const toast = document.getElementById("copy-toast");
+      // `body >`: a README heading can carry the same id, earlier in the page.
+      const toast = document.querySelector("body > #copy-toast");
       let toastTimer;
       function showToast(name, value) {
         if (!toast) return;
