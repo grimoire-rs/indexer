@@ -23,6 +23,8 @@ site/
 .ocx/
 .task/
 .dev/
+# `npm run bench:scale` scratch index, state and site (V-19). Large, never committed.
+.bench/
 *.log
 .DS_Store
 .test-index-*/

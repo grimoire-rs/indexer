@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { enrich } from "../../src/cli/enrich.js";
 import { EXIT } from "../../src/cli/exit.js";
+import { gzipDeterministic } from "../../src/emit/gzip.js";
 import { enrichIndex, grimVersion, type GrimRunner } from "../../src/enrich/index.js";
 import { MARKETPLACE_GRIM_VERSION } from "../../src/grim.js";
 import { BLOB_CAP } from "../../src/state/blobstore.js";
@@ -234,6 +235,87 @@ describe("enrich counters and time budget (IX-R43, spec §5.9)", () => {
     const warned = vi.mocked(console.warn).mock.calls.flat().join("\n");
     expect(warned).toMatch(/re-render required/);
     expect(warned).toMatch(/budget ran out/);
+  });
+});
+
+describe("enrich stages the previous closure (IX-R22, spec §5.8)", () => {
+  const flat = Buffer.from("[]");
+  const flatGz = gzipDeterministic(flat);
+  const flatPath = `/c/f/sha256/${sha(flat)}.json.gz`;
+
+  /** The site as the first run left it: a root naming the flat blob and the plane, and the flat blob. */
+  function serveRoot(plane: unknown): string[] {
+    const urls: string[] = [];
+    const root = { flat: { sha256: sha(flat), size: flat.length }, generated_at: "2026-10-21T08:00:00Z", generation: 1_792_000_000, planes: { catalog: null, enrich: plane }, schema: 1, search: null, stats: null };
+    vi.stubGlobal("fetch", async (input: unknown) => {
+      const url = new URL(String(input));
+      urls.push(url.pathname);
+      if (url.pathname === "/c/root.json") return new Response(JSON.stringify(root));
+      if (url.pathname === flatPath) return new Response(new Uint8Array(flatGz));
+      return new Response("", { status: 404 });
+    });
+    return urls;
+  }
+
+  async function firstRun(): Promise<{ plane: { sha256: string; size: number }; shard: string }> {
+    setSite(SITE);
+    addPackage("foo", "ghcr.io/acme/skills/foo");
+    stubFetch(() => null);
+    await enrich(dir, {});
+    const plane = readHandoff(dir)!.planes.enrich!;
+    return { plane, shard: fs.readdirSync(state("out", "c/s/sha256"))[0]!.replace(/\.json$/, "") };
+  }
+
+  it("stages the closure the site names from the store and the site, and counts it for the build log line", async () => {
+    const { plane, shard } = await firstRun();
+    const urls = serveRoot(plane);
+
+    await enrich(dir, {});
+
+    const staged = (rel: string): string => state("out/retained", rel);
+    expect(fs.readFileSync(staged(`c/f/sha256/${sha(flat)}.json.gz`))).toEqual(flatGz);
+    expect(fs.existsSync(staged(`c/p/sha256/${plane.sha256}.json`))).toBe(true);
+    expect(fs.existsSync(staged(`c/s/sha256/${shard}.json`))).toBe(true);
+    expect(urls).toEqual(["/c/root.json", flatPath]); // the plane files came from the store
+    expect(readHandoff(dir)!.counters).toMatchObject({ retained_files: 3, retained_skipped: 0 });
+  });
+
+  it("stages nothing on an outage run (exit 69), which still hands off", async () => {
+    const { plane } = await firstRun();
+    const urls = serveRoot(plane);
+    // Two new packages fail, the carried one is not due: a majority of the walk.
+    addPackage("bar", "ghcr.io/acme/skills/bar");
+    addPackage("baz", "ghcr.io/acme/skills/baz");
+    grim = async () => {
+      throw new Error("registry down");
+    };
+
+    await expect(enrich(dir, {})).rejects.toMatchObject({ code: EXIT.unavailable });
+
+    expect(urls).toEqual(["/c/root.json"]);
+    expect(fs.existsSync(state("out/retained"))).toBe(false);
+    expect(readHandoff(dir)!.counters).toMatchObject({ retained_files: 0, retained_skipped: 0 });
+  });
+
+  it("--purge <sha256> keeps that digest out of the stage", async () => {
+    const { plane, shard } = await firstRun();
+    serveRoot(plane);
+
+    await enrich(dir, { purge: shard });
+
+    expect(fs.existsSync(state("out/retained", `c/s/sha256/${shard}.json`))).toBe(false);
+    expect(fs.existsSync(state("out/retained", `c/p/sha256/${plane.sha256}.json`))).toBe(true);
+  });
+
+  it("stages nothing without an explicit site", async () => {
+    const { plane } = await firstRun();
+    fs.rmSync(path.join(dir, "index.config.json"));
+    const urls = serveRoot(plane);
+
+    await enrich(dir, {});
+
+    expect(urls).toEqual([]);
+    expect(readHandoff(dir)!.counters).toMatchObject({ retained_files: 0, retained_skipped: 0 });
   });
 });
 
