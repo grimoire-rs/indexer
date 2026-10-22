@@ -28,6 +28,16 @@ That is what makes the Unstable tier below honest: a minor release that moves a
 component leaves a record of what your override was written against. A path
 that only *adds* a file prints nothing — adding one is no compatibility risk.
 
+Replacing `components/Catalog.tsx` or `pages/index.astro` has one further effect.
+The shipped home page renders 48 cards and loads one search file on first
+interaction. A replacement may know nothing of that split, so the home page
+inlines every card instead, as it did before. The build prints one extra line
+right after the replacement line:
+
+```
+theme/components/Catalog.tsx: the home page inlines every card while this file is replaced
+```
+
 ## `@grim/*`
 
 Inside the overlay, `@grim/` resolves to the renderer's source tree — after
