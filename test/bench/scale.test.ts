@@ -2,7 +2,7 @@
 // Copyright 2026 The Grimoire Authors
 
 /**
- * V-19's benchmark is a manual gate at 20,000 and 100,000 entries; this runs the
+ * V-19's benchmark is a manual run (`.github/workflows/bench.yml`); this runs the
  * real script at a size that fits a test, so the script itself cannot rot.
  */
 import { spawnSync } from "node:child_process";
@@ -20,6 +20,13 @@ interface Result {
   steps: { name: string; seconds: number; peak_rss_mib: number }[];
   calls: { cold: number; warm: number; cold_handoff: number; warm_handoff: number };
   checks: { name: string; ok: boolean; detail: string }[];
+  index_html_bytes: number;
+  index_html_baseline_bytes: number;
+  largest_file: { path: string; bytes: number };
+  largest_page: { path: string; bytes: number };
+  peak_rss_mib: number;
+  astro_ms: number | null;
+  astro_dir_bytes: number | null;
   ok: boolean;
 }
 
@@ -59,6 +66,34 @@ describe("scripts/bench-scale.mjs", { timeout: 300_000 }, () => {
     expect(result.steps.map((s) => s.name)).toEqual(["cold enrich", "build", "warm enrich", "build (warm)"]);
     for (const step of result.steps) expect(step.peak_rss_mib, step.name).toBeGreaterThan(10);
     expect(run.stderr).toMatch(/peak RSS/);
+
+    // The site is judged as well as the pipeline (IX-R33): each bound is a check, and it passed.
+    const names = result.checks.map((c) => c.name);
+    for (const name of [
+      "no site file over 16 MiB",
+      "no package page over 24576 bytes",
+      "index.html within 4096 bytes of the 100-entry build",
+      "peak RSS of either build under 4 GiB",
+      "staged .astro/ under 2 GiB",
+      "astro pass within 15 min",
+    ]) {
+      expect(names, name).toContain(name);
+      expect(result.checks.find((c) => c.name === name)?.ok, name).toBe(true);
+    }
+
+    // The report carries the figures the checks judged, measured rather than defaulted.
+    // Each figure comes from its own directory: the baseline never lands in the site the trace reads.
+    const size = (...parts: string[]) => fs.statSync(path.join(work, "run", ...parts, "index.html")).size;
+    expect(result.index_html_bytes).toBe(size("site"));
+    expect(result.index_html_baseline_bytes).toBe(size("baseline", "site"));
+    expect(result.index_html_baseline_bytes).toBeGreaterThan(0);
+    expect(result.largest_file.bytes).toBeGreaterThan(0);
+    expect(result.largest_page.path).toMatch(/^p\/.*\/index\.html$/);
+    expect(result.largest_page.bytes).toBeGreaterThan(0);
+    expect(result.largest_page.bytes).toBeLessThanOrEqual(24 * 1024);
+    expect(result.peak_rss_mib).toBeGreaterThan(10);
+    expect(result.astro_ms).toBeGreaterThan(0);
+    expect(result.astro_dir_bytes).toBeGreaterThan(0);
   });
 
   it("V-19 exits 64 on a bad --entries, before touching the work directory", () => {
