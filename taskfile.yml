@@ -75,7 +75,7 @@ tasks:
   # `NODE_OPTIONS` preloads the WSL chrome-launcher fix — a no-op on plain
   # Linux, so this command is byte-identical here and in CI. See the script.
   quality:web:
-    desc: Build the fixture and bulk catalog sites and run Lighthouse CI + the cascade and CSP probes
+    desc: Build the fixture and bulk catalog sites and run Lighthouse CI + the interaction trace, cascade and CSP probes
     cmds:
       # Report directories are cleared first, and this is not tidiness: lhci
       # writes a fresh manifest but leaves every previous run's report files
@@ -98,6 +98,13 @@ tasks:
         CHROME_PATH="${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"
         NODE_OPTIONS="--require ./scripts/lhci-posix-tmpdir.cjs"
         ./node_modules/.bin/lhci autorun --config=.lighthouserc.bulk.cjs
+      # Lighthouse stops at the first idle page; this one scrolls, sorts and
+      # searches the same bulk site at 4x CPU throttle and fails on a long-task
+      # or DOM-size breach. The budgets and their derivation are in
+      # scripts/lib/interaction-budgets.json.
+      - >-
+        CHROME_PATH="${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"
+        node scripts/quality-interaction.mjs --site .lhci-bulk --budget scripts/lib/interaction-budgets.json
       - >-
         node scripts/quality-css-cascade.mjs
         "${CHROME_PATH:-$(ls -d "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | tail -1)}"

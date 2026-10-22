@@ -1,0 +1,61 @@
+name: Bench
+
+# Manual benchmarks on a GitHub-hosted runner, dispatched from the Actions tab
+# (GitHub offers a dispatch once the file is on the default branch). Never part
+# of `ci.yml`: a run takes far longer than the pull-request gate may.
+on:
+  workflow_dispatch:
+    inputs:
+      entries:
+        description: Catalog size for the scale bench (V-19, IX-R33)
+        default: "10000"
+
+permissions: {}
+
+jobs:
+  scale:
+    name: scale (${{ inputs.entries }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      ENTRIES: ${{ inputs.entries }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Same toolchain as `ci.yml`: node 24 comes from the ocx group, and no
+      # step caches npm, so nothing restored can reach what the bench builds.
+      - uses: ocx-sh/setup-ocx@de8e3366f812941423985eaccae28663ef192e8b # v1.3.0
+        with:
+          groups: default,node24
+      - run: ocx run -g default,node24 -- npm ci
+      # `--silent` keeps npm's `> node scripts/...` banner out of stdout, which
+      # has to stay the one JSON line the bench prints.
+      - name: Bench
+        run: >-
+          ocx run -g default,node24 --
+          npm run --silent bench:scale -- --entries "$ENTRIES" --json
+          > "bench-$ENTRIES.json" 2> "bench-$ENTRIES.txt"
+      # Report only (IX-R33): at scale the long-task and DOM-size numbers say
+      # where the virtualizer trigger sits, not whether to fail.
+      # The bench leaves its last build under `.bench/run/site`. `continue-on-error`
+      # keeps a missing Chrome or a missing site from turning the V-19 verdict red.
+      - name: Interaction trace (report only)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 120
+        run: >-
+          ocx run -g default,node24 --
+          node scripts/quality-interaction.mjs --site .bench/run/site --report
+          > "interaction-$ENTRIES.json" 2> "interaction-$ENTRIES.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: bench-${{ env.ENTRIES }}
+          path: |
+            bench-${{ env.ENTRIES }}.json
+            bench-${{ env.ENTRIES }}.txt
+            interaction-${{ env.ENTRIES }}.json
+            interaction-${{ env.ENTRIES }}.txt

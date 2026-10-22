@@ -1,0 +1,17 @@
+{
+  "//": [
+    "Measured 2026-10-23 on the 250-entry bulk site (quality-site.mjs --bulk 250, 255 packages) of the integrated tip,",
+    "Chrome 155.0.8059.39 headless, 4x CPU throttle, twelve runs. Each budget is twice the worst of the twelve, rounded up:",
+    "  step    count  total ms  max ms  elements   worst of twelve (count / total / max / elements)",
+    "  scroll    20     1380     225     16710     10 / 686 / 111 / 8352",
+    "  sort       6      385     180      7870      3 / 191 /  88 / 3930",
+    "  search     6      485     200      3180      3 / 239 /  99 / 1590",
+    "load is measured (worst 1 / 162 / 162 / 1719) and not budgeted: Lighthouse owns the load.",
+    "A second twelve on the final script stayed under every figure (worst scroll 8 / 453 / 95 / 8352, sort 3 / 177 / 63 / 3930,",
+    "search 2 / 157 / 90 / 1590). Counts and milliseconds move with the host, the element counts do not. If a slower runner",
+    "breaches the counts with no regression behind it, re-measure there rather than loosen the elements."
+  ],
+  "scroll": { "longTaskCount": 20, "longTaskTotalMs": 1380, "longTaskMaxMs": 225, "domNodes": 16710 },
+  "sort": { "longTaskCount": 6, "longTaskTotalMs": 385, "longTaskMaxMs": 180, "domNodes": 7870 },
+  "search": { "longTaskCount": 6, "longTaskTotalMs": 485, "longTaskMaxMs": 200, "domNodes": 3180 }
+}

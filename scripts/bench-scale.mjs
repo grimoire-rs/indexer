@@ -8,7 +8,8 @@
 // `build`, warm `enrich`, `build`, with scripts/lib/fake-grim.mjs as `grim`.
 // Pass: calls <= 3/entry cold and 2.5 warm, no file over 16 MiB (P-10), build in 15 min, and
 // each leg inside the NFR-1 stage sum (enrich projected at the measured per-call latency).
-// Each step also prints its peak RSS; that is reported, not judged.
+// The site is judged too (IX-R33): page size, `index.html` growth over a 100-entry build, build
+// peak RSS, the staged `.astro/` and Astro's own time. Each step prints its peak RSS.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -29,6 +30,12 @@ const RSS_REPORT = path.join(repo, "scripts/lib/rss-report.mjs");
 
 const MAX_CALLS = { cold: 3, warm: 2.5 };
 const MAX_FILE = 16 * 1024 * 1024;
+const MAX_PAGE = 24 * 1024;
+const BASELINE_ENTRIES = 100;
+const MAX_INDEX_GROWTH = 4 * 1024;
+const MAX_BUILD_RSS_MIB = 4 * 1024;
+const MAX_ASTRO_DIR = 2 * 1024 * 1024 * 1024;
+const MAX_ASTRO_MS = 15 * 60 * 1000;
 const IN_FLIGHT = 8;
 const WINDOW_MS = 3_600_000; // sync.revalidate, default
 const EXIT_USAGE = 64;
@@ -83,22 +90,23 @@ function serveSite() {
 }
 
 /** One CLI step, timed, with the CLI process's peak RSS. */
-async function step(name, args, env = {}) {
+async function step(name, args, env = {}, cwd = root) {
   log(name);
   const rssFile = path.join(run, "rss.txt");
   fs.rmSync(rssFile, { force: true });
   const started = performance.now();
+  let stdout;
   try {
     // `--import` as an exec argument, not NODE_OPTIONS: the fake `grim` children must not report.
-    await exec(process.execPath, ["--import", pathToFileURL(RSS_REPORT).href, CLI, ...args], {
-      cwd: root,
+    ({ stdout } = await exec(process.execPath, ["--import", pathToFileURL(RSS_REPORT).href, CLI, ...args], {
+      cwd,
       env: { ...process.env, BENCH_RSS_FILE: rssFile, ...env },
       maxBuffer: 1 << 28,
-    });
+    }));
   } catch (err) {
     throw new Error(`${name} failed (exit ${err.code}):\n${String(err.stderr ?? err.message).slice(-2000)}`);
   }
-  return { name, ms: performance.now() - started, rssMiB: Number(fs.readFileSync(rssFile, "utf8")) / 1024 };
+  return { name, ms: performance.now() - started, rssMiB: Number(fs.readFileSync(rssFile, "utf8")) / 1024, stdout };
 }
 
 const callsLogged = () => (fs.existsSync(callLog) ? fs.readFileSync(callLog, "utf8").split("\n").length - 1 : 0);
@@ -117,15 +125,21 @@ async function enrichRun(name, entries, env) {
   return { ...timed, counted, counters, perEntry: counted / entries };
 }
 
-/** Files over the cap that are not exempt, and the largest that is not. */
+const PAGE = /^p\/.*\/index\.html$/;
+
+/** Files over the cap that are not exempt, and the largest that is not; package pages are judged apart. */
 function scan(dir, exempt) {
-  const out = { files: 0, over: [], largest: { rel: "", size: 0 } };
+  const out = { files: 0, over: [], largest: { rel: "", size: 0 }, pagesOver: [], largestPage: { rel: "", size: 0 } };
   for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!e.isFile()) continue;
     const file = path.join(e.parentPath, e.name);
     const rel = path.relative(dir, file).split(path.sep).join("/");
     const size = fs.statSync(file).size;
     out.files++;
+    if (PAGE.test(rel)) {
+      if (size > MAX_PAGE) out.pagesOver.push(`${rel} (${size} bytes)`);
+      if (size > out.largestPage.size) out.largestPage = { rel, size };
+    }
     if (exempt(rel)) continue;
     if (size > MAX_FILE) out.over.push(`${rel} (${size} bytes)`);
     if (size > out.largest.size) out.largest = { rel, size };
@@ -134,9 +148,10 @@ function scan(dir, exempt) {
 }
 
 // P-10 exempts all.json, stats.json, their .gz siblings and c/f blobs. The store
-// holds the first two by digest, and a retained c/f blob is `<digest>.json.gz`;
-// the search file is exempt wherever it lands.
-const SITE_EXEMPT = /^((all|stats|search[^/]*)\.json(\.gz)?|c\/f\/.*)$/;
+// holds the first two by digest, and a retained c/f blob is `<digest>.json.gz`.
+// The search file is exempt as well: it lands at `c/q/sha256/<digest>.json.gz`, and its own
+// 32 MiB cap is the bound on it.
+const SITE_EXEMPT = /^((all|stats)\.json(\.gz)?|c\/[fq]\/.*)$/;
 function p10() {
   const digest = (name) => createHash("sha256").update(fs.readFileSync(path.join(site, name))).digest("hex");
   const digests = new Set(["all.json", "stats.json"].filter((n) => fs.existsSync(path.join(site, n))).map(digest));
@@ -144,6 +159,28 @@ function p10() {
     state: scan(state, (rel) => digests.has(path.basename(rel).replace(/\.json\.gz$/, ""))),
     site: scan(site, (rel) => SITE_EXEMPT.test(rel)),
   };
+}
+
+/**
+ * The same pipeline at BASELINE_ENTRIES: `index.html` must not grow with the catalog, and a bound on
+ * growth is a difference between two builds of one tree. It runs before the real legs so the
+ * loopback site is still empty and its enrich finds no previous deploy, as the cold leg does.
+ * It writes only under `<run>/baseline`, so `<run>/site` stays the real build the trace reads.
+ */
+async function baselineBuild(config) {
+  const dir = path.join(run, "baseline");
+  const baseRoot = path.join(dir, "root");
+  const baseSite = path.join(dir, "site");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.cpSync(FIXTURE, baseRoot, { recursive: true });
+  for (const f of ["marketplace.toml", "marketplace.lock"]) fs.rmSync(path.join(baseRoot, f), { force: true });
+  await inflate(baseRoot, BASELINE_ENTRIES);
+  fs.rmSync(path.join(baseRoot, "enrich"), { recursive: true, force: true });
+  fs.writeFileSync(path.join(baseRoot, "index.config.json"), config);
+  log(`baseline: enrich and build at ${BASELINE_ENTRIES} entries`);
+  await step("baseline enrich", ["enrich", baseRoot, "--grim", FAKE_GRIM], { FAKE_GRIM_LOG: path.join(dir, "calls.log"), FAKE_GRIM_LATENCY_MS: "0" }, baseRoot);
+  await step("baseline build", ["build", baseRoot, "--out-dir", baseSite], {}, baseRoot);
+  return fs.statSync(path.join(baseSite, "index.html")).size;
 }
 
 async function main() {
@@ -168,6 +205,7 @@ async function main() {
   const outDir = ["--out-dir", site];
   const steps = [];
   try {
+    const baselineIndexBytes = await baselineBuild(fs.readFileSync(configFile, "utf8"));
     const cold = await enrichRun("cold enrich", entries, {});
     const buildCold = await step("build", ["build", root, ...outDir]);
     steps.push(cold, buildCold);
@@ -180,7 +218,7 @@ async function main() {
     steps.push(warm);
     const buildWarm = await step("build (warm)", ["build", root, ...outDir]);
     steps.push(buildWarm);
-    return report(entries, { cold, warm, buildCold, buildWarm }, steps, p10());
+    return report(entries, { cold, warm, buildCold, buildWarm, baselineIndexBytes }, steps, p10());
   } finally {
     server.closeAllConnections();
     server.close();
@@ -188,7 +226,7 @@ async function main() {
 }
 
 function report(entries, runs, steps, files) {
-  const { cold, warm, buildCold, buildWarm } = runs;
+  const { cold, warm, buildCold, buildWarm, baselineIndexBytes } = runs;
   const slowestBuild = Math.max(buildCold.ms, buildWarm.ms);
   const check = (name, ok, detail) => ({ name, ok, detail });
   // The enrich stage at the measured per-call latency, as NFR-1 sums it.
@@ -200,6 +238,15 @@ function report(entries, runs, steps, files) {
     return { ...check(`${name} enrich and build within the NFR-1 stage sum (${NFR1.totalMin} min)`, ok, `${parts} = ${fixed(sum)} min`), sum, enrichMin };
   };
   const legs = { cold: leg("cold", cold, buildCold), warm: leg("warm", warm, buildWarm) };
+  // The worst of the two builds, read off the build line; a build that did not print the field is NaN, which fails.
+  const builds = [buildCold, buildWarm];
+  const buildFact = (field) => Math.max(...builds.map((b) => Number(new RegExp(` ${field}=(\\d+)`).exec(b.stdout)?.[1] ?? NaN)));
+  const astroMs = buildFact("astro_ms");
+  const astroDirBytes = buildFact("astro_dir_bytes");
+  const peakRssMiB = Math.round(Math.max(...builds.map((b) => b.rssMiB)));
+  const indexBytes = fs.statSync(path.join(site, "index.html")).size;
+  const growth = indexBytes - baselineIndexBytes;
+  const overList = (list) => (list.length ? `; over: ${list.join(", ")}` : "");
   const checks = [
     check(`cold calls <= ${MAX_CALLS.cold}/entry`, cold.perEntry <= MAX_CALLS.cold, `${fixed(cold.perEntry, 2)}/entry (${cold.counted} calls)`),
     check(`warm calls <= ${MAX_CALLS.warm}/entry`, warm.perEntry <= MAX_CALLS.warm, `${fixed(warm.perEntry, 2)}/entry (${warm.counted} calls)`),
@@ -208,12 +255,24 @@ function report(entries, runs, steps, files) {
     check("no state file over 16 MiB", files.state.over.length === 0, `${files.state.files} files, largest ${files.state.largest.size} bytes${files.state.over.length ? `; over: ${files.state.over.join(", ")}` : ""}`),
     check("no site file over 16 MiB", files.site.over.length === 0, `${files.site.files} files, largest ${files.site.largest.size} bytes${files.site.over.length ? `; over: ${files.site.over.join(", ")}` : ""}`),
     check(`build within ${NFR1.buildMin} min`, minutes(slowestBuild) <= NFR1.buildMin, `slowest ${fixed(minutes(slowestBuild))} min`),
+    check(`no package page over ${MAX_PAGE} bytes`, files.site.pagesOver.length === 0 && files.site.largestPage.size > 0, `largest ${files.site.largestPage.rel || "(no p/ page)"} ${files.site.largestPage.size} bytes${overList(files.site.pagesOver.slice(0, 5))}`),
+    check(`index.html within ${MAX_INDEX_GROWTH} bytes of the ${BASELINE_ENTRIES}-entry build`, growth <= MAX_INDEX_GROWTH, `${indexBytes} bytes against ${baselineIndexBytes} (${growth >= 0 ? "+" : ""}${growth})`),
+    check(`peak RSS of either build under ${MAX_BUILD_RSS_MIB / 1024} GiB`, peakRssMiB <= MAX_BUILD_RSS_MIB, `${peakRssMiB} MiB`),
+    check(`staged .astro/ under ${MAX_ASTRO_DIR / 2 ** 30} GiB`, astroDirBytes <= MAX_ASTRO_DIR, Number.isFinite(astroDirBytes) ? `${astroDirBytes} bytes` : "astro_dir_bytes missing from the build line"),
+    check(`astro pass within ${MAX_ASTRO_MS / 60_000} min`, astroMs <= MAX_ASTRO_MS, Number.isFinite(astroMs) ? `slowest ${fixed(minutes(astroMs))} min` : "astro_ms missing from the build line"),
     ...Object.values(legs).map(({ name, ok, detail }) => ({ name, ok, detail })),
   ];
   return {
     v: 1,
     entries,
     latency_ms: latencyMs,
+    index_html_bytes: indexBytes,
+    index_html_baseline_bytes: baselineIndexBytes,
+    largest_file: { path: files.site.largest.rel, bytes: files.site.largest.size },
+    largest_page: { path: files.site.largestPage.rel, bytes: files.site.largestPage.size },
+    peak_rss_mib: peakRssMiB,
+    astro_ms: Number.isFinite(astroMs) ? astroMs : null,
+    astro_dir_bytes: Number.isFinite(astroDirBytes) ? astroDirBytes : null,
     steps: steps.map((s) => ({ name: s.name, seconds: Number(fixed(s.ms / 1000, 2)), peak_rss_mib: Math.round(s.rssMiB) })),
     calls: { cold: cold.counted, warm: warm.counted, cold_handoff: cold.counters.calls, warm_handoff: warm.counters.calls },
     projected_enrich_min: { cold: Number(fixed(legs.cold.enrichMin)), warm: Number(fixed(legs.warm.enrichMin)), budget: NFR1.enrichMin },
