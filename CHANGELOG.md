@@ -11,6 +11,32 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.5.11] - 2026-10-22
+
+### Added
+
+- Carry unchanged packages forward on a digest probe *(enrich)*
+- Add an optional /marketplace/ landing page *(renderer)*
+- Export the repository's marketplace.toml with grim *(enrich)*
+- Render the index's marketplace beside or instead of its packages *(renderer)*
+- Require marketplace members to be indexed packages *(validate)*
+- Refuse a grim older than the index needs *(enrich)*
+- Remember the visitor's harness and platform picks across pages *(renderer)*
+- Derive registry.index from the address the index is served at *(renderer)*
+- Load a theme from an npm package via the theme config key *(renderer)*
+
+### Changed
+
+- Build the search index from records and share the relevance cutoff *(search)*
+
+### Fixed
+
+- Keep a .git GitHub remote whole instead of shortening it to owner/repo.git *(renderer)*
+- Probe the companion digest every run, even for a sidecar without descDigest *(enrich)*
+- Order the describe slice by bytes so the rotation is locale-independent *(enrich)*
+- Accept only digits for --concurrency *(enrich)*
+- Carry a companion-less package forward when its probe still finds none *(enrich)*
+
 ## [0.5.10] - 2026-10-07
 
 ### Added
@@ -316,6 +342,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.5.11]: https://github.com/grimoire-rs/indexer/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/grimoire-rs/indexer/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/grimoire-rs/indexer/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/grimoire-rs/indexer/compare/v0.5.7...v0.5.8
