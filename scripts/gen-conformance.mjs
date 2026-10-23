@@ -11,13 +11,14 @@
 //   node scripts/gen-conformance.mjs --check <MANIFEST.json>
 //   GRIM_CHECKOUT=<grim checkout> node scripts/gen-conformance.mjs --pinned <pin file>
 //
-// --pinned is --check against the manifest grim has checked in at the commit
-// the pin file names (`git show <sha>:test/data/conformance/MANIFEST.json`), and
-// also against the fixture files grim holds there: a file missing or edited at
-// the pin fails even when its manifest entry is untouched.
+// --pinned is --check against the manifest grim has checked in at the release
+// tag the pin file names (one `v<major>.<minor>.<patch>` line, IX-R42), resolved
+// to the commit it peels to (`git show <commit>:test/data/conformance/MANIFEST.json`),
+// and also against the fixture files grim holds there: a file missing or edited
+// at the pin fails even when its manifest entry is untouched.
 //
 // Exit: 0 clean, 1 drift, 64 usage (--pinned: GRIM_CHECKOUT unset), 65 unreadable manifest
-// (--pinned: unreadable or malformed pin file), 69 dist/ not built (--pinned: commit unreadable).
+// (--pinned: unreadable or malformed pin file), 69 dist/ not built (--pinned: tag unresolvable or tree unreadable).
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -74,34 +75,41 @@ function pinnedInventory(checkout, sha) {
   return files;
 }
 
-/** The manifest grim checked in at the commit `pinFile` names, and the fixture files it holds there, as `{ text, label, files }`, or the exit code that ends the run. */
+/** The manifest grim checked in at the release tag `pinFile` names (at the commit it peels to), and the fixture files it holds there, as `{ text, label, files }`, or the exit code that ends the run. */
 function pinnedManifest(pinFile) {
-  let sha;
+  let tag;
   try {
-    sha = fs.readFileSync(pinFile, "utf8").trim();
+    tag = fs.readFileSync(pinFile, "utf8").trim();
   } catch (err) {
     console.error(`cannot read the pin file ${pinFile}: ${err.message}`);
     return EXIT.data;
   }
-  if (!/^[0-9a-f]{40}$/.test(sha)) {
-    console.error(`${pinFile} must hold one 40-character lowercase hex commit SHA`);
+  // A tag is mutable, so the pin names only a release tag: no branch, no SHA, no pre-release.
+  if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) {
+    console.error(`${pinFile} must hold one grim release tag of the form v<major>.<minor>.<patch>, not ${JSON.stringify(tag)}`);
     return EXIT.data;
   }
   const checkout = process.env.GRIM_CHECKOUT;
   if (!checkout) {
-    console.error(`set GRIM_CHECKOUT to a grim checkout that contains commit ${sha}`);
+    console.error(`set GRIM_CHECKOUT to a grim checkout that contains tag ${tag}`);
     return EXIT.usage;
   }
   try {
+    // `refs/tags/` keeps a branch of the same name from standing in; `^{commit}` peels an annotated tag.
+    const sha = execFileSync("git", ["-C", checkout, "rev-parse", "--verify", "--end-of-options", `refs/tags/${tag}^{commit}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30_000,
+    }).trim();
     const text = execFileSync("git", ["-C", checkout, "show", `${sha}:${GRIM_MANIFEST}`], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30_000,
       maxBuffer: 16 * 1024 * 1024,
     });
-    return { text, label: `grim ${sha}:${GRIM_MANIFEST}`, files: pinnedInventory(checkout, sha) };
+    return { text, label: `grim ${tag} (${sha}):${GRIM_MANIFEST}`, files: pinnedInventory(checkout, sha) };
   } catch (err) {
-    console.error(`cannot read ${GRIM_TREE} at grim commit ${sha} in ${checkout}: ${err.message}`);
+    console.error(`cannot read ${GRIM_TREE} at grim tag ${tag} in ${checkout}: ${err.message}`);
     return EXIT.unavailable;
   }
 }

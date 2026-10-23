@@ -91,8 +91,8 @@ jobs:
       - run: ocx run -- task lint:workflows
 
   # Diffs the tree the emitters write against grim's checked-in copy at the
-  # commit test/conformance/GRIM_REF pins. Red until that grim commit is on
-  # GitHub. Outside `task check`: it needs a second repository on disk.
+  # release tag test/conformance/GRIM_REF pins. Outside `task check`: it
+  # needs a second repository on disk.
   conformance:
     name: conformance
     runs-on: ubuntu-latest
@@ -105,13 +105,13 @@ jobs:
           persist-credentials: false
       - id: pin
         run: |
-          sha=$(<test/conformance/GRIM_REF)
-          [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "::error::test/conformance/GRIM_REF is not one 40-character lowercase hex SHA" >&2; exit 1; }
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          tag=$(<test/conformance/GRIM_REF)
+          [[ $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::test/conformance/GRIM_REF is not one release tag of the form v<major>.<minor>.<patch>" >&2; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: grimoire-rs/grimoire
-          ref: ${{ steps.pin.outputs.sha }}
+          ref: refs/tags/${{ steps.pin.outputs.tag }}
           path: .grim
           sparse-checkout: test/data/conformance
           persist-credentials: false

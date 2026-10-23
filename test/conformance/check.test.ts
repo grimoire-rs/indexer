@@ -3,9 +3,9 @@
 
 /**
  * `gen-conformance.mjs --pinned` diffs the regenerated tree, and the fixture
- * files grim holds, against the manifest grim has checked in at the commit
- * `GRIM_REF` names. These tests stand a throwaway git repo in for that grim
- * checkout.
+ * files grim holds, against the manifest grim has checked in at the release tag
+ * `GRIM_REF` names, resolved to the commit it peels to. These tests stand a
+ * throwaway git repo in for that grim checkout.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -49,7 +49,9 @@ function git(...args: string[]): string {
   return run.stdout.trim();
 }
 
-/** Commit the generated tree, as grim keeps it, with `edit` applied to the copy, and return the commit's SHA. */
+let tagCount = 0;
+
+/** Commit the generated tree, as grim keeps it, with `edit` applied to the copy, tag the commit (annotated, as grim's releases are) and return the tag. */
 function commitTree(message: string, edit: (dir: string) => void = () => {}): string {
   const dir = path.join(grim, TREE_PATH);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -57,7 +59,9 @@ function commitTree(message: string, edit: (dir: string) => void = () => {}): st
   edit(dir);
   git("add", "-A", TREE_PATH);
   git("commit", "-q", "--allow-empty", "-m", message);
-  return git("rev-parse", "HEAD");
+  const tag = `v1.0.${tagCount++}`;
+  git("tag", "-a", "-m", message, tag);
+  return tag;
 }
 
 /** `checkout` null leaves GRIM_CHECKOUT unset. */
@@ -104,8 +108,8 @@ afterAll(() => {
 });
 
 describe("GRIM_REF", () => {
-  it("contract:I6 IX-R42 is one full lowercase commit SHA and a newline", () => {
-    expect(fs.readFileSync(path.join(HERE, "GRIM_REF"), "utf8")).toMatch(/^[0-9a-f]{40}\n$/);
+  it("contract:I6 IX-R42 is one v<major>.<minor>.<patch> release tag and a newline", () => {
+    expect(fs.readFileSync(path.join(HERE, "GRIM_REF"), "utf8")).toMatch(/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\n$/);
   });
 });
 
@@ -123,15 +127,15 @@ describe("--pinned", { timeout: 60_000 }, () => {
   });
 
   it("contract:I6 IX-R42 exits 1 and names a fixture file missing at the pin, whatever the manifest says", () => {
-    const sha = commitTree("all.json removed, manifest unchanged", (dir) => fs.rmSync(path.join(dir, "all.json")));
-    const run = pinned(`${sha}\n`);
+    const tag = commitTree("all.json removed, manifest unchanged", (dir) => fs.rmSync(path.join(dir, "all.json")));
+    const run = pinned(`${tag}\n`);
     expect(run.status).toBe(1);
     expect(run.stderr).toContain("all.json: the pinned tree does not have it");
   });
 
   it("contract:I6 IX-R42 exits 1 and names a fixture file modified at the pin, whatever the manifest says", () => {
-    const sha = commitTree("stats.json edited, manifest unchanged", (dir) => fs.appendFileSync(path.join(dir, "stats.json"), " "));
-    const run = pinned(`${sha}\n`);
+    const tag = commitTree("stats.json edited, manifest unchanged", (dir) => fs.appendFileSync(path.join(dir, "stats.json"), " "));
+    const run = pinned(`${tag}\n`);
     expect(run.status).toBe(1);
     expect(run.stderr).toContain("stats.json: differs");
   });
@@ -159,16 +163,23 @@ describe("--pinned", { timeout: 60_000 }, () => {
     }
   });
 
-  it.each(["", "abc123\n", `${"A".repeat(40)}\n`, `${"a".repeat(41)}\n`, "not a sha at all\n"])("contract:I6 IX-R42 exits 65 for the malformed pin %j", (pin) => {
+  it.each(["", "v1.0\n", "1.0.0\n", "V1.0.0\n", "v1.0.0-rc.1\n", "v01.0.0\n", `${"a".repeat(40)}\n`, "main\n", "v1.0.0 v1.0.1\n"])("contract:I6 IX-R42 exits 65 for the malformed pin %j", (pin) => {
     const run = pinned(pin);
     expect(run.status, run.stderr).toBe(65);
   });
 
-  it("contract:I6 IX-R42 exits 69 and names the SHA when the checkout does not hold it", () => {
-    const absent = "1".repeat(40);
+  it("contract:I6 IX-R42 exits 69 and names the tag when the checkout does not hold it", () => {
+    const absent = "v9.9.9";
     const run = pinned(`${absent}\n`);
     expect(run.status).toBe(69);
     expect(run.stderr).toContain(absent);
+  });
+
+  it("contract:I6 IX-R42 exits 69 when only a branch, not a tag, carries the pinned name", () => {
+    git("branch", "v8.8.8", good);
+    const run = pinned("v8.8.8\n");
+    expect(run.status).toBe(69);
+    expect(run.stderr).toContain("v8.8.8");
   });
 
   it("contract:I6 IX-R42 exits 69 when the checkout is not a repository", () => {
