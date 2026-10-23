@@ -60,37 +60,58 @@ export function logoOk(ext: string, bytes: Buffer, allowed: readonly LogoType[])
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const XLINK_NS = "http://www.w3.org/1999/xlink";
+// Namespaces whose elements a browser runs or embeds as a document inside an SVG.
+const ACTIVE_NS = new Set(["http://www.w3.org/1999/xhtml", "http://www.w3.org/1998/Math/MathML"]);
+// Local names, lowercased: script, embedded HTML, and SVG Tiny event listeners.
+const ACTIVE_ELEMENTS = new Set(["script", "foreignobject", "iframe", "embed", "object", "handler", "listener"]);
 
-const SVG_ELEMENTS = new Set([
-  "svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "defs", "symbol", "use",
-  "linearGradient", "radialGradient", "stop", "clipPath", "mask", "title", "desc",
-]);
-
-const SVG_ATTRS = new Set([
-  "viewBox", "width", "height", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "fx", "fy",
-  "d", "points", "transform", "fill", "fill-rule", "fill-opacity", "opacity", "clip-path", "clip-rule",
-  "mask", "offset", "stop-color", "stop-opacity", "gradientUnits", "gradientTransform", "preserveAspectRatio",
-  "id", "class", "version", "xmlns", "xmlns:xlink", "href", "xlink:href",
-]);
-
-const NAME = /^[A-Za-z][A-Za-z0-9:_-]*$/;
 const FRAGMENT = /^#[A-Za-z_][A-Za-z0-9_.-]*$/;
-// The five predefined XML entities and character references; anything else could name a DTD entity.
-const ENTITIES = /&(?!(?:amp|lt|gt|quot|apos|#[0-9]{1,7}|#x[0-9A-Fa-f]{1,6});)/;
+// An inline raster; one in an SVG image cannot run script or fetch anything.
+const DATA_IMAGE = /^data:image\/(?:png|jpeg|gif|webp)[;,]/i;
 const PROLOG = /^<\?xml(?:\s+(?:version|encoding|standalone)\s*=\s*(?:"[\w.-]*"|'[\w.-]*'))*\s*\?>/;
-const TAG = /^<(\/?)([A-Za-z][A-Za-z0-9:_-]*)((?:\s+[^\s=<>/"']+\s*=\s*(?:"[^"<]*"|'[^'<]*'))*)\s*(\/?)>/;
+// A doctype with a public or system id but no internal subset: entities there could spell markup.
+const DOCTYPE = /^<!DOCTYPE\s+[A-Za-z][\w:.-]*(?:\s+(?:PUBLIC\s+(?:"[^"]*"|'[^']*')\s+|SYSTEM\s+)(?:"[^"]*"|'[^']*'))?\s*>/;
+const TAG = /^<(\/?)([A-Za-z_][A-Za-z0-9:_.-]*)((?:\s+[^\s=<>/"']+\s*=\s*(?:"[^"<]*"|'[^'<]*'))*)\s*(\/?)>/;
 const ATTR = /([^\s=<>/"']+)\s*=\s*(?:"([^"<]*)"|'([^'<]*)')/g;
+const REF = /&(?:(amp|lt|gt|quot|apos)|#([0-9]{1,7})|#x([0-9A-Fa-f]{1,6}));/g;
+const NAMED: Readonly<Record<string, string>> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+/** `raw` with its references resolved, or null when one names a DTD entity or no character. */
+function decode(raw: string): string | null {
+  if (raw.replace(REF, "").includes("&")) return null;
+  let bad = false;
+  const out = raw.replace(REF, (_m, named?: string, dec?: string, hex?: string) => {
+    if (named) return NAMED[named] ?? "";
+    const code = dec ? Number(dec) : parseInt(hex ?? "", 16);
+    if (code > 0x10ffff) bad = true;
+    return bad ? "" : String.fromCodePoint(code);
+  });
+  return bad ? null : out;
+}
+
+const URL_FN = /url\(\s*(["']?)([^)"']*)\1\s*\)/gi;
+
+/** True when `css` fetches nothing: no `@import`, `image-set` or escape, every `url()` in-file or an inline raster. */
+function cssInert(css: string): boolean {
+  if (/@import|image-set|\\/i.test(css)) return false;
+  for (const m of css.matchAll(URL_FN)) if (!refInert(m[2] ?? "")) return false;
+  return !/url\(/i.test(css.replace(URL_FN, ""));
+}
+
+const refInert = (ref: string): boolean => FRAGMENT.test(ref.trim()) || DATA_IMAGE.test(ref.trim());
+const local = (name: string): string => name.slice(name.indexOf(":") + 1).toLowerCase();
 
 /**
- * True when `bytes` are an SVG made only of shapes, gradients, clips and
- * presentation attributes — nothing a browser runs or fetches, opened
+ * True when `bytes` are an SVG with nothing a browser runs or fetches, opened
  * top-level or not. The bytes are judged, never rewritten: one that fails is
  * dropped like a mislabelled PNG.
  *
- * ponytail: a hand tokenizer that refuses anything it does not recognise
- * (doctype, comment, CDATA, processing instruction, `style`, external `url()`).
- * Some real logos will be refused; widen the two allowlists when one is.
+ * Everything an editor writes passes — comments, CDATA, `<style>`, `style`,
+ * `<text>`, filters, editor namespaces and metadata — and only the active
+ * parts are refused: script and event handlers, `foreignObject` and HTML or
+ * MathML namespaces, an `href` outside the file (a data: raster aside),
+ * animation of an `href`, a processing instruction, a doctype internal
+ * subset, and CSS that imports or fetches.
  */
 export function svgSafe(bytes: Buffer): boolean {
   if (bytes.length === 0 || bytes.length > MAX_LOGO_BYTES) return false;
@@ -107,21 +128,49 @@ export function svgSafe(bytes: Buffer): boolean {
 
   const open: string[] = [];
   let root = false;
+  let doctype = false;
+  // A comment splits a style's text but not its CSS, so the whole of it is judged at the close.
+  let css = "";
   while (text.length > 0) {
     const lt = text.indexOf("<");
-    const chars = lt === -1 ? text : text.slice(0, lt);
-    if (ENTITIES.test(chars) || (open.length === 0 && chars.trim() !== "")) return false;
+    const raw = lt === -1 ? text : text.slice(0, lt);
+    const chars = decode(raw);
+    if (chars === null || (open.length === 0 && raw.trim() !== "")) return false;
+    if (open.at(-1) === "style") css += chars;
     if (lt === -1) break;
     text = text.slice(lt);
+
+    if (text.startsWith("<!--")) {
+      const end = text.indexOf("-->", 4);
+      if (end === -1) return false;
+      text = text.slice(end + 3);
+      continue;
+    }
+    if (text.startsWith("<![CDATA[")) {
+      const end = text.indexOf("]]>", 9);
+      if (end === -1 || open.length === 0) return false;
+      if (open.at(-1) === "style") css += text.slice(9, end);
+      text = text.slice(end + 3);
+      continue;
+    }
+    if (text.startsWith("<!DOCTYPE")) {
+      const dt = DOCTYPE.exec(text);
+      if (!dt || doctype || root) return false;
+      doctype = true;
+      text = text.slice(dt[0].length);
+      continue;
+    }
     const tag = TAG.exec(text);
     if (!tag) return false;
     const [whole, close, name = "", attrs = "", selfClose] = tag;
     text = text.slice(whole.length);
     if (close) {
-      if (attrs || selfClose || open.pop() !== name) return false;
+      if (attrs || selfClose || open.pop() !== local(name)) return false;
+      if (local(name) === "style" && !cssInert(css)) return false;
+      css = "";
       continue;
     }
-    if (!SVG_ELEMENTS.has(name)) return false;
+    if (ACTIVE_ELEMENTS.has(local(name))) return false;
     if (open.length === 0) {
       if (root || name !== "svg") return false;
       root = true;
@@ -129,18 +178,19 @@ export function svgSafe(bytes: Buffer): boolean {
     const seen = new Set<string>();
     for (const m of attrs.matchAll(ATTR)) {
       const [, key = "", dq, sq] = m;
-      const value = dq ?? sq ?? "";
-      if (!NAME.test(key) || seen.has(key) || !SVG_ATTRS.has(key)) return false;
+      const value = decode(dq ?? sq ?? "");
+      const attr = local(key);
+      if (value === null || seen.has(key) || attr.startsWith("on")) return false;
       seen.add(key);
       if (key === "xmlns" && value !== SVG_NS) return false;
-      if (key === "xmlns:xlink" && value !== XLINK_NS) return false;
-      if ((key === "href" || key === "xlink:href") && !FRAGMENT.test(value)) return false;
-      // No references in values at all: `&#117;rl(` would spell an external `url(` past the check below.
-      if (value.includes("&")) return false;
-      for (const url of value.matchAll(/url\(([^)]*)\)/gi)) if (!FRAGMENT.test((url[1] ?? "").trim())) return false;
+      if (key.startsWith("xmlns:") && ACTIVE_NS.has(value.trim())) return false;
+      if (attr === "href" && !refInert(value)) return false;
+      if (attr === "attributename" && /href|^on/i.test(local(value.trim()))) return false;
+      // A prefixed attribute is editor data (`inkscape:export-filename`); an unprefixed one may be CSS.
+      if (!key.includes(":") && !cssInert(value)) return false;
     }
     if (open.length === 0 && !seen.has("xmlns")) return false;
-    if (!selfClose) open.push(name);
+    if (!selfClose) open.push(local(name));
   }
   return root && open.length === 0;
 }

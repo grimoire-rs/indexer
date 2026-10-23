@@ -5,11 +5,14 @@ What an operator sees when a release changes how the site is built, newest first
 ## SVG logos {#svg-logos}
 
 Package and marketplace plugin logos may be SVG. One is published byte for
-byte when it holds only shapes, gradients, clip paths, masks and presentation
-attributes, with `href` and `url()` pointing inside the file. Anything else
-(a script, an event handler, `style`, `foreignObject`, an outside link, a
-doctype, a comment) drops the logo and the record carries `"logo": null`, as a
-mislabelled PNG does. A theme SVG emitted under `_astro/` passes the build on
+byte unless it holds something a browser runs or fetches: a script, an event
+handler, a `foreignObject` or an HTML namespace, an `href` or CSS `url()`
+outside the file (an inline PNG, JPEG, GIF or WebP aside), an animated `href`,
+a CSS `@import`, `image-set` or escape, a processing instruction, or a
+doctype with an internal subset. Such a logo is dropped and the record carries
+`"logo": null`, as a mislabelled PNG does. Editor output passes: comments,
+CDATA, `<style>` and `style`, text, filters, markers, patterns and editor
+namespaces. A theme SVG emitted under `_astro/` passes the build on
 the same terms and fails it otherwise.
 
 ## Site at scale
@@ -279,7 +282,7 @@ goes red once.
 
 | The build says | Why | Fix |
 |---|---|---|
-| `_astro/<file>.svg: the build emitted an SVG that fails the logo allowlist, which can run script when opened` | A theme imported an SVG from CSS or a component, the build emitted it under `_astro/`, and it holds more than a plain drawing. An SVG opened at its own URL runs its script on the index origin. | Strip it to shapes and presentation attributes, or move it to `public/` and reference it by path. |
+| `_astro/<file>.svg: the build emitted an SVG that fails the logo allowlist, which can run script when opened` | A theme imported an SVG from CSS or a component, the build emitted it under `_astro/`, and it holds something a browser runs or fetches. An SVG opened at its own URL runs its script on the index origin. | Remove the active part (see [SVG logos](#svg-logos)), or move it to `public/` and reference it by path. |
 | `<page>: rendered markdown carries <script>` (or `<iframe>`, a `style` attribute, a `javascript:` URL) | Rendered markdown still held something the sanitizer removes, so the sanitizer did not run on it. | A component you replaced probably writes README HTML itself. Render the entry through its `<Content />` instead, and report it if you replaced nothing. |
 | `<page>: no Shiki rule for class __shiki_...` | A page uses a highlighter class the build never registered. | Drop the class; the `__shiki_` prefix is reserved for the build's own output. |
 | `<name>: logo changed after it was checked` | A logo file was rewritten between the check and the copy. | Re-run the build; if it repeats, find what writes `enrich/` during the build. |

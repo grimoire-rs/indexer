@@ -280,5 +280,5 @@ Pages built from an overlay run under the site's Content-Security-Policy. A
 blocked. README images load over `https` only.
 
 The build fails when it emits an SVG under `_astro/` that a package logo could
-not be, since an SVG served there can run script. A plain drawing passes. To
-ship any other SVG from a theme, put it in `public/` and reference it by path.
+not be, since an SVG served there can run script. A drawing with no script,
+handler or outside reference passes. To ship any other SVG from a theme, put it in `public/` and reference it by path.

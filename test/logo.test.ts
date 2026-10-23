@@ -106,18 +106,46 @@ describe("svgSafe", () => {
 
   const wrap = (inner: string, attrs = "") => `<svg xmlns="http://www.w3.org/2000/svg"${attrs}>${inner}</svg>`;
   it.each([
+    [
+      "an Inkscape export",
+      '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<!-- Created with Inkscape -->\n' +
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" ' +
+        'xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" ' +
+        'width="24mm" height="24mm" inkscape:export-filename="C:\\logo.png" sodipodi:docname="logo.svg">' +
+        '<sodipodi:namedview id="nv" inkscape:zoom="1"/><metadata><rdf:RDF/></metadata>' +
+        '<g inkscape:label="Layer 1" inkscape:groupmode="layer"><text xml:space="preserve" ' +
+        'style="font-family:&apos;Fira Sans&apos;;fill:#000"><tspan>Acme</tspan></text></g></svg>',
+    ],
+    [
+      "an Illustrator export",
+      '<?xml version="1.0" encoding="utf-8"?>\n<!-- Generator: Adobe Illustrator 27.0 -->\n' +
+        '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
+        '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 24 24" ' +
+        'style="enable-background:new 0 0 24 24;" xml:space="preserve"><style type="text/css">\n' +
+        "\t.st0{fill:url(#SVGID_1_);}\n</style><circle class=\"st0\" stroke=\"#000\" stroke-width=\"2\" stroke-dasharray=\"1 2\" cx=\"12\" cy=\"12\" r=\"10\"/></svg>",
+    ],
+    [
+      "filters, links and an inline raster",
+      wrap(
+        '<defs><filter id="f"><feGaussianBlur stdDeviation="1"/></filter></defs>' +
+          '<a href="#f"><image href="data:image/png;base64,iVBORw0KGgo=" filter="url(#f)"/></a>' +
+          "<style><![CDATA[rect{opacity:.5}]]></style>",
+      ),
+    ],
+  ])("accepts %s", (_label, text) => {
+    expect(svgSafe(Buffer.from(text))).toBe(true);
+  });
+
+  it.each([
     ["a script element", wrap("<script>alert(1)</script>")],
     ["an event handler", wrap("", ' onload="alert(1)"')],
     ["a foreignObject", wrap("<foreignObject><div/></foreignObject>")],
-    ["an inline style", wrap("", ' style="fill:red"')],
     ["an external href", wrap('<use href="https://evil.test/x.svg#a"/>')],
     ["a javascript href", wrap('<use xlink:href="javascript:alert(1)"/>')],
     ["an external url()", wrap('<rect fill="url(https://evil.test/a)"/>')],
     ["a reference inside a value", wrap('<rect fill="&#117;rl(https://evil.test/a)"/>')],
     ["a doctype with an entity", `<!DOCTYPE svg [<!ENTITY x "y">]>${wrap("&x;")}`],
     ["an undeclared entity", wrap("<title>&x;</title>")],
-    ["a CDATA section", wrap("<title><![CDATA[x]]></title>")],
-    ["a comment", wrap("<!-- x -->")],
     ["a processing instruction", wrap('<?xml-stylesheet href="x.css"?>')],
     ["an unbalanced tag", '<svg xmlns="http://www.w3.org/2000/svg"><g></svg>'],
     ["a missing namespace", "<svg></svg>"],
@@ -125,7 +153,18 @@ describe("svgSafe", () => {
     ["a second root", `${wrap("")}${wrap("")}`],
     ["text outside the root", `${wrap("")}x`],
     ["a duplicate attribute", wrap("", ' width="1" width="2"')],
-    ["an html element", wrap("<a><rect/></a>")],
+    ["a prefixed script", wrap('<s:script xmlns:s="http://www.w3.org/2000/svg">alert(1)</s:script>')],
+    ["an XHTML namespace", wrap('<h:p xmlns:h="http://www.w3.org/1999/xhtml"/>')],
+    ["an encoded XHTML namespace", wrap('<h:p xmlns:h="http://www.w3.org/1999/xht&#109;l"/>')],
+    ["an animated href", wrap('<a><set attributeName="href" to="javascript:alert(1)"/></a>')],
+    ["an svg data image", wrap('<image href="data:image/svg+xml,&lt;svg/&gt;"/>')],
+    ["a style import", wrap("<style>@import 'https://evil.test/a.css';</style>")],
+    ["an encoded style import", wrap("<style>&#64;import 'https://evil.test/a.css';</style>")],
+    ["a style import split by a comment", wrap("<style>@im<!-- -->port 'https://evil.test/a.css';</style>")],
+    ["a CSS escape", wrap("<style>rect{fill:u\\72l(https://evil.test/a)}</style>")],
+    ["an external url() in a style attribute", wrap('<rect style="fill:url(\'https://evil.test/a\')"/>')],
+    ["an external url() in CDATA", wrap("<style><![CDATA[rect{fill:url(https://evil.test/a)}]]></style>")],
+    ["an unterminated comment", wrap("<!-- x")],
     ["a png signature", Buffer.from("89504e470d0a1a0a", "hex").toString("latin1")],
     ["nothing", ""],
   ])("refuses %s", (_label, text) => {

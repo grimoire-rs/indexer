@@ -164,10 +164,10 @@ tag lists, and the curated annotations grim reports (`revision`, `authors`,
 `support` channels).
 
 A logo is kept only when it is a PNG, JPEG, WebP or GIF and its file extension
-matches its bytes, or an SVG made only of shapes, gradients, clip paths and
-presentation attributes. An SVG with a script, an event handler, a `style`, a
-`foreignObject`, a reference to another file, a doctype or a comment is dropped
-and the package has no logo; so is any other file.
+matches its bytes, or an SVG with nothing a browser runs or fetches. An SVG
+with a script, an event handler, a `foreignObject`, a reference to another file
+or a CSS `@import` is dropped and the package has no logo; so is any other file.
+The full list is in [SVG logos](../ops/upgrade-notes.md#svg-logos).
 
 **The online step of the build chain, and the only one that needs `grim` on
 `PATH`.** It reads the registry and the published site. `state-key` and
