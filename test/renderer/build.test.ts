@@ -1841,6 +1841,19 @@ describe("stageMarketplace", () => {
       expect(await fs.readFile(path.join(dir, "b/marketplace-docs/hex/readme.md"), "utf8")).toContain("(/index-repo/marketplace/logos/hex.png)");
     }));
 
+  it("points a sized <img> logo at where the logo is served and keeps its width", () =>
+    withDir(async (dir, src) => {
+      await fs.writeFile(path.join(src, "README.md"), '# hex\n\n<img src="assets/logo.svg" alt="hex" width="96">\n\nBody\n');
+      await fs.writeFile(path.join(src, "logo.png"), PNG);
+      const files = new Map([["hex", { readme: path.join(src, "README.md"), logo: { ext: "png" as const, file: path.join(src, "logo.png") } }]]);
+      await stageMarketplace(path.join(dir, "a"), files, "/index-repo");
+      expect(await fs.readFile(path.join(dir, "a/marketplace-docs/hex/readme.md"), "utf8")).toBe(
+        '# hex\n\n<img src="/index-repo/marketplace/logos/hex.png" alt="hex" width="96">\n\nBody\n',
+      );
+      await stageMarketplace(path.join(dir, "b"), new Map([["hex", { readme: path.join(src, "README.md") }]]));
+      expect(await fs.readFile(path.join(dir, "b/marketplace-docs/hex/readme.md"), "utf8")).not.toContain("<img");
+    }));
+
   it("drops the README's logo line when the plugin has no valid logo to serve", () =>
     withDir(async (dir, src) => {
       await fs.writeFile(path.join(src, "README.md"), "![hex](assets/logo.png)\n# Hex\n");

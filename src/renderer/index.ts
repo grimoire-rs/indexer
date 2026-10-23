@@ -884,14 +884,20 @@ export async function stageMarketplace(dir: string, files: LoadedMarketplace["fi
 }
 
 /**
- * grim's plugin README opens with `![name](assets/logo.<ext>)`, a path that is
+ * grim's plugin README opens with its logo, as `![name](assets/logo.<ext>)` or,
+ * from grim 0.16, as a sized `<img src="assets/logo.<ext>" …>`. The path is
  * only true inside the export tree. On the site the logo is served from
  * `logoPath`: point the image there, or drop the line when there is no logo.
  */
 function relinkLogo(readme: string, plugin: string, ext: string | undefined, base: string): string {
-  return readme.replace(/^(!\[[^\]\n]*\])\(assets\/logo\.(?:png|svg|webp)\)[ \t]*(\r?\n|$)/gm, (_all, alt: string, eol: string) =>
-    ext ? `${alt}(${base}${logoPath(plugin, ext)})${eol}` : "",
-  );
+  const served = ext && `${base}${logoPath(plugin, ext)}`;
+  return readme
+    .replace(/^(!\[[^\]\n]*\])\(assets\/logo\.(?:png|svg|webp)\)[ \t]*(\r?\n|$)/gm, (_all, alt: string, eol: string) =>
+      served ? `${alt}(${served})${eol}` : "",
+    )
+    .replace(/^<img src="assets\/logo\.(?:png|svg|webp)"([^>\n]*)>[ \t]*(\r?\n|$)/gm, (_all, rest: string, eol: string) =>
+      served ? `<img src="${served}"${rest}>${eol}` : "",
+    );
 }
 
 /**
