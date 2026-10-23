@@ -11,6 +11,14 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.6.2] - 2026-10-23
+
+### Fixed
+
+- Raise engines.node to the locked Astro floor
+- Stop judging build memory and trim small page-budget costs *(renderer)*
+- Refuse only active SVG content instead of allowlisting primitives *(logo)*
+
 ## [0.6.1] - 2026-10-23
 
 ### Added
@@ -391,6 +399,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.6.2]: https://github.com/grimoire-rs/indexer/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/grimoire-rs/indexer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/grimoire-rs/indexer/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/grimoire-rs/indexer/compare/v0.5.11...v0.5.12
