@@ -3,7 +3,7 @@
 
 import { escapeHTML } from "astro/runtime/server/index.js";
 import { describe, expect, it } from "vitest";
-import { boundBytes, boundedUrl, boundLines, boundList } from "../../src/renderer/astro/lib/bounds.js";
+import { boundBytes, boundedUrl, boundLines, boundList, keywordParam } from "../../src/renderer/astro/lib/bounds.js";
 
 const bytes = (s: string) => new TextEncoder().encode(s).length;
 
@@ -84,6 +84,31 @@ describe("boundLines", () => {
     expect(bytes(out.text)).toBeLessThanOrEqual(21);
     expect(Buffer.from(out.text, "utf8").toString("utf8")).toBe(out.text);
     expect(out.text.length).toBeGreaterThan(0);
+  });
+});
+
+describe("keywordParam", () => {
+  it("leaves non-ASCII characters unescaped, at their UTF-8 length", () => {
+    expect(keywordParam("café-日本語-😀")).toBe("café-日本語-😀");
+    expect(bytes(keywordParam("日本語"))).toBe(9);
+  });
+
+  it("still escapes URL-syntax and unsafe ASCII", () => {
+    expect(keywordParam('a&b#c%d+e?f/g h"i\'j<k>l=m,n')).toBe(encodeURIComponent('a&b#c%d+e?f/g h"i\'j<k>l=m,n'));
+    expect(keywordParam("a&b")).toBe("a%26b");
+  });
+
+  it("escapes controls, separators and format characters", () => {
+    for (const ch of ["\u0085", "\u00a0", "\u2028", "\u202e", "\u200b"]) {
+      expect(keywordParam(ch), JSON.stringify(ch)).toBe(encodeURIComponent(ch));
+    }
+  });
+
+  it("round-trips through URLSearchParams, as the home page reads it", () => {
+    for (const k of ["cli", "café", "日本語", "a&b=c#d", "100%", "😀 party", "x+y", "a,b", "\u00a0pad"]) {
+      expect(new URLSearchParams(`kw=${keywordParam(k)}`).get("kw"), k).toBe(k);
+      expect(new URL(`https://x.test/?kw=${keywordParam(k)}`).searchParams.get("kw"), k).toBe(k);
+    }
   });
 });
 

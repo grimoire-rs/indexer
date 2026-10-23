@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// C-008 / IX-R16, S-006: the sitemap names every `browse/` and `/p/` page,
-// never a `c/` path, and becomes a sitemap index past 50,000 URLs. Pure: no
+// The sitemap names every `browse/` and `/p/` page, never a `c/` path, and becomes a sitemap index past 50,000 URLs. Pure: no
 // Astro build, `writeSitemap` called into a temporary directory.
 import fs from "node:fs/promises";
 import os from "node:os";

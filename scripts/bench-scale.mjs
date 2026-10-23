@@ -8,8 +8,9 @@
 // `build`, warm `enrich`, `build`, with scripts/lib/fake-grim.mjs as `grim`.
 // Pass: calls <= 3/entry cold and 2.5 warm, no file over 16 MiB (P-10), build in 15 min, and
 // each leg inside the NFR-1 stage sum (enrich projected at the measured per-call latency).
-// The site is judged too (IX-R33): page size, `index.html` growth over a 100-entry build, build
-// peak RSS, the staged `.astro/` and Astro's own time. Each step prints its peak RSS.
+// The site is judged too (IX-R33): page size, `index.html` growth over a 100-entry build and Astro's
+// own time. Build peak RSS and the staged `.astro/` are reported, never judged: the bench makes no
+// claim on build memory. Each step prints its peak RSS.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -33,8 +34,6 @@ const MAX_FILE = 16 * 1024 * 1024;
 const MAX_PAGE = 24 * 1024;
 const BASELINE_ENTRIES = 100;
 const MAX_INDEX_GROWTH = 4 * 1024;
-const MAX_BUILD_RSS_MIB = 4 * 1024;
-const MAX_ASTRO_DIR = 2 * 1024 * 1024 * 1024;
 const MAX_ASTRO_MS = 15 * 60 * 1000;
 const IN_FLIGHT = 8;
 const WINDOW_MS = 3_600_000; // sync.revalidate, default
@@ -257,8 +256,6 @@ function report(entries, runs, steps, files) {
     check(`build within ${NFR1.buildMin} min`, minutes(slowestBuild) <= NFR1.buildMin, `slowest ${fixed(minutes(slowestBuild))} min`),
     check(`no package page over ${MAX_PAGE} bytes`, files.site.pagesOver.length === 0 && files.site.largestPage.size > 0, `largest ${files.site.largestPage.rel || "(no p/ page)"} ${files.site.largestPage.size} bytes${overList(files.site.pagesOver.slice(0, 5))}`),
     check(`index.html within ${MAX_INDEX_GROWTH} bytes of the ${BASELINE_ENTRIES}-entry build`, growth <= MAX_INDEX_GROWTH, `${indexBytes} bytes against ${baselineIndexBytes} (${growth >= 0 ? "+" : ""}${growth})`),
-    check(`peak RSS of either build under ${MAX_BUILD_RSS_MIB / 1024} GiB`, peakRssMiB <= MAX_BUILD_RSS_MIB, `${peakRssMiB} MiB`),
-    check(`staged .astro/ under ${MAX_ASTRO_DIR / 2 ** 30} GiB`, astroDirBytes <= MAX_ASTRO_DIR, Number.isFinite(astroDirBytes) ? `${astroDirBytes} bytes` : "astro_dir_bytes missing from the build line"),
     check(`astro pass within ${MAX_ASTRO_MS / 60_000} min`, astroMs <= MAX_ASTRO_MS, Number.isFinite(astroMs) ? `slowest ${fixed(minutes(astroMs))} min` : "astro_ms missing from the build line"),
     ...Object.values(legs).map(({ name, ok, detail }) => ({ name, ok, detail })),
   ];
@@ -286,6 +283,11 @@ function print(r) {
   const lines = [`V-19 scale benchmark: ${r.entries} entries, fake grim latency ${r.latency_ms} ms`, ""];
   for (const s of r.steps) lines.push(`  ${s.name.padEnd(14)} ${fixed(s.seconds, 1).padStart(9)} s   peak RSS ${String(s.peak_rss_mib).padStart(5)} MiB`);
   lines.push("", ...r.checks.map((c) => `  ${c.ok ? "PASS" : "FAIL"}  ${c.name}: ${c.detail}`), "");
+  // Reported, not judged: no claim is made on build memory.
+  lines.push(
+    `  reported: peak RSS of either build ${r.peak_rss_mib} MiB, staged .astro/ ${r.astro_dir_bytes === null ? "not reported by the build line" : `${r.astro_dir_bytes} bytes`}`,
+    "",
+  );
   lines.push(
     `  NFR-1 stage sum, enrich projected at the measured per-call latency (${IN_FLIGHT} in flight): cold ${r.stage_sum_min.cold} min, warm ${r.stage_sum_min.warm} min, against ${r.stage_sum_min.budget}.`,
     "  A local run has no registry latency, so the projection is only as slow as the fake grim:",

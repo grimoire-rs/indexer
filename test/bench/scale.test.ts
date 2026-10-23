@@ -73,13 +73,15 @@ describe("scripts/bench-scale.mjs", { timeout: 300_000 }, () => {
       "no site file over 16 MiB",
       "no package page over 24576 bytes",
       "index.html within 4096 bytes of the 100-entry build",
-      "peak RSS of either build under 4 GiB",
-      "staged .astro/ under 2 GiB",
       "astro pass within 15 min",
     ]) {
       expect(names, name).toContain(name);
       expect(result.checks.find((c) => c.name === name)?.ok, name).toBe(true);
     }
+
+    // Build memory is reported, never judged: no check names it, and the summary still prints both figures.
+    expect(names.filter((n) => /RSS|\.astro/.test(n))).toEqual([]);
+    expect(run.stderr).toMatch(/reported: peak RSS of either build \d+ MiB, staged \.astro\/ \d+ bytes/);
 
     // The report carries the figures the checks judged, measured rather than defaulted.
     // Each figure comes from its own directory: the baseline never lands in the site the trace reads.

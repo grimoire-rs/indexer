@@ -54,6 +54,25 @@ const weigh = (text: string): number => {
   return total;
 };
 
+// What a keyword link may carry unescaped: any non-ASCII character except
+// controls, format characters, separators and unassigned or private-use points.
+const UNSAFE_NON_ASCII = /[\p{C}\p{Z}]/u;
+
+/**
+ * `keyword` as the value of a `?kw=` query parameter. Non-ASCII characters stay
+ * as they are (a valid IRI; the browser percent-encodes on navigation, and
+ * `URLSearchParams` decodes it back to the same keyword), so they cost their
+ * UTF-8 length rather than three times that. ASCII still goes through
+ * `encodeURIComponent`, which covers `& # % + ? / =` and quotes.
+ */
+export function keywordParam(keyword: string): string {
+  let out = "";
+  for (const point of keyword) {
+    out += point.charCodeAt(0) < 0x80 || UNSAFE_NON_ASCII.test(point) ? encodeURIComponent(point) : point;
+  }
+  return out;
+}
+
 /** The first `limit` of `items`, and how many were left out. */
 export function boundList<T>(items: readonly T[], limit: number = LIST_LIMIT): { shown: T[]; more: number } {
   return { shown: items.slice(0, limit), more: Math.max(0, items.length - limit) };

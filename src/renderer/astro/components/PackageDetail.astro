@@ -45,6 +45,7 @@ import {
   boundLines,
   boundList,
   boundedUrl,
+  keywordParam,
   sectionCommand,
 } from "../lib/bounds";
 import {
@@ -735,7 +736,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
                       packages nobody tagged `cli`. The catalog still reads
                       `?q=`, so links shared before this change still work.
                       No `title`: it repeated the chip's own text. */}
-                  <a href={withBase(`${home}?kw=${encodeURIComponent(boundBytes(k, KEYWORD_BYTES))}`)}>
+                  <a href={withBase(`${home}?kw=${keywordParam(boundBytes(k, KEYWORD_BYTES))}`)}>
                     {boundBytes(k, KEYWORD_BYTES)}
                   </a>
                 </li>
