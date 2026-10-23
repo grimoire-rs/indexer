@@ -2,6 +2,16 @@
 
 What an operator sees when a release changes how the site is built, newest first.
 
+## SVG logos {#svg-logos}
+
+Package and marketplace plugin logos may be SVG. One is published byte for
+byte when it holds only shapes, gradients, clip paths, masks and presentation
+attributes, with `href` and `url()` pointing inside the file. Anything else
+(a script, an event handler, `style`, `foreignObject`, an outside link, a
+doctype, a comment) drops the logo and the record carries `"logo": null`, as a
+mislabelled PNG does. A theme SVG emitted under `_astro/` passes the build on
+the same terms and fails it otherwise.
+
 ## Site at scale
 
 What changes for an index on the release that serves the site at 20,000
@@ -257,11 +267,9 @@ goes red once.
   The extension must name the same type as the bytes, and the file can be at
   most 1 MiB. A logo that fails is dropped and the record carries
   `"logo": null` in `all.json`. A file with an allowed extension that fails the
-  check prints a `dropped its logo` warning. A declared `.svg`, or any other
-  extension off the list, is nulled without a warning, and a stale `logo.svg`
-  left beside a package is deleted with a `removed sidecar` warning. A
-  marketplace plugin's `assets/logo.svg` is never read, so it is ignored
-  without a warning. A `logo` in a package's `metadata.json` is replaced by the
+  check prints a `dropped its logo` warning. A declared extension off the
+  list is nulled without a warning. SVG joined the list later; see
+  [SVG logos](#svg-logos). A `logo` in a package's `metadata.json` is replaced by the
   canonical `/logos/` path of the vetted file, or by `null`.
 - **Highlighted code uses classes**, not inline colours, so those pages link
   one more stylesheet, `_astro/shiki.<hash>.css`. A kind colour token for a
@@ -271,7 +279,7 @@ goes red once.
 
 | The build says | Why | Fix |
 |---|---|---|
-| `_astro/<file>.svg: the build emitted an SVG, which can run script when opened` | A theme imported an SVG from CSS or a component, and the build emitted it under `_astro/`. An SVG opened at its own URL runs its script on the index origin. | Move the file to `public/` and reference it by path. |
+| `_astro/<file>.svg: the build emitted an SVG that fails the logo allowlist, which can run script when opened` | A theme imported an SVG from CSS or a component, the build emitted it under `_astro/`, and it holds more than a plain drawing. An SVG opened at its own URL runs its script on the index origin. | Strip it to shapes and presentation attributes, or move it to `public/` and reference it by path. |
 | `<page>: rendered markdown carries <script>` (or `<iframe>`, a `style` attribute, a `javascript:` URL) | Rendered markdown still held something the sanitizer removes, so the sanitizer did not run on it. | A component you replaced probably writes README HTML itself. Render the entry through its `<Content />` instead, and report it if you replaced nothing. |
 | `<page>: no Shiki rule for class __shiki_...` | A page uses a highlighter class the build never registered. | Drop the class; the `__shiki_` prefix is reserved for the build's own output. |
 | `<name>: logo changed after it was checked` | A logo file was rewritten between the check and the copy. | Re-run the build; if it repeats, find what writes `enrich/` during the build. |

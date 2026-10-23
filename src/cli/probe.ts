@@ -19,7 +19,7 @@ const MAX_SHOWN = 200;
 const SHA256 = /^[0-9a-f]{64}$/;
 
 const GZIP = ["application/gzip", "application/x-gzip"];
-const IMAGE = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" } as const;
+const IMAGE = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", svg: "image/svg+xml" } as const;
 
 interface Typed {
   type: string;

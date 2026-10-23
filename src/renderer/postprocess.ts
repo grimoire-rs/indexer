@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
+import { svgSafe } from "../logo.js";
 import { SHIKI_CLASSES, shikiCss } from "./astro/lib/code.js";
 
 type Element = DefaultTreeAdapterMap["element"];
@@ -170,9 +171,9 @@ export async function postProcessSite(outDir: string, base: string): Promise<voi
   const blocked: string[] = [];
 
   for (const rel of await fs.readdir(outDir, { recursive: true })) {
-    // Served from the index origin, where no page's policy applies, and a clean build emits none.
-    if (/\.svg$/i.test(rel) && rel.split(path.sep)[0] === "_astro") {
-      throw new Error(`${rel}: the build emitted an SVG, which can run script when opened; serve one from public/`);
+    // Served from the index origin, where no page's policy applies, so it must pass the logo allowlist.
+    if (/\.svg$/i.test(rel) && rel.split(path.sep)[0] === "_astro" && !svgSafe(await fs.readFile(path.join(outDir, rel)))) {
+      throw new Error(`${rel}: the build emitted an SVG that fails the logo allowlist, which can run script when opened`);
     }
     if (!rel.endsWith(".html")) continue;
     const file = path.join(outDir, rel);

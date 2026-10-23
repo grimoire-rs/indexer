@@ -139,6 +139,7 @@ describe("compileIndex logos", () => {
   const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
   const JPEG = Buffer.from("ffd8ffe000104a464946", "hex");
   const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  const CLEAN_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>');
   const POLYGLOT = Buffer.concat([PNG, Buffer.from("<html><script>alert(1)</script></html>")]);
   const NS = "github.com/acme";
 
@@ -196,7 +197,13 @@ describe("compileIndex logos", () => {
     expect(published("foo.jpeg")).toBe(true);
   });
 
-  it("nulls an svg logo and publishes nothing", async () => {
+  it("publishes an svg that passes the allowlist, byte for byte", async () => {
+    pkg({ logo: `/logos/${NS}/foo.svg`, file: ["logo.svg", CLEAN_SVG] });
+    expect((await compile()).logo).toBe(`/logos/${NS}/foo.svg`);
+    expect(fs.readFileSync(path.join(outDir, "logos", NS, "foo.svg"))).toEqual(CLEAN_SVG);
+  });
+
+  it("nulls a scripted svg logo and publishes nothing", async () => {
     pkg({ logo: `/logos/${NS}/foo.svg`, file: ["logo.svg", SVG] });
     expect((await compile()).logo).toBeNull();
     expect(fs.existsSync(path.join(outDir, "logos"))).toBe(false);
@@ -221,14 +228,14 @@ describe("compileIndex logos", () => {
     expect(fs.readdirSync(path.join(outDir, "logos", NS))).toEqual(["foo.png"]);
   });
 
-  it("refuses the same polyglot under an html or svg extension", async () => {
-    pkg({ logo: `/logos/${NS}/foo.html`, file: ["logo.html", POLYGLOT] });
+  it.each(["html", "svg"])("refuses the same polyglot under a .%s extension", async (ext) => {
+    pkg({ logo: `/logos/${NS}/foo.${ext}`, file: [`logo.${ext}`, POLYGLOT] });
     expect((await compile()).logo).toBeNull();
     expect(fs.existsSync(path.join(outDir, "logos"))).toBe(false);
   });
 
   it("nulls a declared logo with a disallowed extension even when no file was shipped", async () => {
-    pkg({ logo: `/logos/${NS}/foo.svg` });
+    pkg({ logo: `/logos/${NS}/foo.html` });
     expect((await compile()).logo).toBeNull();
   });
 

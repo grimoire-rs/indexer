@@ -10,6 +10,7 @@ import {
   logoExtType,
   logoOk,
   sniffLogo,
+  svgSafe,
 } from "../src/logo.js";
 
 const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
@@ -55,7 +56,7 @@ describe("logoExtType", () => {
     expect(logoExtType("PNG", PACKAGE_LOGOS)).toBe("png");
   });
 
-  it.each(["svg", "svgz", "html", "", "png/../x", "constructor", "__proto__"])("refuses %j", (ext) => {
+  it.each(["svgz", "html", "", "png/../x", "constructor", "__proto__"])("refuses %j", (ext) => {
     expect(logoExtType(ext, PACKAGE_LOGOS)).toBeNull();
   });
 
@@ -79,6 +80,7 @@ describe("logoOk", () => {
     expect(logoOk("png", JPEG, PACKAGE_LOGOS)).toBe(false);
     expect(logoOk("jpg", PNG, PACKAGE_LOGOS)).toBe(false);
     expect(logoOk("svg", PNG, PACKAGE_LOGOS)).toBe(false);
+    expect(logoOk("png", Buffer.from(SVG), PACKAGE_LOGOS)).toBe(false);
     expect(logoOk("", PNG, PACKAGE_LOGOS)).toBe(false);
   });
 
@@ -86,5 +88,52 @@ describe("logoOk", () => {
     expect(logoOk("gif", GIF, MARKETPLACE_LOGOS)).toBe(false);
     expect(logoOk("jpg", JPEG, MARKETPLACE_LOGOS)).toBe(false);
     expect(logoOk("png", PNG, MARKETPLACE_LOGOS)).toBe(true);
+  });
+});
+
+const SVG =
+  '<?xml version="1.0" encoding="UTF-8"?>\n' +
+  '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24">' +
+  '<title>Acme &amp; co</title><defs><linearGradient id="g"><stop offset="0" stop-color="#fff"/></linearGradient>' +
+  '<path id="p" d="M0 0h24v24z"/></defs><use xlink:href="#p" fill="url(#g)"/></svg>\n';
+
+describe("svgSafe", () => {
+  it("accepts shapes, gradients and fragment references", () => {
+    expect(svgSafe(Buffer.from(SVG))).toBe(true);
+    expect(logoOk("svg", Buffer.from(SVG), PACKAGE_LOGOS)).toBe(true);
+    expect(logoOk("svg", Buffer.from(SVG), MARKETPLACE_LOGOS)).toBe(true);
+  });
+
+  const wrap = (inner: string, attrs = "") => `<svg xmlns="http://www.w3.org/2000/svg"${attrs}>${inner}</svg>`;
+  it.each([
+    ["a script element", wrap("<script>alert(1)</script>")],
+    ["an event handler", wrap("", ' onload="alert(1)"')],
+    ["a foreignObject", wrap("<foreignObject><div/></foreignObject>")],
+    ["an inline style", wrap("", ' style="fill:red"')],
+    ["an external href", wrap('<use href="https://evil.test/x.svg#a"/>')],
+    ["a javascript href", wrap('<use xlink:href="javascript:alert(1)"/>')],
+    ["an external url()", wrap('<rect fill="url(https://evil.test/a)"/>')],
+    ["a reference inside a value", wrap('<rect fill="&#117;rl(https://evil.test/a)"/>')],
+    ["a doctype with an entity", `<!DOCTYPE svg [<!ENTITY x "y">]>${wrap("&x;")}`],
+    ["an undeclared entity", wrap("<title>&x;</title>")],
+    ["a CDATA section", wrap("<title><![CDATA[x]]></title>")],
+    ["a comment", wrap("<!-- x -->")],
+    ["a processing instruction", wrap('<?xml-stylesheet href="x.css"?>')],
+    ["an unbalanced tag", '<svg xmlns="http://www.w3.org/2000/svg"><g></svg>'],
+    ["a missing namespace", "<svg></svg>"],
+    ["a foreign namespace", '<svg xmlns="http://www.w3.org/1999/xhtml"></svg>'],
+    ["a second root", `${wrap("")}${wrap("")}`],
+    ["text outside the root", `${wrap("")}x`],
+    ["a duplicate attribute", wrap("", ' width="1" width="2"')],
+    ["an html element", wrap("<a><rect/></a>")],
+    ["a png signature", Buffer.from("89504e470d0a1a0a", "hex").toString("latin1")],
+    ["nothing", ""],
+  ])("refuses %s", (_label, text) => {
+    expect(svgSafe(Buffer.from(text))).toBe(false);
+  });
+
+  it("refuses bytes that are not UTF-8 and bytes over the cap", () => {
+    expect(svgSafe(Buffer.concat([Buffer.from(wrap("<title>")), Buffer.from([0xff]), Buffer.from("</title>")]))).toBe(false);
+    expect(svgSafe(Buffer.from(wrap(`<title>${"x".repeat(MAX_LOGO_BYTES)}</title>`)))).toBe(false);
   });
 });

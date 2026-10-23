@@ -279,6 +279,6 @@ Pages built from an overlay run under the site's Content-Security-Policy. A
 `style=""` attribute or an `onclick=""` handler in a component you replace is
 blocked. README images load over `https` only.
 
-The build fails when it emits an SVG under `_astro/`, since an SVG served
-there can run script. To ship an SVG from a theme, put it in `public/` and
-reference it by path.
+The build fails when it emits an SVG under `_astro/` that a package logo could
+not be, since an SVG served there can run script. A plain drawing passes. To
+ship any other SVG from a theme, put it in `public/` and reference it by path.

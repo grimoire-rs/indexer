@@ -393,11 +393,15 @@ describe("rendered markdown", () => {
 });
 
 // A standalone SVG opened at its own URL runs its script on the index origin,
-// and no page's policy applies to it. A clean build emits none, and spotting
-// script in SVG markup is a parser's job, so any SVG at all fails.
+// and no page's policy applies to it, so it must pass the logo allowlist.
 describe("an SVG the build emitted", () => {
+  it("keeps a plain drawing", async () => {
+    await write("_astro/logo.abc.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>');
+    await expect(postProcessSite(outDir, "/")).resolves.toBeUndefined();
+  });
+
   it.each([
-    ["a plain drawing", '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>'],
+    ["a script", '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'],
     ["a namespaced script", '<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:script>alert(1)</s:script></s:svg>'],
     ["a handler after a quoted >", '<svg xmlns="http://www.w3.org/2000/svg" a=">" onload="alert(1)"/>'],
   ])("fails the build: %s", async (_name, svg) => {

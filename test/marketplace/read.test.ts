@@ -102,18 +102,23 @@ describe("readMarketplace caps", () => {
     expect(readMarketplace(root)?.logos).toEqual({ b: "c/b/assets/logo.webp" });
   });
 
-  // An svg opened at its own URL runs script, so a plugin that ships one renders without a logo.
-  it("keeps png and webp logos and drops svg, jpeg, gif and mismatched ones", () => {
-    listing([entry("png"), entry("webp"), entry("svg"), entry("jpeg"), entry("gif"), entry("fake")]);
+  // An svg opened at its own URL runs script, so only one that passes the allowlist is kept.
+  it("keeps png, webp and clean svg logos and drops scripted svg, jpeg, gif and mismatched ones", () => {
+    listing([entry("png"), entry("webp"), entry("svg"), entry("bad"), entry("jpeg"), entry("gif"), entry("fake")]);
     write(`${EXPORT}/c/png/assets/logo.png`, PNG);
     write(`${EXPORT}/c/webp/assets/logo.webp`, WEBP);
     write(`${EXPORT}/c/svg/assets/logo.svg`, '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
+    write(`${EXPORT}/c/bad/assets/logo.svg`, '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
     write(`${EXPORT}/c/jpeg/assets/logo.jpg`, Buffer.from("ffd8ffe000104a464946", "hex"));
     write(`${EXPORT}/c/gif/assets/logo.gif`, "GIF89a\x01\x00\x01\x00");
     write(`${EXPORT}/c/fake/assets/logo.webp`, PNG);
     const mk = readMarketplace(root);
-    expect(mk?.logos).toEqual({ png: "c/png/assets/logo.png", webp: "c/webp/assets/logo.webp" });
-    expect(names(mk)).toEqual(["png", "webp", "svg", "jpeg", "gif", "fake"]);
+    expect(mk?.logos).toEqual({
+      png: "c/png/assets/logo.png",
+      webp: "c/webp/assets/logo.webp",
+      svg: "c/svg/assets/logo.svg",
+    });
+    expect(names(mk)).toEqual(["png", "webp", "svg", "bad", "jpeg", "gif", "fake"]);
   });
 
   it("is null for a marketplace.json over the cap, or one that names nothing", () => {

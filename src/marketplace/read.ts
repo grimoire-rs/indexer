@@ -36,7 +36,7 @@ const MAX_CATEGORY = 40;
 const MAX_KEYWORD = 40;
 const MAX_KEYWORDS = 10;
 
-export const LOGO_EXTS = ["png", "webp"] as const;
+export const LOGO_EXTS = ["png", "webp", "svg"] as const;
 export type LogoExt = (typeof LOGO_EXTS)[number];
 
 const PLUGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
