@@ -53,3 +53,28 @@ jobs:
             exit 1
           fi
       - run: npm publish
+
+  # After the publish, so a release page never announces a version npm does
+  # not have. Its own job: the publish job holds the OIDC token and must not
+  # also hold a token that can write to the repository.
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          node scripts/release-notes.mjs "$TAG" > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
