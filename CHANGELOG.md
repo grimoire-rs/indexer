@@ -11,6 +11,42 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.6.0] - 2026-10-23
+
+### Added
+
+- Give every built page a hash-based Content-Security-Policy *(renderer)*
+- Bound and strip record fields at emit *(data)*
+- Publish c/root.json and add the sync config block *(emit)*
+- Restore build state and hand off to an offline build *(enrich)*
+- Add sync.legacy: false and seed stats through the root *(config)*
+- Retain the previous closure and print a log line *(build)*
+- Cache the build-state blob store under an exact state-key *(ci)*
+- Inline every home-page card while a theme replaces the catalog *(renderer)*
+- Fetch digest files with force-cache, a reload retry and a stall timeout *(site)*
+- Probe a deployed site's content types after deploy *(cli)*
+- Page every package under browse/ for readers without JavaScript *(site)*
+- Write the site search file and name it in the catalog root *(emit)*
+- Ship 48 cards and the catalog's counts on the home page *(site)*
+
+### Changed
+
+- Chunk the content store and pin astro *(renderer)*
+- Fit every package page under the 24 KiB cap *(site)*
+
+### Documentation
+
+- Add upgrade notes for the hardening release *(ops)*
+- Document the sync block, the root and the build-state cache
+
+### Fixed
+
+- Keep the Actions cache to the Pages build job *(ci)*
+- Publish a logo only when its bytes are an allowed image *(logos)*
+- Render code colours and kind tiles without inline styles *(renderer)*
+- Sanitize README, changelog and SKILL.md HTML before it reaches a page *(renderer)*
+- Refuse a theme package name that escapes the index root *(renderer)*
+
 ## [0.5.12] - 2026-10-22
 
 ### Fixed
@@ -348,6 +384,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.6.0]: https://github.com/grimoire-rs/indexer/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/grimoire-rs/indexer/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/grimoire-rs/indexer/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/grimoire-rs/indexer/compare/v0.5.9...v0.5.10
