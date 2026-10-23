@@ -11,6 +11,13 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.6.1] - 2026-10-23
+
+### Added
+
+- Accept SVG logos and theme SVGs that pass a strict allowlist *(logo)*
+- Derive site and repoUrl from CI or the git remote *(config)*
+
 ## [0.6.0] - 2026-10-23
 
 ### Added
@@ -384,6 +391,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.6.1]: https://github.com/grimoire-rs/indexer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/grimoire-rs/indexer/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/grimoire-rs/indexer/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/grimoire-rs/indexer/compare/v0.5.10...v0.5.11
