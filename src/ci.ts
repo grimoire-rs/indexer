@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { CliError, EXIT } from "./cli/exit.js";
 import { CONFIG_FILE, SiteConfigError } from "./config.js";
+import { deriveHosts } from "./derive.js";
 import type { DownloadsConfig } from "./downloads/config.js";
 import { MINIMUM_GRIM_VERSION, grimTooOld } from "./grim.js";
 import type { RatingsConfig } from "./ratings/config.js";
@@ -216,12 +217,13 @@ export async function loadCiConfig(root: string): Promise<CiConfig> {
 }
 
 /**
- * The two site URLs that say where an index is hosted, as written.
+ * The two site URLs that say where an index is hosted, as written or else
+ * as [`deriveHosts`] reads them.
  *
- * Read leniently and never defaulted: the site config owns their validation,
- * and a value this cannot read is "unknown", which [`onGithubCom`] treats as
- * not github.com. Defaulting `site` would put the first-party index's host
- * into every config that omits it.
+ * Read leniently and never given the built-in default: the site config owns
+ * their validation, and a value this cannot read is "unknown", which
+ * [`onGithubCom`] treats as not github.com. Defaulting `site` would put the
+ * first-party index's host into every config that omits it.
  */
 export interface IndexHosts {
   site?: string;
@@ -230,10 +232,12 @@ export interface IndexHosts {
 
 export async function loadIndexHosts(root: string): Promise<IndexHosts> {
   const config = await readConfigObject(root);
-  return {
-    ...(typeof config.site === "string" ? { site: config.site } : {}),
-    ...(typeof config.repoUrl === "string" ? { repoUrl: config.repoUrl } : {}),
-  };
+  const explicitSite = typeof config.site === "string" ? config.site : undefined;
+  const explicitRepo = typeof config.repoUrl === "string" ? config.repoUrl : undefined;
+  const derived = explicitSite !== undefined && explicitRepo !== undefined ? {} : deriveHosts(root);
+  const site = explicitSite ?? derived.site?.value;
+  const repoUrl = explicitRepo ?? derived.repoUrl?.value;
+  return { ...(site !== undefined ? { site } : {}), ...(repoUrl !== undefined ? { repoUrl } : {}) };
 }
 
 function hostnameOf(url: string | undefined): string | undefined {

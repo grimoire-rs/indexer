@@ -38,7 +38,7 @@ Full walkthrough: [Quickstart](./docs/how-to/quickstart.md).
 ## Subcommands
 
 `init` · `dev` · `enrich` · `build` · `validate` · `ci` · `ratings` ·
-`downloads` · `stats-seed` · `state-key` · `probe` — each one and its flags in the
+`downloads` · `stats-seed` · `state-key` · `site` · `probe` — each one and its flags in the
 [CLI reference](./docs/reference/cli.md).
 
 An index stores nothing but pointers — a ref and who owns it. Everything a

@@ -24,6 +24,7 @@ import {
   type PublishTrigger,
 } from "../ci.js";
 import { CONFIG_FILE, validateSite, validateUrlShape } from "../config.js";
+import { gitRemoteUrl, normalizeRepoUrl, pagesUrlFromRepo } from "../derive.js";
 import { fromTemplate } from "../templates.js";
 import { CliError, EXIT, type ExitCode } from "./exit.js";
 
@@ -89,9 +90,6 @@ const UNDERIVED = "REPLACE-ME";
 
 /** GitHub/GitLab Pages hosts — the URL of a Pages site names the repo serving it. */
 const PAGES_HOST = /^([\w-]+)\.(github|gitlab)\.io$/;
-
-/** scp-like `[user@]host:owner/repo` — the one git remote shape that is not a URL. */
-const SCP_REMOTE = /^(?:[^@/]+@)?([\w.-]+):(?!\/)(.+)$/;
 
 export type { Forge };
 
@@ -248,50 +246,6 @@ function badLogo(value: string): string | null {
 }
 
 /**
- * The target dir's `origin` remote as an https URL — set when the repo was
- * created on the forge and cloned before scaffolding into it. Any remote
- * shape (https, ssh, scp-like) reduces to the https form `[announce]` wants.
- */
-function gitRemoteUrl(dir: string): string | undefined {
-  let remote: string;
-  try {
-    remote = execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return undefined; // no git, no repo, or no `origin`
-  }
-  return normalizeRepoUrl(remote);
-}
-
-/**
- * Reduce any repository URL to the https form the rest of this file derives
- * from: Pages URL, forge, announce target and the site's own header link.
- *
- * Applied to `--repo-url` as well as to the git remote, because the obvious
- * thing to paste into it is GitHub's clone box — `https://github.com/acme/idx.git`
- * — and used verbatim that trailing `.git` became `https://acme.github.io/idx.git`
- * as `site`, hence `/idx.git` as Astro's `base`, on a Pages deployment that
- * serves `/idx`. Every link on the built site pointed one path segment wrong.
- */
-function normalizeRepoUrl(remote: string): string | undefined {
-  const bare = remote.replace(/\.git$/, "");
-  const scp = SCP_REMOTE.exec(bare);
-  if (scp) return `https://${scp[1]}/${scp[2]}`;
-  try {
-    const url = new URL(bare);
-    // `url.host` drops the userinfo, so a token in the remote never survives.
-    if (["https:", "http:", "ssh:", "git:"].includes(url.protocol)) {
-      return `https://${url.host}${url.pathname}`;
-    }
-  } catch {
-    /* a `file://` or otherwise unmappable remote — nothing to announce into */
-  }
-  return undefined;
-}
-
-/**
  * The forge repo behind a Pages base URL: `https://acme.github.io/idx` is
  * served from `github.com/acme/idx`, and a Pages root (`https://acme.github.io`)
  * from the repo named after the host itself. Only the first path segment is
@@ -365,40 +319,6 @@ function forgeFromRepoUrl(repoUrl: string): Forge | undefined {
   if (host === "github.com" || host.startsWith("github.")) return "github";
   if (host === "gitlab.com" || host.startsWith("gitlab.")) return "gitlab";
   return undefined;
-}
-
-/**
- * The Pages URL a forge serves `repoUrl` from — the inverse of
- * [`repoUrlFromPages`], and the reason nobody has to know their own Pages URL
- * to scaffold an index.
- *
- * `github.com/acme/idx` -> `https://acme.github.io/idx`, and the repository
- * *named after* the Pages host is served from its root rather than a
- * subpath. GitLab keeps everything below the top-level group in the path, so
- * `gitlab.com/acme/team/idx` -> `https://acme.gitlab.io/team/idx`.
- *
- * Only the two public hosts are answered. A self-hosted instance can serve
- * Pages from anywhere, and a custom domain is a fact this command cannot
- * observe — both are why the value is a prompt default and not a decision.
- */
-function pagesUrlFromRepo(repoUrl: string): string | undefined {
-  let url: URL;
-  try {
-    url = new URL(repoUrl);
-  } catch {
-    return undefined;
-  }
-  const host = url.hostname.toLowerCase();
-  const forge = host === "github.com" ? "github" : host === "gitlab.com" ? "gitlab" : undefined;
-  if (!forge) return undefined;
-
-  const segments = url.pathname.split("/").filter(Boolean);
-  if (segments.length < 2) return undefined;
-  const pagesHost = `${segments[0]}.${forge}.io`.toLowerCase();
-  const project = segments.slice(1).join("/");
-  return project.toLowerCase() === pagesHost
-    ? `https://${pagesHost}`
-    : `https://${pagesHost}/${project}`;
 }
 
 /**

@@ -309,16 +309,29 @@ function seedShell(forge: "github" | "gitlab"): { script: string; env: Record<st
  * what is under test runs first, and asserting on a regex would prove the
  * guard is spelled rather than that it fires.
  */
-function runSeed(
+async function runSeed(
   forge: "github" | "gitlab",
   platformUrl?: string,
   site: string | undefined = SITE,
-): { code: number; output: string } {
+): Promise<{ code: number; output: string }> {
   const { script, env } = seedShell(forge);
   fs.writeFileSync(path.join(dir, STATS_FILE), "{}\n");
   fs.writeFileSync(
     path.join(dir, "index.config.json"),
     JSON.stringify(site === undefined ? {} : { site }, null, 2) + "\n",
+  );
+  // `npx --no grim-indexer site` answers what `loadConfig` resolves for this
+  // checkout, computed here by the real code: the shell cannot load the sources.
+  const resolved = await loadConfig(dir).then(
+    (config) => config.site,
+    () => undefined, // an invalid `site` fails the command the same way an absent one does
+  );
+  const bin = path.join(dir, "bin");
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(
+    path.join(bin, "npx"),
+    resolved === undefined ? "#!/bin/sh\nexit 65\n" : `#!/bin/sh\nprintf '%s\\n' '${resolved}'\n`,
+    { mode: 0o755 },
   );
   const platform = forge === "github" ? "PAGES_URL" : "CI_PAGES_URL";
   const result = spawnSync(forge === "github" ? "bash" : "sh", ["-c", script], {
@@ -328,7 +341,7 @@ function runSeed(
       // No inherited environment: the script is under test, not this
       // machine's shell profile.
       HOME: dir,
-      PATH: process.env.PATH ?? "",
+      PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
       ...env,
       ...(platformUrl === undefined ? {} : { [platform]: platformUrl }),
     },
@@ -339,15 +352,14 @@ return { code: result.status ?? -1, output: `${result.stdout}${result.stderr}` }
 describe("the seed URL has one source (F-6)", () => {
   // The seed URL is read from the checkout, not baked into the workflow: the
   // tally reads `index.config.json` on every run, so a value frozen at render
-  // time diverges again the moment `site` is edited without a re-render. GitLab
-  // hands the whole read to the indexer; GitHub also reads it in shell, for the
-  // cross-check below.
+  // time diverges again the moment `site` is edited without a re-render. Both forges
+  // hand the read to the indexer; GitHub then cross-checks its answer in shell.
   it.each(["github", "gitlab"] as const)("bakes no site into the file — %s", (forge) => {
     expect(seedShell(forge).script).not.toContain(SITE);
   });
 
   it("reads the site from the checkout — github", () => {
-    expect(seedShell("github").script).toContain("index.config.json");
+    expect(seedShell("github").script).toContain("grim-indexer site");
   });
 
   it.each(["github", "gitlab"] as const)("never hands the platform URL to the seed — %s", (forge) => {
@@ -361,14 +373,14 @@ describe("the seed URL has one source (F-6)", () => {
   // so these exercise the guard that precedes it. The same policy lives in the
   // indexer for the run that does seed (stats_seed.test.ts), which is the only
   // place GitLab applies it.
-  it("refuses an absent site — github", () => {
-    expect(runSeed("github", undefined, SITE).code).toBe(0);
-    expect(runSeed("github", undefined, "").code, "an absent site must not be defaulted").not.toBe(0);
+  it("refuses an absent site — github", async () => {
+    expect((await runSeed("github", undefined, SITE)).code).toBe(0);
+    expect((await runSeed("github", undefined, "")).code, "an absent site must not be defaulted").not.toBe(0);
   });
 
-  it("refuses a site that is not https — github", () => {
+  it("refuses a site that is not https — github", async () => {
     // The seed decides every published rating.
-    const { code, output } = runSeed("github", undefined, "http://index.example.test/catalog");
+    const { code, output } = await runSeed("github", undefined, "http://index.example.test/catalog");
 
     expect(code, output).not.toBe(0);
     expect(output).toContain("https");
@@ -377,16 +389,16 @@ describe("the seed URL has one source (F-6)", () => {
   // The whole of F-6: the guard read one URL and the tally read another, so a
   // 404 on the tally's URL — a legal empty seed — published a sidecar built
   // from nothing while the guard passed on a URL that was fine.
-  it("fails when the site and the deployment disagree — github", () => {
+  it("fails when the site and the deployment disagree — github", async () => {
     const other = "https://someone-else.example.test/catalog";
-    const { code, output } = runSeed("github", other);
+    const { code, output } = await runSeed("github", other);
 
     expect(code, output).not.toBe(0);
     expect(output).toContain(SITE);
     expect(output).toContain(other);
   });
 
-  it("reads slash, scheme and host case as agreement — github", () => {
+  it("reads slash, scheme and host case as agreement — github", async () => {
     for (const agreeing of [
       SITE,
       `${SITE}/`,
@@ -394,15 +406,15 @@ describe("the seed URL has one source (F-6)", () => {
       SITE.replace("https://", "http://"),
       SITE.replace("index.example.test", "Index.Example.Test"),
     ]) {
-      const { code, output } = runSeed("github", agreeing);
+      const { code, output } = await runSeed("github", agreeing);
       expect(code, `${agreeing}: ${output}`).toBe(0);
     }
   });
 
   // A fork, or a deploy that is not Pages, has no such URL. That is not a
   // disagreement — `site` is authoritative alone.
-  it("runs when the platform is silent — github", () => {
-    const { code, output } = runSeed("github", undefined);
+  it("runs when the platform is silent — github", async () => {
+    const { code, output } = await runSeed("github", undefined);
 
     expect(code, output).toBe(0);
   });

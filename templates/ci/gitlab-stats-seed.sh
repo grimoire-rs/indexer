@@ -8,8 +8,8 @@
       # The indexer reads it, through the root the live site publishes. Fetching
       # `stats.json` here would read a 404 on a site that no longer serves one
       # (`sync.legacy: false`) as the first run, and deploy with every rating
-      # gone. Its `site` is the one in index.config.json, read out of the
-      # checkout by the same code the collectors use. An unreadable root, a
+      # gone. Its `site` is index.config.json's, else `CI_PAGES_URL`,
+      # resolved by the same code the collectors use. An unreadable root, a
       # missing or mismatching blob and a document that does not parse all fail
       # the job: `|| true` is forbidden, since it cannot tell a genuine first
       # run from a wipe. It is not cross-checked against `CI_PAGES_URL`, which

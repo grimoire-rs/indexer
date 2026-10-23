@@ -56,6 +56,9 @@ Serve the index locally through the same renderer `build` uses.
 Mirrors `theme/**` edits into the running server. See
 [Preview locally](../how-to/preview-locally.md).
 
+With no `site` set or derived, the preview uses `http://localhost:<port>` as
+its `site`, never the built-in default.
+
 `dev` is offline, like `build`: it makes no request. It publishes the root and
 the enrich plane from the hand-off `enrich` left, with no retained files. It
 never removes `/all.json`, so the preview searches over it whatever
@@ -367,8 +370,8 @@ republishes the last document instead of none.
 
 It reads the stats blob that `<site>/c/root.json` names and checks its digest and
 size. It reads `<site>/stats.json` only after a root 404, or a root that names no
-stats. `ratings` and `downloads` seed the same way. Needs an explicit https
-`site`.
+stats. `ratings` and `downloads` seed the same way. Needs an https `site`, set or
+[derived](config-schema.md#derived-site-and-repourl).
 
 An existing `.stats.json` is left alone. Nothing published yet writes nothing
 and exits 0. An unreadable root or blob exits 69. A 200 answer that is not a
@@ -395,7 +398,7 @@ Without `--next` it reads `<site>/c/root.json`, then the enrich plane index the
 root names, and checks the index against the root's digest and size. `<epoch>`
 is the plane's `state_epoch`, and `<blobs>` is its `blobs` digest. Both reads
 bypass edge caches and refuse a redirect, an HTML answer and a body over the
-cap. Needs an explicit https `site` (plain http only for a loopback host).
+cap. Needs an https `site`, set or derived (plain http only for a loopback host).
 
 An epoch more than 7 days old is replaced by the current time. The key therefore
 changes weekly, and the cold build that follows refreshes everything. `enrich
@@ -412,6 +415,14 @@ a digest that does not match) exits 69. A root or index that is not valid, an
 epoch that is not a non-negative safe integer, and a missing or non-https `site`
 exit 65. None of them prints a key, so the build runs cold and does not save.
 `--next` without a usable hand-off exits 69.
+
+## `grim-indexer site`
+
+Print the `site` every other command resolves: the one in `index.config.json`,
+else the one [derived](config-schema.md#derived-site-and-repourl) from CI or the
+git remote. One line on stdout; the source of a derived value goes to stderr.
+The generated GitHub deploy reads it before seeding the stats. Exits 65 when
+nothing names a `site`.
 
 ## `grim-indexer probe`
 

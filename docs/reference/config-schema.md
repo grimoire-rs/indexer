@@ -8,11 +8,15 @@ someone else's identity: `repoUrl` (which put a "github" link on every site
 pointing at `grimoire-rs/index`) and `registry` (which handed out a working
 `grim config registry add` for the wrong index entirely).
 
+`site` and `repoUrl` are instead *derived* when unset: from the forge's CI
+variables, else from the repository's own git remote. See
+[Derived `site` and `repoUrl`](#derived-site-and-repourl).
+
 ## Identity
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `site` | string | `https://index.grimoire.rs` | Canonical deployment URL. Its path becomes the site's base prefix, so a project-Pages subpath belongs here. Also the origin `enrich`, `state-key` and the stats seeds read the published root from |
+| `site` | string | derived, else `https://index.grimoire.rs` | Canonical deployment URL. Its path becomes the site's base prefix, so a project-Pages subpath belongs here. Also the origin `enrich`, `state-key` and the stats seeds read the published root from |
 | `brand` | string | `grim package index` | Header text, `<title>`, landing `<h1>` |
 | `brandMark` | string | `grim` | Accent-styled monospace prefix of `brand`. Applies only when it really is the leading run |
 | `description` | string | *(see source)* | `<meta name="description">` |
@@ -26,7 +30,7 @@ host and fetches another), no query, no fragment, lowercase scheme.
 
 `enrich` and `state-key` read `<site>/c/root.json`. `stats-seed`, `ratings` and
 `downloads` read the stats blob that root names. All of them need a `site` that
-`index.config.json` sets itself, because the built-in default names another
+is set or derived, never the built-in default, because that names another
 index. The commands differ in what they accept:
 
 | Command | `site` unset or not usable |
@@ -35,6 +39,30 @@ index. The commands differ in what they accept:
 | `state-key` | Exits 65 and prints nothing, so CI builds cold and saves nothing |
 | `stats-seed`, `ratings`, `downloads` | Exit 65. They accept `https` only |
 
+### Derived `site` and `repoUrl`
+
+A value in `index.config.json` always wins. When a key is unset, the first
+source that answers fills it:
+
+| Where it runs | `repoUrl` | `site` |
+|---|---|---|
+| GitHub Actions | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY` | The `github.io` URL that repository is served from. github.com only |
+| GitLab CI | `$CI_PROJECT_URL` | `$CI_PAGES_URL`, else the `gitlab.io` URL of a gitlab.com project |
+| Anywhere else | The `origin` remote, when the index root is the repository root | The Pages URL of that remote, on github.com or gitlab.com |
+
+Each derived value prints one line to stderr naming its source. A derived
+`site` must pass the same rule as a written one, and is dropped if it fails.
+`repoUrl: null` keeps the link off and is never derived over.
+
+Set `site` by hand when the index is served from a custom domain, GitHub
+Enterprise or a self-hosted GitLab without Pages variables. On GitHub, the
+generated deploy fails the stats seed when the derived `site` and the deployed
+Pages URL disagree, and names both.
+
+`dev` falls back to `http://localhost:<port>` when nothing derives a `site`.
+`build` warns instead, because its output would carry the built-in default in
+canonical and `og:` URLs. `grim-indexer site` prints the resolved value.
+
 ## Navigation
 
 | Key | Type | Default | Effect |
@@ -42,7 +70,7 @@ index. The commands differ in what they accept:
 | `nav` | `{label, href, external?}[]` \| null | `null` | Header links. `null` synthesizes `docsUrl` then `repoUrl`; `[]` empties the nav |
 | `notice` | string \| null | `null` | One line above the page content, on every page |
 | `docsUrl` | string \| null | `https://grimoire.rs` | Feeds the synthesized nav |
-| `repoUrl` | string \| null | `null` | Feeds the synthesized nav, labelled after its forge |
+| `repoUrl` | string \| null | derived, else `null` | Feeds the synthesized nav, labelled after its forge |
 | `installDocsUrl` | string \| null | `https://grimoire.rs/installation.html` | "Install grim" link in the hero sentence |
 | `footerNote` | string \| null | `index metadata is CC0 · packages live on OCI registries` | Sentence after the raw-data link |
 | `footerLinks` | `{label, href, external?}[]` | `[]` | Extra footer links |

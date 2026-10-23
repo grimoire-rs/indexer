@@ -8,6 +8,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { deriveHosts } from "./derive.js";
+
 /** File name `loadConfig` looks for at the index repo root. */
 export const CONFIG_FILE = "index.config.json";
 
@@ -539,8 +541,15 @@ function validate(raw: unknown): LoadedConfig {
 /**
  * Read `index.config.json` from `root`. A missing file is not an
  * error — an index repo that wants the defaults ships no config at all.
+ *
+ * An unset `site` or `repoUrl` is filled from [`deriveHosts`]; `repoUrl: null`
+ * stays off.
  */
 export async function loadConfig(root: string): Promise<LoadedConfig> {
+  return withDerivedHosts(root, await readConfig(root));
+}
+
+async function readConfig(root: string): Promise<LoadedConfig> {
   let text: string;
   try {
     text = await fs.readFile(path.join(root, CONFIG_FILE), "utf8");
@@ -555,6 +564,31 @@ export async function loadConfig(root: string): Promise<LoadedConfig> {
     fail((err as Error).message);
   }
   return validate(parsed);
+}
+
+/** Each derivation is announced once per process, however often the config loads. */
+const announced = new Set<string>();
+
+function withDerivedHosts(root: string, config: LoadedConfig): LoadedConfig {
+  if (config.site !== undefined && config.repoUrl !== undefined) return config;
+  const derived = deriveHosts(root);
+  const out = { ...config };
+  for (const key of ["site", "repoUrl"] as const) {
+    const found = derived[key];
+    if (out[key] !== undefined || found === undefined) continue;
+    // A derived value meets the rule a written one does: `site` is fetched.
+    try {
+      if (key === "site") validateSite(found.value);
+      else validateUrlShape(found.value, key, false);
+    } catch {
+      continue;
+    }
+    out[key] = found.value;
+    const line = `note: ${key} ${found.value} (from ${found.source}; set \`${key}\` in ${CONFIG_FILE} to override)`;
+    if (!announced.has(line)) console.warn(line);
+    announced.add(line);
+  }
+  return out;
 }
 
 /** Fill every gap in `config` from `DEFAULT_CONFIG`. */

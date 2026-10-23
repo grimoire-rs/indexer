@@ -35,6 +35,9 @@ export async function build(root: string, flags: BuildFlags): Promise<ExitCode> 
   ]);
 
   const config = await loadConfig(rootDir);
+  if (config.site === undefined) {
+    console.warn("warn: `site` is unset and could not be derived — canonical and og: URLs name the built-in default; set `site` in index.config.json");
+  }
   const { count, namespaces } = await compileIndex({ root: rootDir, outDir });
   const site = await buildSite({ root: rootDir, outDir, config });
   // The only state this step reads: no network, whatever `enrich` left (IX-R35).

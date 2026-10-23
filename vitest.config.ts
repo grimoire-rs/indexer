@@ -13,6 +13,9 @@ export default defineConfig({
     // package's red stubs as this tree's failures. Spread the defaults: a
     // bare `exclude` replaces them rather than adding to them.
     exclude: [...configDefaults.exclude, "**/.agents/worktrees/**"],
+    // `deriveHosts` reads these: under this repo's own CI every fixture would
+    // otherwise be given grimoire-rs/indexer's site and repoUrl.
+    env: { GITHUB_ACTIONS: "", GITLAB_CI: "" },
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],

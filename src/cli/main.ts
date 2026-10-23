@@ -18,6 +18,7 @@ import { init } from "./init.js";
 import { downloads } from "./downloads.js";
 import { probe } from "./probe.js";
 import { ratings } from "./ratings.js";
+import { site } from "./site.js";
 import { statsSeed } from "./stats_seed.js";
 import { stateKey } from "./state_key.js";
 import { validate, type ValidateFlags } from "./validate.js";
@@ -221,6 +222,14 @@ export async function run(argv: string[]): Promise<number> {
     .option("--next", "print the key of the state `enrich` handed off, read offline")
     .action(async (root: string, opts: { next?: boolean }) => {
       code = await stateKey(root, opts);
+    });
+
+  program
+    .command("site")
+    .argument("[root]", "index repo root", ".")
+    .description("print the URL the index publishes to: `site`, else derived from CI or the git remote")
+    .action(async (root: string) => {
+      code = await site(root);
     });
 
   program

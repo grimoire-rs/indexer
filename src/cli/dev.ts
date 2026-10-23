@@ -68,7 +68,10 @@ export async function dev(root: string, flags: DevFlags): Promise<ExitCode> {
     import("../state/handoff.js"),
   ]);
 
-  const config = await loadConfig(rootDir);
+  const loaded = await loadConfig(rootDir);
+  // Nothing says where this index is hosted: name the dev server rather than
+  // the built-in default, which is another index's URL.
+  const config = loaded.site === undefined ? { ...loaded, site: `http://localhost:${port ?? 4321}` } : loaded;
   const { count, namespaces } = await compileIndex({ root: rootDir, outDir });
   // Before the server stages `outDir` as its public layer; dev has no stats.json
   // to name, since only the build step writes one. Nor a search file: dev is
