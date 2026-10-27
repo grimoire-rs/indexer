@@ -79,8 +79,8 @@ Config is owner-authored, so URL validation there is a typo guard rather than a
 trust boundary — but it is applied anyway, at load rather than at render, so a
 `javascript:` href fails the build instead of shipping. `customCss` is
 containment-checked to the index root for a sharper reason: `validate` builds
-contribution PRs, and an unconstrained path would let one inline any readable
-file into the published site.
+contribution PRs, and an unconstrained path would let one publish any readable
+file on the site.
 
 ## Package data is untrusted
 

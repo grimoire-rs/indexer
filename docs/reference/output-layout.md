@@ -19,7 +19,8 @@ dist/
   c/s/sha256/<digest>.json                     one enrich shard per bucket
   index/<host>/<ns>/<pkg>/metadata.json        the pointer tree, served as data
   favicon.svg                                  and everything else from public/
-  _astro/…                                     hashed CSS and island bundles
+  _astro/…                                     hashed CSS and island bundles,
+                                               and theme.<hash>.css: theme.css + customCss
   setup/index.html                             any page you added under theme/pages/
 ```
 
@@ -206,7 +207,10 @@ file under `c/`. Past 50,000 URLs it becomes a sitemap index that names
 ## Package pages are capped at 24 KiB {#page-cap}
 
 Every `p/<namespace>/<name>/index.html` is at most 24,576 bytes, measured as
-served, after the CSP post-process. The build renders the page in full, and
+served, after the CSP post-process. The theme's `theme.css` and your
+`customCss` do not count: they are one linked file under `_astro/`.
+[`pageCap`](config-schema.md#appearance) raises the cap, trading page weight
+for README length. The build renders the page in full, and
 only a page over the cap is cut. The cuts go in this order and stop as soon as
 the page fits:
 

@@ -180,12 +180,13 @@ trust](../explanation/security-and-trust-model.md).
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `customCss` | string \| null | `null` | Path to a CSS file, relative to the index root. Inlined unlayered and last. An `@import` of a remote URL in it is blocked by the page's Content-Security-Policy |
+| `customCss` | string \| null | `null` | Path to a CSS file, relative to the index root. Linked unlayered and last, in one file with the theme's `theme.css`. An `@import` of a remote URL in it is blocked by the page's Content-Security-Policy |
 | `theme` | string \| null | `null` | npm package name of a theme, resolved from the index root. Its `theme/`, `public/` and `theme.css` sit below the index's own. See [Theme packages](theme-overlay.md#theme-packages) |
+| `pageCap` | integer | `24576` | Bytes a package page may reach before its panels are cut. At least `24576`. Raising it trades page weight for README length. See [Output layout](output-layout.md#page-cap) |
 
 The path is contained to the index root: a public index takes contribution PRs
 and `grim-indexer validate` builds them, so an unconstrained path would let a
-PR inline any readable file into the published site.
+PR publish any readable file on the site.
 
 See [Theme tokens](theme-tokens.md) and
 [Brand the site](../how-to/customize-branding.md).

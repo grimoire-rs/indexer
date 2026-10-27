@@ -46,6 +46,8 @@ A package page is now at most 24 KiB. A long changelog, contents list or README
 is cut, and the page names the `grim` command that prints the rest. The rules
 are in the [output layout](../reference/output-layout.md#page-cap). The scripts
 every page carried inline now load once, from one cached file under `_astro/`.
+So does the theme's `theme.css` with your `customCss`, so neither counts
+against the cap. `pageCap` in `index.config.json` raises it.
 
 ### Browse pages and the sitemap {#site-at-scale-browse}
 

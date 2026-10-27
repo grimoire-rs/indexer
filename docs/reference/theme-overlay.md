@@ -128,7 +128,7 @@ layout:
   package.json   peerDependencies: { "@grimoire-rs/indexer": "^0.5" }
   theme/         overlay, same rules as your own theme/
   public/        static files
-  theme.css      inlined before your customCss
+  theme.css      linked, before your customCss
 ```
 
 Each part is optional. Every layer sits between the renderer's own files and
@@ -211,7 +211,8 @@ actually replace.
 ### Package pages are capped
 
 A package page is cut to 24 KiB after it renders: the changelog first, then the
-contents, the bounded sections and the README. See
+contents, the bounded sections and the README. `theme.css` is linked, not
+inlined, so it never counts. See
 [Output layout](output-layout.md#page-cap). A theme that replaces
 `components/PackageDetail.astro` should keep its markup in the panels the cut
 knows. A page it leaves over the cap still deploys, with one warning line. An

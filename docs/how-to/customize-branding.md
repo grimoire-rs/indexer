@@ -87,7 +87,7 @@ opt-out, not opt-in.
 ```
 
 The path is relative to the index repo root and is contained to it. The file
-is inlined **unlayered and last**, and everything the renderer ships sits in
+is linked **unlayered and last**, and everything the renderer ships sits in
 `@layer grimoire` — so an ordinary selector in your file beats any default
 rule at any specificity, with no `!important` and no knowledge of where Astro
 injected its bundle.
