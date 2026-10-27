@@ -54,8 +54,8 @@ export interface BuildSiteOptions {
   /** `sync` is the loaded block; a hand-built config without it renders as `legacy: true`. */
   config: SiteConfig & { sync?: SyncConfig };
   /**
-   * Bytes a `/p/` page may reach (default 24 KiB). Internal, for tests whose
-   * fixture needs a page's full content; not a config key, in no schema.
+   * Bytes a `/p/` page may reach; overrides `config.pageCap`. For tests whose
+   * fixture needs a page's full content.
    */
   pageCap?: number;
 }
@@ -1184,7 +1184,7 @@ export async function buildSite(opts: BuildSiteOptions): Promise<SiteFacts> {
     await fs.rm(path.join(opts.outDir, "marketplace", "index.html"), { force: true });
   }
   await postProcessSite(opts.outDir, inputs.base);
-  const pages = await capPages(opts.outDir, inputs.packages, { cap: opts.pageCap });
+  const pages = await capPages(opts.outDir, inputs.packages, { cap: opts.pageCap ?? inputs.config.pageCap });
   // After the build, and outside the `finally`: there is nothing to check
   // against until the routes exist, and a build that threw has a real error
   // to report rather than a list of links that were never emitted.

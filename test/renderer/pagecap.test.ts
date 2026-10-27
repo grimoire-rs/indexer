@@ -291,6 +291,23 @@ describe("capPages with a large theme sheet", () => {
   });
 });
 
+describe("capPages under a configured pageCap", () => {
+  let site: { root: string; outDir: string };
+  beforeAll(async () => {
+    site = await buildFloor({ config: { pageCap: 2 * CAP } });
+  }, 300_000);
+  afterAll(async () => {
+    await fs.rm(site.root, { recursive: true, force: true });
+  });
+
+  it("cuts the README to the configured cap, not the default", async () => {
+    const html = await fs.readFile(path.join(site.outDir, PAGES.readme), "utf8");
+    expect(bytes(html)).toBeGreaterThan(CAP);
+    expect(bytes(html)).toBeLessThanOrEqual(2 * CAP);
+    expect(cuts(html, "truncated")).toHaveLength(1);
+  });
+});
+
 describe("slimIcons", () => {
   const svg = (inner: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true">${inner}</svg>`;

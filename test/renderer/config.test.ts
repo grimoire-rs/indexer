@@ -151,6 +151,10 @@ describe("loadConfig", () => {
     // `notice` is a string like the rest; the point of the row is that the
     // key `validate` walks is this one and not the pre-release `banner`.
     ["a non-string notice", '{"notice":42}'],
+    // The hard-cut frame is sized for the default; below it, every page ships over.
+    ["a pageCap below the default", '{"pageCap":24575}'],
+    ["a fractional pageCap", '{"pageCap":65536.5}'],
+    ["a string pageCap", '{"pageCap":"65536"}'],
   ])("rejects %s", async (_case, contents) => {
     await expect(loadConfig(await rootWith(contents))).rejects.toBeInstanceOf(SiteConfigError);
   });
@@ -229,6 +233,13 @@ describe("loadConfig", () => {
 // unless a config says otherwise, so the contract is that an unset field
 // changes nothing and a set one survives untouched. What the header *does*
 // with it is the header's test, not this file's.
+describe("pageCap", () => {
+  it("defaults to 24 KiB and takes a larger cap", async () => {
+    expect(resolveConfig(await loadConfig(await rootWith(null))).pageCap).toBe(24_576);
+    expect(resolveConfig(await loadConfig(await rootWith('{"pageCap":65536}'))).pageCap).toBe(65_536);
+  });
+});
+
 describe("NavLink.external", () => {
   it("adds no key when unset", async () => {
     const root = await rootWith('{"nav":[{"label":"setup","href":"/setup/"}]}');

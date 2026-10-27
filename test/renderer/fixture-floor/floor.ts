@@ -113,7 +113,7 @@ async function write(root: string, rel: string, content: string): Promise<void> 
 }
 
 /** Stages the floor fixture under a fresh temp root and builds the site there. */
-export async function buildFloor(opts: { pageCap?: number; customCss?: string } = {}): Promise<{ root: string; outDir: string }> {
+export async function buildFloor(opts: { pageCap?: number; customCss?: string; config?: SiteConfig } = {}): Promise<{ root: string; outDir: string }> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "floor-"));
   const outDir = path.join(root, "dist");
   await fs.cp(HERE, root, { recursive: true, filter: (src) => !src.endsWith(".ts") });
@@ -158,7 +158,7 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string } 
   for (const name of ["floor-max-bundle", "floor-max-mcp", "floor-readme", "floor-quotes"]) await write(root, `${e(name)}/readme.md`, markdown(200 * KiB));
   for (const name of ["floor-max-bundle", "floor-quotes"]) await write(root, `${e(name)}/changelog.md`, markdown(200 * KiB));
 
-  const config = JSON.parse(await fs.readFile(path.join(root, "index.config.json"), "utf8")) as SiteConfig;
+  const config = { ...(JSON.parse(await fs.readFile(path.join(root, "index.config.json"), "utf8")) as SiteConfig), ...opts.config };
   if (opts.customCss !== undefined) {
     await write(root, "floor.css", opts.customCss);
     config.customCss = "floor.css";

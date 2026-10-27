@@ -164,6 +164,12 @@ export interface SiteConfig {
    * `public/` and `theme.css` are layered below the index's own.
    */
   theme?: string | null;
+  /**
+   * Bytes a `p/<namespace>/<name>/index.html` may reach before its panels are
+   * cut. Raising it trades page weight for README length; it cannot go below
+   * the default, which is what the hard-cut frame is sized to fit.
+   */
+  pageCap?: number;
 }
 
 /**
@@ -219,6 +225,7 @@ export const DEFAULT_CONFIG: Required<SiteConfig> = {
   attribution: true,
   customCss: null,
   theme: null,
+  pageCap: 24 * 1024,
 };
 
 /** Thrown for a malformed config file — a user data problem, not a bug. */
@@ -491,6 +498,10 @@ function validate(raw: unknown): LoadedConfig {
 
   if (cfg.attribution !== undefined && typeof cfg.attribution !== "boolean") {
     fail("attribution must be a boolean");
+  }
+
+  if (cfg.pageCap !== undefined && !(Number.isSafeInteger(cfg.pageCap) && (cfg.pageCap as number) >= DEFAULT_CONFIG.pageCap)) {
+    fail(`pageCap must be an integer of at least ${DEFAULT_CONFIG.pageCap} bytes`);
   }
 
   validateLinks(cfg, "nav");

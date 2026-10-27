@@ -4,6 +4,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
+import { DEFAULT_CONFIG } from "../config.js";
 import { REPOSITORY_ANCHOR, SECTION_NOUN, boundedUrl, sectionCommand, type Section } from "./astro/lib/bounds.js";
 import type { CatalogPackage, PageCapReport } from "./types.js";
 
@@ -27,7 +28,7 @@ interface Located {
 }
 type Pkg = Pick<CatalogPackage, "ref" | "name" | "repository">;
 
-const DEFAULT_CAP = 24 * 1024;
+const DEFAULT_CAP = DEFAULT_CONFIG.pageCap;
 const DEFAULT_BUDGET_MS = 5 * 60 * 1000;
 const PANEL_IDS = new Map<string, Panel>([
   ["tab-readme", "readme"],
