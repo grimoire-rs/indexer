@@ -11,6 +11,21 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.6.3] - 2026-10-27
+
+### Added
+
+- Make the package page cap configurable *(config)*
+
+### Documentation
+
+- Theme CSS is linked; document pageCap
+
+### Fixed
+
+- Relink an <img> README logo to the served path *(renderer)*
+- Link the theme stylesheet instead of inlining it *(renderer)*
+
 ## [0.6.2] - 2026-10-23
 
 ### Fixed
@@ -399,6 +414,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.6.3]: https://github.com/grimoire-rs/indexer/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/grimoire-rs/indexer/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/grimoire-rs/indexer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/grimoire-rs/indexer/compare/v0.5.12...v0.6.0
