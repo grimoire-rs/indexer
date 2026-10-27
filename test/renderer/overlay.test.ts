@@ -701,12 +701,14 @@ describe("a theme package", () => {
     expect(await pkgRead("pkg/index.html")).toContain(">root<");
   });
 
-  it("serves the package's public/ and inlines its theme.css before customCss", async () => {
+  it("serves the package's public/ and links its theme.css before customCss", async () => {
     expect(await pkgRead("pkg.txt")).toBe("from the package\n");
-    const html = await pkgRead("index.html");
-    const pkgAt = html.indexOf(".pkg-sheet{}");
+    const href = /<link rel="stylesheet" href="\/(_astro\/theme\.[0-9a-f]{16}\.css)">/.exec(await pkgRead("index.html"));
+    expect(href).not.toBeNull();
+    const css = await pkgRead(href![1]!);
+    const pkgAt = css.indexOf(".pkg-sheet{}");
     expect(pkgAt).toBeGreaterThan(-1);
-    expect(html.indexOf("rgb(1 2 3)")).toBeGreaterThan(pkgAt);
+    expect(css.indexOf("rgb(1 2 3)")).toBeGreaterThan(pkgAt);
   });
 
   it("applies the deny-list to the package, naming it", async () => {

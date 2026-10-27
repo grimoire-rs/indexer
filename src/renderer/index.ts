@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, dev } from "astro";
 import preact from "@astrojs/preact";
+import { sha256Hex } from "../emit/digest.js";
 import { resolveConfig, type NavLink, type SiteConfig, type SyncConfig } from "../config.js";
 // The per-key merge, shared with the ratings producer rather than restated:
 // both write the same file and both have to leave the other's key alone.
@@ -971,7 +972,7 @@ function inlineConfig(
   opts: BuildSiteOptions,
   staged: Awaited<ReturnType<typeof stage>>,
   {
-    config, packages, css, marketplace, siteMode, builtAt, base, digests,
+    config, packages, marketplace, siteMode, builtAt, base, digests,
   }: Awaited<ReturnType<typeof resolveInputs>> & Pick<GrimoireData, "digests">,
   dev: boolean,
 ) {
@@ -1004,7 +1005,7 @@ function inlineConfig(
       define: {
         // Dev serves no stats blob, so a windowed catalog would sort by rating
         // from rows that carry none: dev inlines every card.
-        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, css, marketplace, siteMode, builtAt, legacy: opts.config.sync?.legacy ?? true, digests, inlineCatalog: dev || staged.inlineCatalog }),
+        __GRIMOIRE_DATA__: JSON.stringify({ config, packages, marketplace, siteMode, builtAt, legacy: opts.config.sync?.legacy ?? true, digests, inlineCatalog: dev || staged.inlineCatalog }),
         __GRIMOIRE_BASE__: JSON.stringify(base),
         __GRIMOIRE_DEV__: JSON.stringify(dev),
       },
@@ -1099,10 +1100,28 @@ function keepAstroOffline(): void {
 }
 
 /** The hashes the page names; the sizes stay with `SiteFacts`. */
-const digestsOf = (d: SiteDigests): GrimoireData["digests"] => ({
+const digestsOf = (d: SiteDigests, css: string | null): GrimoireData["digests"] => ({
   search: d.search?.sha256 ?? null,
   stats: d.stats?.sha256 ?? null,
+  css,
 });
+
+/**
+ * Publish the joined `theme.css` + `customCss` as one stylesheet under
+ * `_astro/`, named by its content, and return that name; `null` for none.
+ *
+ * Linked rather than inlined: inline, the sheet counted against every
+ * package page's cap and was downloaded again with each page. `outDir` is
+ * `stage`'s last `public/` layer, the same route `stats.json` takes, so the
+ * file survives Astro emptying it.
+ */
+async function publishCss(outDir: string, css: string): Promise<string | null> {
+  if (!css) return null;
+  const name = `theme.${sha256Hex(css).slice(0, 16)}.css`;
+  await fs.mkdir(path.join(outDir, "_astro"), { recursive: true });
+  await fs.writeFile(path.join(outDir, "_astro", name), css);
+  return name;
+}
 
 /** Total bytes of the files under `dir`; 0 when it does not exist. */
 async function dirBytes(dir: string): Promise<number> {
@@ -1133,9 +1152,10 @@ export async function buildSite(opts: BuildSiteOptions): Promise<SiteFacts> {
   const statsBytes = inputs.stats ? Buffer.from(`${JSON.stringify(inputs.stats)}\n`) : null;
   if (statsBytes) await fs.writeFile(path.join(opts.outDir, STATS_PUBLISHED), statsBytes);
   const published = prepareSiteSearch(opts.outDir, inputs.packages, statsBytes, inputs.siteMode);
+  const css = await publishCss(opts.outDir, inputs.css);
   // Same route as `stats.json`: `outDir` is `stage`'s last `public/` layer.
   const staged = await stage(opts.root, opts.outDir, undefined, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
-  const astro = inlineConfig(opts, staged, { ...inputs, digests: digestsOf(published) }, false);
+  const astro = inlineConfig(opts, staged, { ...inputs, digests: digestsOf(published, css) }, false);
   // The registry is per process: without this, a second build in the same
   // process ships the first one's rules and a different sheet hash.
   SHIKI_CLASSES.clearRegistry();
@@ -1378,8 +1398,9 @@ export function urlHost(address: string): string {
 export async function devSite(opts: DevSiteOptions): Promise<DevServer> {
   keepAstroOffline();
   const inputs = await resolveInputs(opts);
+  const css = await publishCss(opts.outDir, inputs.css);
   const staged = await stage(opts.root, opts.outDir, opts.srcDir, inputs.marketplaceFiles, inputs.base.replace(/\/$/, ""), inputs.themePackage);
-  const astro = inlineConfig(opts, staged, { ...inputs, digests: { search: null, stats: null } }, true);
+  const astro = inlineConfig(opts, staged, { ...inputs, digests: { search: null, stats: null, css } }, true);
   const cwd = process.cwd();
   process.chdir(staged.dir);
   try {

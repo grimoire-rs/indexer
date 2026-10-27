@@ -42,9 +42,9 @@ const SRC = sources();
  * Every block of CSS the renderer ships, as `[file, contents]`: each
  * `<style>…</style>`, plus every `.css` file whole.
  *
- * Self-closing style tags are skipped on purpose — `Base.astro`'s
- * `<style is:inline set:html={css} />` IS the consumer's own file, and it
- * must stay unlayered or the whole override contract is defeated.
+ * Self-closing style tags are skipped on purpose — none ships today, and the
+ * consumer's own file is linked by `Base.astro` from `_astro/`, never
+ * inlined; it must stay unlayered or the whole override contract is defeated.
  */
 function cssBlocks(): [string, string][] {
   const out: [string, string][] = [];

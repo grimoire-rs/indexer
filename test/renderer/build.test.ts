@@ -140,6 +140,9 @@ async function render(
 
   const cssDir = path.join(outDir, "_astro");
   const cssFiles = (await fs.readdir(cssDir)).filter((f) => f.endsWith(".css"));
+  // The index's own sheet (`customCss`), published beside Astro's bundle.
+  const isUserCss = (f: string) => /^theme\.[0-9a-f]{16}\.css$/.test(f);
+  const userCssFile = cssFiles.find(isUserCss);
   return {
     root,
     outDir,
@@ -148,8 +151,10 @@ async function render(
     // Empty for an index with no packages (mode `marketplace`).
     detailHtml: await read("p/github.com/acme/code-review/index.html").catch(() => ""),
     bundledCss: (
-      await Promise.all(cssFiles.map((f) => fs.readFile(path.join(cssDir, f), "utf8")))
+      await Promise.all(cssFiles.filter((f) => !isUserCss(f)).map((f) => fs.readFile(path.join(cssDir, f), "utf8")))
     ).join("\n"),
+    userCssFile: userCssFile ?? "",
+    userCss: userCssFile ? await fs.readFile(path.join(cssDir, userCssFile), "utf8") : "",
   };
 }
 
@@ -239,6 +244,8 @@ let sub: Built;
 let indexHtml: string;
 let detailHtml: string;
 let bundledCss: string;
+let userCss: string;
+let userCssFile: string;
 
 const readOut = (rel: string) => site.read(rel);
 
@@ -247,7 +254,7 @@ beforeAll(async () => {
   // cwd is process-global.
   site = await render("https://index.example.test");
   sub = await render(SUB_SITE);
-  ({ indexHtml, detailHtml, bundledCss } = site);
+  ({ indexHtml, detailHtml, bundledCss, userCss, userCssFile } = site);
 }, 300_000);
 
 afterAll(async () => {
@@ -1383,22 +1390,24 @@ describe("theming", () => {
     // exists to prevent, and colour alone would not have caught it: these
     // two families are declared once, in `:root`, and are read by rules in
     // both the global block and a scoped component block.
-    expect(indexHtml).toContain("--grim-space-6: 7.77rem");
-    expect(indexHtml).toContain("--grim-radius-control: 61px");
+    expect(userCss).toContain("--grim-space-6: 7.77rem");
+    expect(userCss).toContain("--grim-radius-control: 61px");
     // Reaching them means the rules read the token rather than a literal.
     expect(bundledCss).toMatch(/var\(--grim-space-6\)/);
     expect(bundledCss).toMatch(/var\(--grim-radius-control\)/);
   });
 
-  it("emits the user CSS unlayered, after the bundled stylesheet", () => {
-    expect(indexHtml).toContain("--grim-color-accent: rgb(1 2 3)");
-    expect(indexHtml).toContain("--grim-color-accent: rgb(4 5 6)");
-    // Unlayered beats layered regardless of order, but the file is also
+  it("links the user CSS unlayered, after the bundled stylesheet", () => {
+    expect(userCss).toContain("--grim-color-accent: rgb(1 2 3)");
+    expect(userCss).toContain("--grim-color-accent: rgb(4 5 6)");
+    expect(userCss).not.toContain("@layer");
+    // Unlayered beats layered regardless of order, but the link is also
     // last in the document — assert the ordering that makes it obvious.
-    expect(indexHtml.indexOf("rgb(1 2 3)")).toBeGreaterThan(
-      indexHtml.indexOf('rel="stylesheet"'),
-    );
-    expect(indexHtml.indexOf("rgb(1 2 3)")).toBeGreaterThan(indexHtml.indexOf("@layer grimoire"));
+    const link = indexHtml.indexOf(`<link rel="stylesheet" href="/_astro/${userCssFile}">`);
+    expect(link).toBeGreaterThan(indexHtml.indexOf('rel="stylesheet"'));
+    // Linked, not inlined: the sheet's bytes are on no page.
+    expect(indexHtml).not.toContain("rgb(1 2 3)");
+    expect(detailHtml).not.toContain("rgb(1 2 3)");
   });
 });
 

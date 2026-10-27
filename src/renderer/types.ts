@@ -121,8 +121,6 @@ export interface GrimoireData {
    * text-only); `null` when `marketplace.toml` is absent or nothing was exported.
    */
   marketplace: LocalMarketplace | null;
-  /** Contents of `config.customCss`, already read from disk. Empty = none. */
-  css: string;
   /**
    * When this render ran, RFC 3339 UTC to the second — the same shape the
    * stats sidecar's `generated_at` carries.
@@ -140,9 +138,10 @@ export interface GrimoireData {
   /**
    * SHA-256 of the published search file and stats blob, `null` when this
    * build published none. Inlined into the page so the island can name the
-   * immutable URL it fetches.
+   * immutable URL it fetches. `css` is the file name under `_astro/` of the
+   * theme's `theme.css` + `customCss`, `null` when there is neither.
    */
-  digests: { search: string | null; stats: string | null };
+  digests: { search: string | null; stats: string | null; css: string | null };
   /** Whether the page inlines every card instead of the first screenful. */
   inlineCatalog: boolean;
 }

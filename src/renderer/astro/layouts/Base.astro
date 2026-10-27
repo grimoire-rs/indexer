@@ -23,7 +23,7 @@ interface Props {
   description: string;
   image?: string;
 }
-const { config, css } = data;
+const { config, digests } = data;
 // `og:image` falls back to the logo before the favicon: a favicon is drawn to
 // read at 16px, and a link preview is not that.
 const { title, description, image = config.logo ?? config.favicon } = Astro.props;
@@ -2603,6 +2603,6 @@ for (const btn of document.querySelectorAll("[data-copy]")) {
     </style>
 
     {/* Unlayered, and last in the document: the user's file wins twice over. */}
-    {css && <style is:inline set:html={css} />}
+    {digests.css && <link rel="stylesheet" href={withBase(`/_astro/${digests.css}`)} />}
   </body>
 </html>

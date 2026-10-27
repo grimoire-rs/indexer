@@ -271,6 +271,26 @@ describe("capPages on the floor fixture", () => {
 });
 
 
+// A theme's sheet is linked, not inlined, so its size never reaches the cap:
+// inlined, 32 KiB of it left no room for a README and every page took the hard cut.
+describe("capPages with a large theme sheet", () => {
+  let site: { root: string; outDir: string };
+  beforeAll(async () => {
+    site = await buildFloor({ customCss: `/* ${"x".repeat(32 * KiB)} */\n:root { --grim-color-accent: rgb(1 2 3); }\n` });
+  }, 300_000);
+  afterAll(async () => {
+    await fs.rm(site.root, { recursive: true, force: true });
+  });
+
+  it("soft-cuts the README at a block instead of taking the hard cut", async () => {
+    const html = await fs.readFile(path.join(site.outDir, PAGES.readme), "utf8");
+    expect(bytes(html)).toBeLessThanOrEqual(CAP);
+    expect(html).not.toContain("rgb(1 2 3)");
+    expect(cuts(html, "truncated")).toHaveLength(1);
+    expect(html).toContain("Lorem ipsum");
+  });
+});
+
 describe("slimIcons", () => {
   const svg = (inner: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true">${inner}</svg>`;
