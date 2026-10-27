@@ -22,11 +22,13 @@ const GOLDEN = path.join(HERE, "golden");
 /** The pages pinned: the catalog root and one package page. */
 const PAGES = { "index.html": "packages-index.html", "p/github.com/acme/code-review/index.html": "packages-detail.html" };
 
-/** Drops what changes per build: temp paths baked into dev bundles, build time, island ids, content hashes. */
+/** Drops what changes per build: temp paths baked into dev bundles, build time, relative ages, island ids, content hashes. */
 function normalize(html: string): string {
   return html
     .replace(/\/[^"'`\s]*?\/\.index-[A-Za-z0-9]+/g, "<STAGE>")
     .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/g, (t) => (t === "2026-08-02T11:15:00Z" ? t : "<NOW>"))
+    // An age is rendered against the build's clock, so it drifts as the fixture's dates recede.
+    .replace(/>(updated )?[^<>]*? ago</g, ">$1<AGO><")
     .replace(/uid="[A-Za-z0-9]+"/g, 'uid="<UID>"')
     .replace(/(\/_astro\/[A-Za-z0-9_]+)\.[A-Za-z0-9_-]{8}\.(js|css)/g, "$1.<HASH>.$2");
 }
