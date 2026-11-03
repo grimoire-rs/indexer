@@ -157,6 +157,28 @@ function boundSupport(value: unknown, budget: Budget): unknown {
   );
 }
 
+/** The artifact kinds a `requires` entry may name, in grim's sort order. */
+export const REQUIRES_KINDS = ["skill", "rule", "agent", "bundle", "mcp", "hook"];
+const REQUIRES_LIMIT = 64;
+
+/**
+ * `describe`'s `requires`: `null` (absent, foreign manifest, unreadable layers) or a list of
+ * `{kind, name, id}` strings. Anything else is `null`; a malformed entry or an unknown kind is dropped, the rest kept.
+ */
+export function boundRequires(value: unknown): { kind: string; name: string; id: string }[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: { kind: string; name: string; id: string }[] = [];
+  for (const e of value) {
+    if (out.length >= REQUIRES_LIMIT) break;
+    if (!isObject(e) || typeof e.kind !== "string" || typeof e.name !== "string" || typeof e.id !== "string") continue;
+    if (!REQUIRES_KINDS.includes(e.kind)) continue;
+    const id = clean(e.id, 512, false);
+    if (id === "") continue;
+    out.push({ kind: e.kind, name: clean(e.name, 256, false), id });
+  }
+  return out;
+}
+
 const isU32 = (v: unknown): boolean => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 0xffffffff;
 
 function boundField(key: string, value: unknown, budget: Budget): unknown {
@@ -164,6 +186,7 @@ function boundField(key: string, value: unknown, budget: Budget): unknown {
   // grim 0.14.3 reads lists and identity keys as required, so one `null` or wrong shape fails its whole index.
   const list = LISTS.get(key);
   if (list) return boundList(value, list);
+  if (key === "requires") return boundRequires(value);
   if (IDENTITY.has(key)) {
     if (key === "schema") return isU32(value) ? value : 0;
     return typeof value === "string" ? stripControls(value, false) : "";

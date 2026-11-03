@@ -198,6 +198,8 @@ function mapMeta(desc: Record<string, unknown>): Record<string, unknown> {
   data.tags = desc.tags ?? [];
   data.deprecated = desc.deprecated ?? null; // string | null, always present
   if (desc.replaced_by) data.replacedBy = desc.replaced_by;
+  // Declared dependencies; an older grim omits the field, which reads as `null`. Bounded in `clampData`.
+  data.requires = desc.requires ?? null;
   return data;
 }
 

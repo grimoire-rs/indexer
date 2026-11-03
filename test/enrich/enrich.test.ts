@@ -193,6 +193,7 @@ describe("enrichIndex", () => {
       keywords: ["a"],
       tags: ["1.2.3", "latest"],
       deprecated: null,
+      requires: null,
       hasReadme: true,
       hasChangelog: true,
       logo: "/logos/github.com/acme/foo.png",
@@ -207,6 +208,24 @@ describe("enrichIndex", () => {
     expect(fs.readFileSync(path.join(out, "changelog.md"), "utf8")).toBe("## 1.2.3\n");
     expect(fs.readFileSync(path.join(out, "logo.png"))).toEqual(PNG);
     expect(fs.readFileSync(path.join(out, "contents.md"), "utf8")).toBe("# Entry\n");
+  });
+
+  it("carries declared dependencies, bounds malformed ones, and reads an absent field as null", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const requires = [
+      { kind: "mcp", name: "srv", id: "./srv:1" },
+      { kind: "weird", name: "x", id: "x" },
+      { kind: "rule", name: 7, id: "r" },
+      "junk",
+    ];
+    const { run } = fakeGrim({ describe: { requires } });
+    await enrichIndex({ root: dir, run });
+    expect(sidecar("github.com/acme", "foo").requires).toEqual([{ kind: "mcp", name: "srv", id: "./srv:1" }]);
+
+    addPackage("github.com/acme", "bar", "ghcr.io/acme/skills/bar");
+    const { run: bad } = fakeGrim({ describe: { requires: "nope" } });
+    await enrichIndex({ root: dir, run: bad });
+    expect(sidecar("github.com/acme", "bar").requires).toBeNull();
   });
 
   it("carries an optional field through only when the registry has one", async () => {
