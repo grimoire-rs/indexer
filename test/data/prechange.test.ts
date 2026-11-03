@@ -77,13 +77,28 @@ const RETIRED = ["enrich.json"];
  * markup by design: the home page (IX-R14), the browse pages and sitemap
  * (IX-R16) and the package-page cap (IX-R17, IX-R46). Markup is owned by
  * `test/renderer/packages_golden.test.ts` and the page-cap tests from here on.
- * A file matched here must still be published; every data file (`all.json`,
- * `stats.json`, `robots.txt`, the logos) stays pinned byte for byte.
+ * A file matched here must still be published; every data file the build
+ * writes (`stats.json`, `robots.txt`, the logos) stays pinned byte for byte,
+ * and `compileIndex`'s `all.json` too, less `ADDED_KEYS`.
  */
 const UNPINNED: ReadonlyArray<readonly [RegExp, string]> = [
   [/\.html$/, "markup, IX-R14 IX-R16 IX-R17 IX-R46"],
   [/^sitemap\.xml$/, "IX-R16, lists the browse/ pages"],
+  [/^all\.json$/, "the renderer fixture's own input, republished verbatim; C-016 in build.test.ts pins that"],
 ];
+/**
+ * Record keys `compileIndex` publishes beyond the golden's, each with its
+ * reason. `all.json` is compared with them removed from every record.
+ */
+const ADDED_KEYS: ReadonlyArray<readonly [string, string]> = [
+  ["requires", "declared dependencies, grimoire-rs/indexer#22"],
+];
+/** `all.json` less `ADDED_KEYS`, re-serialised as `compileIndex` writes it. */
+function withoutAddedKeys(text: string): string {
+  const records = JSON.parse(text) as Record<string, unknown>[];
+  for (const record of records) for (const [key] of ADDED_KEYS) delete record[key];
+  return JSON.stringify(records, null, 1) + "\n";
+}
 /** The chunks the markup links: renamed or split along with it, so neither their bytes nor their names are pinned. */
 const CHUNK = /^_astro\//;
 const unpinned = (rel: string) => UNPINNED.find(([re]) => re.test(rel))?.[1];
@@ -143,7 +158,10 @@ async function expectBytes(actual: string, golden: string): Promise<void> {
 }
 
 async function expectGolden(built: Built, inventory: Inventory): Promise<void> {
-  await expectBytes(path.join(built.compiled, "all.json"), "all.json");
+  const compiled = await fs.readFile(path.join(built.compiled, "all.json"), "utf8");
+  // Already in the re-serialised form, so stripping the added keys hides no other byte.
+  expect(JSON.stringify(JSON.parse(compiled), null, 1) + "\n").toBe(compiled);
+  expect(withoutAddedKeys(compiled)).toBe(await fs.readFile(path.join(GOLDEN, "all.json"), "utf8"));
   await expectBytes(path.join(built.dist, "stats.json"), "stats.json");
 
   const actual: Record<string, string> = {};

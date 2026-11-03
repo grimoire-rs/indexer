@@ -215,6 +215,12 @@ if (values.smoke) {
         // `support` block — so this fails on a broken render *and* on a dev index
         // whose enrich sidecars stopped being read.
         [at(detail), "Get help"],
+        // Declared dependencies, in their own tab: an indexed one links to its
+        // page, one published elsewhere says so on hover — and the sidecar's
+        // `requires` reached the record.
+        [at(detail), 'id="tab-dependencies"'],
+        [at(detail), 'href="/p/github.com/acme/context7/"'],
+        [at(detail), 'title="not in this index"'],
         // The vote badge reaches the detail page too, with both halves live —
         // it was missing here long after the cards had it.
         [at(detail), 'class="rating-vote"'],

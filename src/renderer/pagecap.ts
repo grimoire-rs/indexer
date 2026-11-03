@@ -10,7 +10,7 @@ import type { CatalogPackage, PageCapReport } from "./types.js";
 
 type Element = DefaultTreeAdapterMap["element"];
 type ParentNode = DefaultTreeAdapterMap["parentNode"];
-type Panel = "readme" | "changelog" | "contents";
+type Panel = "readme" | "changelog" | "contents" | "dependencies";
 /** A span of the page source, in the UTF-16 offsets parse5 reports. */
 interface Span {
   start: number;
@@ -34,6 +34,7 @@ const PANEL_IDS = new Map<string, Panel>([
   ["tab-readme", "readme"],
   ["tab-changelog", "changelog"],
   ["tab-contents", "contents"],
+  ["tab-dependencies", "dependencies"],
 ]);
 // The members and MCP sections sit inside the contents panel, which `locate` never descends into.
 const SECTIONS = new Set<string>(["tags", "downloads"]);
@@ -92,6 +93,8 @@ const PANEL_NOTICE: Record<Panel, (pkg: Pkg) => string> = {
   readme: (pkg) => notice("truncated", "This README is cut to fit the page.", `grim fetch ${pkg.ref} --description`, pkg),
   changelog: (pkg) => notice("link-out", "The changelog is not shown on this page.", `grim fetch ${pkg.ref} --description`, pkg),
   contents: (pkg) => notice("link-out", "The contents are not shown on this page.", sectionCommand("members", pkg), pkg),
+  dependencies: (pkg) =>
+    notice("link-out", "The dependencies are not shown on this page.", sectionCommand("dependencies", pkg), pkg),
 };
 
 const sectionNotice = (section: Section, pkg: Pkg): string =>
@@ -113,20 +116,20 @@ const panelSplice = (loc: Located, panel: Panel, pkg: Pkg): Splice[] => {
 function hardCut(html: string, pkg: Pkg): string {
   const loc = locate(html);
   return apply(html, [
-    ...(["readme", "changelog", "contents"] as const).flatMap((p) => panelSplice(loc, p, pkg)),
+    ...(["readme", "changelog", "contents", "dependencies"] as const).flatMap((p) => panelSplice(loc, p, pkg)),
     ...loc.sections.map(({ section, span: s }) => ({ ...s, text: sectionNotice(section, pkg) })),
   ]);
 }
 
 /**
- * Passes in order, each only while the page is over `cap`: the changelog, then
- * the contents, to a link-out; the structured sections, largest first, while
- * the page without its README is still over; the README, at a top-level block;
- * else the hard cut.
+ * Passes in order, each only while the page is over `cap`: the changelog, the
+ * contents, then the dependencies, to a link-out; the structured sections,
+ * largest first, while the page without its README is still over; the README,
+ * at a top-level block; else the hard cut.
  */
 function softCut(html: string, pkg: Pkg, cap: number): { html: string; hard: boolean } {
   let h = html;
-  for (const panel of ["changelog", "contents"] as const) {
+  for (const panel of ["changelog", "contents", "dependencies"] as const) {
     if (bytes(h) <= cap) return { html: h, hard: false };
     h = apply(h, panelSplice(locate(h), panel, pkg));
   }

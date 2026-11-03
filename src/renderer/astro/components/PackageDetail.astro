@@ -98,7 +98,7 @@ const {
 } = Astro.props;
 const id = `${pkg.namespace}/${pkg.name}`;
 
-// The three tab panels below carry `data-grim-markdown`, as does each element
+// The tab panels below carry `data-grim-markdown`, as does each element
 // the markdown pipeline renders: the build fails on a script, style or event
 // handler inside one, because rendered markdown carrying any was not sanitised.
 const Readme = readmeEntry ? (await render(readmeEntry)).Content : null;
@@ -119,18 +119,24 @@ const contentsData = (await getEntry("contentData", id))?.data as
 // A page lists the first 32 and points at a command for the rest: the record
 // bounds a bundle at 5,000 members, and a page is capped in bytes. Slicing
 // before the map also keeps the per-member lookup off the other 4,968.
+const resolveMembers = (list: { kind?: string; name?: string; id?: string }[]) =>
+  list.map((member) => {
+    const ref = member.id ? resolveMemberRef(pkg.ref, member.id) : null;
+    const target = ref ? packages.find((p) => p.ref === ref) : undefined;
+    return {
+      kind: member.kind ?? "",
+      name: member.name ?? ref ?? "",
+      ref,
+      href: target ? withBase(`/p/${target.namespace}/${target.name}/`) : null,
+    };
+  });
 const { shown: memberList, more: moreMembers } = boundList(contentsData?.members ?? []);
 const { shown: shownPluginMembers, more: morePluginMembers } = boundList(pluginMembers);
-const members = memberList.map((member) => {
-  const ref = member.id ? resolveMemberRef(pkg.ref, member.id) : null;
-  const target = ref ? packages.find((p) => p.ref === ref) : undefined;
-  return {
-    kind: member.kind ?? "",
-    name: member.name ?? ref ?? "",
-    ref,
-    href: target ? withBase(`/p/${target.namespace}/${target.name}/`) : null,
-  };
-});
+const members = resolveMembers(memberList);
+// Declared dependencies: the Dependencies tab lists them exactly as Contents
+// lists a bundle's members. `null` is a grim too old to report them.
+const { shown: depList, more: moreDeps } = boundList(pkg.requires ?? []);
+const dependencies = resolveMembers(depList);
 
 // Pretty JSON, cut at a line boundary: an MCP descriptor may be 1 MiB. Only the
 // branch of the Contents panel that prints it pays for the serialisation.
@@ -186,8 +192,19 @@ const filled = {
   contents:
     Contents !== null || members.length > 0 || contentsData !== undefined || pluginMembers.length > 0,
   changelog: Changelog !== null,
+  dependencies: dependencies.length > 0,
 };
-const openTab = (["readme", "contents", "changelog"] as const).find((tab) => filled[tab]) ?? null;
+const TABS = [
+  { id: "readme", label: "Readme", empty: "no readme available" },
+  { id: "contents", label: "Contents", empty: "no contents available" },
+  { id: "changelog", label: "Changelog", empty: "no changelog available" },
+  {
+    id: "dependencies",
+    label: "Dependencies",
+    empty: pkg.requires == null ? "dependencies unknown" : "no dependencies",
+  },
+] as const;
+const openTab = TABS.find((tab) => filled[tab.id])?.id ?? null;
 
 const title = boundBytes(pkg.title ?? pkg.name, FIELD_BYTES);
 const description = boundBytes(pkg.summary ?? pkg.description ?? `${pkg.kind} package: ${pkg.ref}`);
@@ -340,49 +357,31 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
               behaviour tabs want (arrows move, only one selected). The inputs
               are visually hidden rather than `hidden`, which would take them
               out of the focus order along with the pixels. */}
-          {/* All three tabs are always offered — a ribbon that grows a tab per
+          {/* Every tab is always offered — a ribbon that grows a tab per
               package makes the panel a different shape on every page. An empty
-              one is disabled instead: greyed, not clickable through to a
-              sentence apologising for itself. */}
-          <input
-            type="radio"
-            name="panel"
-            id="panel-readme"
-            class="sr-only"
-            checked={openTab === "readme"}
-            disabled={!filled.readme}
-          />
-          <input
-            type="radio"
-            name="panel"
-            id="panel-contents"
-            class="sr-only"
-            checked={openTab === "contents"}
-            disabled={!filled.contents}
-          />
-          <input
-            type="radio"
-            name="panel"
-            id="panel-changelog"
-            class="sr-only"
-            checked={openTab === "changelog"}
-            disabled={!filled.changelog}
-          />
+              one is a bare `aria-disabled` label instead: greyed, with no radio
+              behind it, so not clickable through to a sentence apologising for
+              itself. No
+              `sr-only` class either: `.detail-main > input` hides them, and
+              the page cap counts every byte. */}
+          {TABS.map(
+            (tab) =>
+              filled[tab.id] && (
+                <input type="radio" name="panel" id={`panel-${tab.id}`} checked={openTab === tab.id} />
+              ),
+          )}
           {/* The greyed tab says it is not for clicking; the tooltip says why,
               so the answer is one hover away instead of a panel of its own. */}
           <div class="ribbon">
-            <label for="panel-readme" title={filled.readme ? undefined : "no readme available"}>
-              Readme
-            </label>
-            <label for="panel-contents" title={filled.contents ? undefined : "no contents available"}>
-              Contents
-            </label>
-            <label
-              for="panel-changelog"
-              title={filled.changelog ? undefined : "no changelog available"}
-            >
-              Changelog
-            </label>
+            {TABS.map((tab) =>
+              filled[tab.id] ? (
+                <label for={`panel-${tab.id}`}>{tab.label}</label>
+              ) : (
+                <label title={tab.empty} aria-disabled="true">
+                  {tab.label}
+                </label>
+              ),
+            )}
             {
               pkg.rating && (
                 <span class="rating-group">
@@ -468,7 +467,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
                           {member.href ? (
                             <a href={member.href}>{member.name}</a>
                           ) : (
-                            <span>{member.name}</span>
+                            <span title="not in this index">{member.name}</span>
                           )}
                           <span class={kindMark(member.kind) ? `badge kind-${member.kind}` : "badge"}>{member.kind}</span>
                           <code>{member.ref}</code>
@@ -509,6 +508,29 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
           {filled.changelog && (
             <div class="prose tab-panel" id="tab-changelog" data-grim-markdown>
               <Changelog />
+            </div>
+          )}
+          {filled.dependencies && (
+            <div class="prose tab-panel" id="tab-dependencies" data-grim-markdown>
+              <ul class="members">
+                {dependencies.map((dep) => (
+                  <li>
+                    {dep.href ? (
+                      <a href={dep.href}>{dep.name}</a>
+                    ) : (
+                      <span title="not in this index">{dep.name}</span>
+                    )}
+                    <span class={kindMark(dep.kind) ? `badge kind-${dep.kind}` : "badge"}>{dep.kind}</span>
+                    <code>{dep.ref}</code>
+                  </li>
+                ))}
+              </ul>
+              {moreDeps > 0 && (
+                <p class="empty">
+                  {moreDeps} more dependencies — run <code>{sectionCommand("dependencies", pkg)}</code> to list
+                  them all.
+                </p>
+              )}
             </div>
           )}
           {/* Nothing anywhere: one statement in the middle of the panel, rather
@@ -971,9 +993,12 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
   }
   /* Full-bleed inside the panel's padding, so the rule under it reads as the
      panel's own top edge rather than a line floating in the content. */
+  /* Four tabs and the vote outrun a phone's width: they wrap to a second
+     row there rather than run off the panel's clipped edge. */
   .ribbon {
     display: flex;
-    gap: var(--grim-space-7);
+    flex-wrap: wrap;
+    gap: 0 var(--grim-space-7);
     /* The negation of `.detail-main`'s own padding, written as that token so
        the two cannot drift apart into a bleed that no longer reaches the edge. */
     margin: calc(-1 * var(--grim-space-7)) calc(-1 * var(--grim-space-7))
@@ -994,18 +1019,30 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
   .ribbon label:hover {
     color: var(--grim-color-fg);
   }
-  /* Nothing behind it. Still shown, so the ribbon is the same shape on every
-     package page, but visibly not a thing to click. */
-  #panel-readme:disabled ~ .ribbon label[for="panel-readme"],
-  #panel-contents:disabled ~ .ribbon label[for="panel-contents"],
-  #panel-changelog:disabled ~ .ribbon label[for="panel-changelog"] {
+  /* Nothing behind it: a label with no radio. Still shown, so the ribbon is
+     the same shape on every package page, but visibly not a thing to click.
+     `aria-disabled` says so to assistive tech too, and is what exempts the
+     faded text from a contrast audit, as a disabled radio's label was. */
+  .ribbon label[aria-disabled="true"] {
     opacity: 0.4;
     cursor: default;
   }
-  #panel-readme:disabled ~ .ribbon label[for="panel-readme"]:hover,
-  #panel-contents:disabled ~ .ribbon label[for="panel-contents"]:hover,
-  #panel-changelog:disabled ~ .ribbon label[for="panel-changelog"]:hover {
+  .ribbon label[aria-disabled="true"]:hover {
     color: var(--grim-color-muted);
+  }
+  /* The radios behind the ribbon: Base's `.sr-only`, spelled here so each
+     input on every page does not carry the class. Visually hidden, not
+     `hidden`, which would also take them out of the focus order. */
+  .detail-main > input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: calc(-1 * var(--grim-border-width));
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   /* Every tab empty: say it once, in the middle. */
   .panel-empty {
@@ -1020,19 +1057,22 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
   }
   #panel-readme:checked ~ #tab-readme,
   #panel-contents:checked ~ #tab-contents,
-  #panel-changelog:checked ~ #tab-changelog {
+  #panel-changelog:checked ~ #tab-changelog,
+  #panel-dependencies:checked ~ #tab-dependencies {
     display: block;
   }
   #panel-readme:checked ~ .ribbon label[for="panel-readme"],
   #panel-contents:checked ~ .ribbon label[for="panel-contents"],
-  #panel-changelog:checked ~ .ribbon label[for="panel-changelog"] {
+  #panel-changelog:checked ~ .ribbon label[for="panel-changelog"],
+  #panel-dependencies:checked ~ .ribbon label[for="panel-dependencies"] {
     color: var(--grim-color-fg);
     border-bottom-color: var(--grim-color-accent);
   }
   /* The input carries the focus, the label shows it. */
   #panel-readme:focus-visible ~ .ribbon label[for="panel-readme"],
   #panel-contents:focus-visible ~ .ribbon label[for="panel-contents"],
-  #panel-changelog:focus-visible ~ .ribbon label[for="panel-changelog"] {
+  #panel-changelog:focus-visible ~ .ribbon label[for="panel-changelog"],
+  #panel-dependencies:focus-visible ~ .ribbon label[for="panel-dependencies"] {
     outline: 2px solid var(--grim-color-accent);
     outline-offset: 2px;
     border-radius: var(--grim-radius-code);

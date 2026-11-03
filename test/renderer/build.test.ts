@@ -249,6 +249,29 @@ let userCssFile: string;
 
 const readOut = (rel: string) => site.read(rel);
 
+describe("declared dependencies", () => {
+  it("lists them in their own tab, like a bundle's members", async () => {
+    const html = await readOut("p/github.com/acme/test-writer/index.html");
+    expect(html).toContain('<label for="panel-dependencies"');
+    const panel = html.slice(html.indexOf('id="tab-dependencies"'));
+    expect(panel).toMatch(/<ul class="members"/);
+    expect(panel).toContain('href="/p/github.com/acme/rust-style/"');
+    // Published elsewhere: named, never linked into a 404, and says why on hover.
+    expect(panel).toMatch(/<span title="not in this index"[^>]*>ext<\/span>/);
+    expect(panel).toContain("ghcr.io/other/ext");
+    expect(panel).not.toContain('href="/p/github.com/other');
+  });
+
+  it("greys the tab for an empty list and for an unknown one, each with its reason", async () => {
+    // `rust-style` declares `[]`; `code-review` carries no `requires` at all.
+    const empty = await readOut("p/github.com/acme/rust-style/index.html");
+    expect(empty).toMatch(/<label title="no dependencies"[^>]*>Dependencies<\/label>/);
+    expect(empty).not.toContain('id="tab-dependencies"');
+    const unknown = await readOut("p/github.com/acme/code-review/index.html");
+    expect(unknown).toMatch(/<label title="dependencies unknown"[^>]*>Dependencies<\/label>/);
+  });
+});
+
 beforeAll(async () => {
   // Sequential, not concurrent: `buildSite` chdirs into its staged dir, and
   // cwd is process-global.
@@ -878,6 +901,8 @@ describe("config reaches the rendered HTML", () => {
       "contents",
       "changelog",
     ]);
+    // Always offered, greyed here: the fixture's code-review declares none.
+    expect(main).toMatch(/<label title="dependencies unknown"[^>]*>Dependencies<\/label>/);
     expect(main).toMatch(/id="panel-readme"[^>]*checked/);
     expect(main).not.toContain("<details class=\"changelog\"");
     expect(bundledCss).toMatch(/#panel-readme\[[^\]]+\]:checked~#tab-readme/);
@@ -887,15 +912,17 @@ describe("config reaches the rendered HTML", () => {
   });
 
   // Every tab is a fixed part of the panel — one that grows a tab per package
-  // is a different shape on every page. An empty tab is disabled rather than
-  // removed, and rather than clickable through to an apology.
+  // is a different shape on every page. An empty tab is a bare label — no
+  // radio behind it — rather than removed, and rather than clickable through
+  // to an apology.
   it("greys out the tabs with nothing behind them", async () => {
     const partial = await readOut("p/github.com/acme/rust-style/index.html");
-    expect(partial).toContain('<label for="panel-changelog"');
-    expect(partial).toMatch(/id="panel-changelog"[^>]*disabled/);
-    expect(partial).not.toMatch(/id="panel-readme"[^>]*disabled/);
+    expect(partial).toMatch(/<label title="no changelog available"[^>]*>Changelog<\/label>/);
+    expect(partial).not.toContain('id="panel-changelog"');
+    expect(partial).toContain('<label for="panel-readme"');
     expect(partial).not.toContain("available.");
-    expect(bundledCss).toMatch(/#panel-changelog\[[^\]]+\]:disabled~\.ribbon/);
+    expect(partial).toMatch(/<label title="no changelog available" aria-disabled="true"/);
+    expect(bundledCss).toMatch(/\.ribbon\[[^\]]+\] label\[[^\]]+\]\[aria-disabled=true\]\{[^}]*opacity:\.4/);
     // Greyed says "not for clicking"; the tooltip says why.
     expect(partial).toContain('title="no changelog available"');
     expect(partial).not.toContain('title="no readme available"');
@@ -903,9 +930,7 @@ describe("config reaches the rendered HTML", () => {
     // Nothing anywhere: one statement in the middle of the panel, not three
     // tabs each denying it separately.
     const none = await readOut("p/github.com/acme/old-helper/index.html");
-    for (const tab of ["readme", "contents", "changelog"]) {
-      expect(none, tab).toMatch(new RegExp(`id="panel-${tab}"[^>]*disabled`));
-    }
+    expect(none).not.toContain('type="radio"');
     expect(none).toContain("No content available.");
     expect(none.match(/No \w+ available/g)).toHaveLength(1);
   });
@@ -948,7 +973,7 @@ describe("config reaches the rendered HTML", () => {
 
     // Nothing to show renders no panel at all — the tab is greyed instead.
     const none = await readOut("p/github.com/acme/test-writer/index.html");
-    expect(none).toMatch(/id="panel-contents"[^>]*disabled/);
+    expect(none).toContain('<label title="no contents available"');
     expect(none).not.toContain('id="tab-contents"');
   });
 

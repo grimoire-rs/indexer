@@ -31,6 +31,7 @@ interface Parts {
   readme?: number;
   changelog?: number;
   contents?: number;
+  dependencies?: number;
   sections?: Record<string, number>;
   filler?: number;
 }
@@ -41,6 +42,7 @@ function page(parts: Parts): string {
     parts.readme !== undefined && panel("readme", paragraphs(parts.readme / 100)),
     parts.changelog !== undefined && panel("changelog", paragraphs(parts.changelog / 100)),
     parts.contents !== undefined && panel("contents", paragraphs(parts.contents / 100)),
+    parts.dependencies !== undefined && panel("dependencies", paragraphs(parts.dependencies / 100, "li")),
     ...Object.entries(parts.sections ?? {}).map(([n, size]) => section(n, `<ul>${paragraphs(size / 100, "li")}</ul>`)),
   ].filter(Boolean);
   return `<!doctype html><html><head><meta charset="utf-8"><title>t</title></head><body>${body.join("\n")}</body></html>`;
@@ -104,6 +106,15 @@ describe("capPages passes", () => {
     expect(find(html, (el) => el.tagName === "a" && attr(el, "href") === REPO)).toHaveLength(0);
     expect(text(byId(html, "tab-readme")!)).toContain("block 0 ");
     expect(cuts(html, "truncated")).toHaveLength(0);
+  });
+
+  it("pass 1 takes the dependencies panel after the contents", async () => {
+    const p = await put(page({ readme: 6 * KiB, changelog: 2 * KiB, contents: 2 * KiB, dependencies: 10 * KiB }));
+    await capPages(dir, [p], { cap: 9.5 * KiB });
+    const html = await read(p);
+    expect(cuts(html, "link-out")).toHaveLength(3);
+    expect(text(byId(html, "tab-dependencies")!)).toContain(`grim describe ghcr.io/acme/${p.name}`);
+    expect(text(byId(html, "tab-readme")!)).toContain("block 0 ");
   });
 
   it("omits the repository link when the record has none", async () => {

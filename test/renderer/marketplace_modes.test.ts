@@ -302,7 +302,8 @@ describe("the plugin Contents tab (C-011)", () => {
 
   it("disables the tab for a plugin with no members", async () => {
     const html = await both.read("marketplace/plain/index.html");
-    expect(html).toMatch(/id="panel-contents"[^>]*disabled/);
+    expect(html).toContain('<label title="no contents available"');
+    expect(html).not.toContain('id="panel-contents"');
   });
 
   it("renders the plugin's README from the marketplace docs", async () => {

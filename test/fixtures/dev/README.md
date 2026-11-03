@@ -35,6 +35,23 @@ count, and nothing is written back here.
 | `gitlab.com/team/mirror` | rule | Second namespace, nested, GitLab `login` owner, non-`ghcr.io` host |
 | `long-address` | rule | A namespace far wider than the card's head, as the case for the address line's leading ellipsis — the card must trim `registry.internal.…/` off the front rather than wrap to a second line |
 
+Declared dependencies (`requires` in the sidecars) fill the detail page's
+Dependencies tab, listed exactly like a bundle's members: a target indexed here
+links to its page, one published elsewhere is plain text that says "not in this
+index" on hover. The tab is always in the ribbon; with nothing behind it it is
+greyed, its tooltip telling `[]` ("no dependencies") from `null`, a grim too old
+to report them ("dependencies unknown").
+
+| Artifact | `requires` state |
+|---|---|
+| `test-writer` | Two indexed, relative ids → both linked |
+| `code-review` | One external (`ghcr.io/other-org/…`, "not in this index") and one indexed `mcp` |
+| `sunset-agent` | Indexed through an **absolute** id rather than a relative one |
+| `enterprise-compliance-policy-pack` | The long list: every remaining kind (bundle, hook, agent), a registry-wide external ref that has to wrap, and a `@sha256:` pin |
+| `rust-style`, `changelog-only` | One indexed dependency each |
+| `bean-counter` & most others | `[]` → greyed tab, "no dependencies" |
+| `starter-pack`, `tool-guard` | `null` → greyed tab, "dependencies unknown" |
+
 `marketplace.toml` and `marketplace.lock` make this a `both`-mode site: two plugins whose members are packages of this index. `review-kit` is the full state (logo, README, CHANGELOG, author, licence, keywords, both members linked to their package pages); `hex` is the bare one (README only, so no logo, no CHANGELOG tab). `enrich/marketplace/` is what `grim-indexer enrich` leaves behind: `export/` is the tree `grim export marketplace` writes (one marketplace file and plugin tree per client, and the root README), `meta.json` carries `repository`, `clients` and the lock's members. The registry refs are the dev index's own (`ghcr.io/acme/*`), so a real `grim` cannot resolve them and the export is written by hand to the shape a real run produced for `grimoire-rs/e2e-marketplace`.
 
 `npm run dev -- --marketplace-only` drops every package from the scratch copy: `/` becomes the marketplace and the header has no tabs. `npm run dev:smoke:marketplace` asserts it.

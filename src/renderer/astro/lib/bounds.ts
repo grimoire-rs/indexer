@@ -121,7 +121,7 @@ export function boundLines(text: string, maxBytes: number = MCP_PREVIEW_BYTES): 
  * re-rendering, so everything it needs to word one is derived from these
  * names and the record.
  */
-export type Section = "members" | "plugin-members" | "mcp" | "tags" | "downloads";
+export type Section = "members" | "plugin-members" | "mcp" | "tags" | "downloads" | "dependencies";
 
 /** What each section says it holds, for the link-out sentence. */
 export const SECTION_NOUN: Record<Section, string> = {
@@ -130,6 +130,7 @@ export const SECTION_NOUN: Record<Section, string> = {
   mcp: "MCP descriptor",
   tags: "older tags",
   downloads: "per-release download counts",
+  dependencies: "dependencies",
 };
 
 /** The grim command that prints a section in full; each exists at grim main. */
@@ -141,6 +142,7 @@ export function sectionCommand(section: Section, pkg: { ref: string; name: strin
     case "plugin-members":
       return `grim export plugin --plugin ${pkg.name}`;
     case "tags":
+    case "dependencies":
       return `grim describe ${pkg.ref}`;
     case "downloads":
       return `grim search ${pkg.name} --format json`;
