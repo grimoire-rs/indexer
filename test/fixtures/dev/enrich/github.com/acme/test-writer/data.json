@@ -13,6 +13,10 @@
     "0.9.0"
   ],
   "deprecated": null,
+  "requires": [
+    {"kind":"skill","name":"code-review","id":"./code-review:1"},
+    {"kind":"skill","name":"bean-counter","id":"./bean-counter:1"}
+  ],
   "created": "2026-07-12T08:00:00+00:00",
   "updated": "2026-07-12T08:00:00+00:00",
   "documentation": "https://docs.acme.example/test-writer",

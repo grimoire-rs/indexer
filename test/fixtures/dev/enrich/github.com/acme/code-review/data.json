@@ -16,6 +16,18 @@
     "1.1.0"
   ],
   "deprecated": null,
+  "requires": [
+    {
+      "kind": "rule",
+      "name": "review-style",
+      "id": "ghcr.io/other-org/rules/review-style:2"
+    },
+    {
+      "kind": "mcp",
+      "name": "context7",
+      "id": "./context7:3"
+    }
+  ],
   "created": "2026-07-01T10:00:00+00:00",
   "updated": "2026-07-01T10:00:00+00:00",
   "revision": "3f1c0d9a7b2e5148c6d0a94f2b7e8c1d5a6f0b39",

@@ -12,6 +12,7 @@
     "0.2.0"
   ],
   "deprecated": "unmaintained since 2026-06; the checklist it enforced moved into code-review",
+  "requires": [],
   "replacedBy": "ghcr.io/acme/code-review",
   "created": "2026-01-09T12:00:00+00:00",
   "updated": "2026-06-01T12:00:00+00:00",

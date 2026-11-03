@@ -28,6 +28,8 @@ export interface CatalogPackage extends IndexRecord {
   created?: string;
   deprecated?: string | null;
   replacedBy?: string;
+  /** Declared dependencies; `null` or absent when none are known. */
+  requires?: { kind: string; name: string; id: string }[] | null;
   tags?: string[];
   /** `null` when `compileIndex` dropped a logo that failed its byte check. */
   logo?: string | null;

@@ -57,6 +57,7 @@
   {
     "schema": 1,
     "name": "rust-style",
+    "requires": [],
     "logo": null,
     "kind": "rule",
     "ref": "ghcr.io/acme/rust-style",
@@ -81,6 +82,7 @@
   {
     "schema": 1,
     "name": "test-writer",
+    "requires": [{ "kind": "skill", "name": "rust-style", "id": "./rust-style:1" }, { "kind": "rule", "name": "ext", "id": "ghcr.io/other/ext:1" }],
     "kind": "agent",
     "ref": "ghcr.io/acme/test-writer",
     "description": "Writes the failing test before the fix exists.",
