@@ -254,6 +254,7 @@ budget of its own, so the other unlisted keys cannot displace it.
 | `keywords` | 32 items of 64 B |
 | `tags` | 128 items of 64 B |
 | `authors` | 16 items of 256 B. One string is cut to the same total |
+| `requires` | `null`, or at most 64 `{kind, name, id}` entries (`name` 256 B, `id` 512 B). An entry of the wrong shape or an unknown `kind` is dropped; a non-list is `null` |
 | Any other key | A string 1 KiB, a list of strings 32 items of 256 B, and 8 KiB across all such keys together |
 
 Bounds count UTF-8 bytes. Past the shared 8 KiB, an unlisted value is cut to

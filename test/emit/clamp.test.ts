@@ -6,7 +6,7 @@
 // the bytes it would give the raw payload.
 import { describe, expect, it } from "vitest";
 
-import { boundRecord, clampData } from "../../src/emit/records.js";
+import { boundRecord, boundRequires, clampData } from "../../src/emit/records.js";
 
 const MiB = 1024 * 1024;
 
@@ -104,5 +104,17 @@ describe("clampData (IX-R47)", () => {
     expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
     expect(Object.hasOwn(out, "__proto__")).toBe(true);
     expect(emit(out)).toBe(emit(raw));
+  });
+});
+
+describe("boundRequires", () => {
+  it("keeps valid entries, drops malformed and unknown kinds, nulls a non-list, caps the count", () => {
+    const ok = { kind: "skill", name: "a", id: "./a:1" };
+    expect(boundRequires([ok, { kind: "x", name: "a", id: "a" }, { kind: "rule", name: "a" }, 3])).toEqual([ok]);
+    expect(boundRequires(undefined)).toBeNull();
+    expect(boundRequires({})).toBeNull();
+    expect(boundRequires([])).toEqual([]);
+    expect(boundRequires(Array.from({ length: 500 }, () => ok))).toHaveLength(64);
+    expect(boundRecord({ requires: [ok] }).requires).toEqual([ok]);
   });
 });

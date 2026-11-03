@@ -45,7 +45,7 @@ export const META_KEYS = [
 export const SUPPORT_CHANNELS = ["issues", "chat", "contact", "security"];
 
 /** Every key `enrich` writes into `data.json`, in the order it writes them. */
-const SIDECAR_KEYS = [...META_KEYS, "support", "keywords", "tags", "deprecated", "replacedBy", "hasReadme", "hasChangelog", "logo", "contentDigest", "hasContents", "updated"];
+const SIDECAR_KEYS = [...META_KEYS, "support", "keywords", "tags", "deprecated", "replacedBy", "requires", "hasReadme", "hasChangelog", "logo", "contentDigest", "hasContents", "updated"];
 
 const inOrder = (o: Record<string, unknown>, order: readonly string[]): Record<string, unknown> => {
   const rank = (key: string): number => {
