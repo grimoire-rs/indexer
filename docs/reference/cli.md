@@ -177,7 +177,18 @@ their forge or Artifactory. `build` and `dev` make no request.
 **It needs grim 0.9.0 or newer, and 0.15.0 or newer when the repository has a
 `marketplace.toml`.** `enrich` runs `grim --version` before any registry call
 and exits 69 naming the binary when it is older. `grim-indexer ci` refuses a
-`ci.grimVersion` pinned below 0.9.0.
+`ci.grimVersion` pinned below 0.9.0. A `marketplace.lock` that pins a settings
+member needs grim 0.16.0 or newer: an older grim refuses the lock, so the
+export fails, and `enrich` warns and keeps the previous export, if there is
+one.
+
+A `settings` package shows its settings document under Contents only when
+`enrich` ran with grim 0.16.0 or newer, the first grim that reads the kind. An
+older grim reports the artifact with no kind, so `enrich` still writes the
+package's metadata and README but no contents. Upgrading grim moves none of the
+digests the probe compares (below), so a settings package an older grim
+enriched gets its contents at its bucket's next full pass, at most seven days
+later, or on the next run with `--purge <ref>`.
 
 | Flag | Effect |
 |---|---|
