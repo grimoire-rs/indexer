@@ -42,6 +42,8 @@ let root: string;
 let out: string;
 /** A fresh repository prefix per run, so a reused registry never answers with a previous run's tags. */
 let prefix: string;
+/** `dep`'s manifest digest, which `top` pins it by. */
+let depDigest: string;
 
 function write(file: string, text: string): string {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -49,17 +51,19 @@ function write(file: string, text: string): string {
   return file;
 }
 
-function release(source: string, ref: string): void {
-  execFileSync(BIN!, ["release", source, `${ref}:${VERSION}`, "--no-git", "--format", "json"], {
+/** Publishes `source` as `<ref>:1.0.0` and returns its manifest digest. */
+function release(source: string, ref: string): string {
+  const report = execFileSync(BIN!, ["release", source, `${ref}:${VERSION}`, "--no-git", "--format", "json"], {
     encoding: "utf8",
     timeout: 60_000,
   });
+  return (JSON.parse(report) as { manifest_digest: string }).manifest_digest;
 }
 
-function addPackage(name: string, ref: string): void {
+function addPackage(name: string, kind: string, ref: string): void {
   write(
     path.join(root, "index", NS, name, "metadata.json"),
-    JSON.stringify({ schema: 1, name, kind: "skill", ref, description: `The ${name} skill.`, owner: { id: 1, github: "octocat" } }),
+    JSON.stringify({ schema: 1, name, kind, ref, description: `The ${name} ${kind}.`, owner: { id: 1, github: "octocat" } }),
   );
 }
 
@@ -83,29 +87,35 @@ beforeAll(async () => {
   vi.stubEnv("GRIM_DEFAULT_REGISTRY", undefined);
 
   const src = path.join(tmp, "src");
-  // `dep` sits beside `top` and is indexed; `ext` is published elsewhere and is not.
+  // `top` declares one id of each form: `dep` beside it and pinned by digest,
+  // `style` one directory up, both indexed, and `ext` absolute and not indexed.
+  const rule = (name: string) => `---\ndescription: The ${name} rule.\npaths:\n  - "**/*.rs"\n---\n# ${name}\n`;
   write(path.join(src, "dep", "SKILL.md"), "---\nname: dep\ndescription: A dependency.\n---\n# dep\n");
-  write(path.join(src, "ext.md"), '---\ndescription: An external rule.\npaths:\n  - "**/*.rs"\n---\n# ext\n');
+  write(path.join(src, "style.md"), rule("style"));
+  write(path.join(src, "ext.md"), rule("ext"));
+  depDigest = release(path.join(src, "dep"), `${prefix}/skills/dep`);
+  release(path.join(src, "style.md"), `${prefix}/rules/style`);
+  release(path.join(src, "ext.md"), `${prefix}/elsewhere/rules/ext`);
   write(
     path.join(src, "top", "SKILL.md"),
     [
       "---",
       "name: top",
-      "description: Needs dep and ext.",
+      "description: Needs dep, style and ext.",
       "metadata:",
-      `  grim.requires.skills.dep: "./dep:${VERSION}"`,
+      `  grim.requires.skills.dep: "./dep:${VERSION}@${depDigest}"`,
+      `  grim.requires.rules.style: "../rules/style:${VERSION}"`,
       `  grim.requires.rules.ext: "${prefix}/elsewhere/rules/ext:${VERSION}"`,
       "---",
       "# top",
       "",
     ].join("\n"),
   );
-  release(path.join(src, "dep"), `${prefix}/skills/dep`);
-  release(path.join(src, "ext.md"), `${prefix}/elsewhere/rules/ext`);
   release(path.join(src, "top"), `${prefix}/skills/top`);
 
-  addPackage("dep", `${prefix}/skills/dep`);
-  addPackage("top", `${prefix}/skills/top`);
+  addPackage("dep", "skill", `${prefix}/skills/dep`);
+  addPackage("style", "rule", `${prefix}/rules/style`);
+  addPackage("top", "skill", `${prefix}/skills/top`);
 
   expect(await enrich(root, { grim: BIN })).toBe(EXIT.ok);
   expect(await build(root, { outDir: out })).toBe(EXIT.ok);
@@ -125,8 +135,9 @@ function byName(requires: unknown): unknown {
 describe("declared dependencies from a real grim", () => {
   it("enrich and the published all.json carry what describe reports, relative ids verbatim", () => {
     const declared = [
-      { kind: "skill", name: "dep", id: `./dep:${VERSION}` },
+      { kind: "skill", name: "dep", id: `./dep:${VERSION}@${depDigest}` },
       { kind: "rule", name: "ext", id: `${prefix}/elsewhere/rules/ext:${VERSION}` },
+      { kind: "rule", name: "style", id: `../rules/style:${VERSION}` },
     ];
     expect(byName(sidecar("top").requires)).toEqual(declared);
     const records = JSON.parse(fs.readFileSync(path.join(out, "all.json"), "utf8")) as Record<string, unknown>[];
@@ -135,11 +146,12 @@ describe("declared dependencies from a real grim", () => {
     expect(sidecar("dep").requires).toEqual([]);
   });
 
-  it("the package page lists them, linking the one this index carries", () => {
+  it("the package page lists them, linking the ones this index carries", () => {
     const html = page("top");
     expect(html).toContain('<label for="panel-dependencies"');
     const panel = html.slice(html.indexOf('id="tab-dependencies"'));
     expect(panel).toContain(`href="/p/${NS}/dep/"`);
+    expect(panel).toContain(`href="/p/${NS}/style/"`);
     expect(panel).toMatch(/<span title="not in this index"[^>]*>ext<\/span>/);
     expect(panel).not.toContain("dependencies unknown");
   });
