@@ -158,7 +158,7 @@ function boundSupport(value: unknown, budget: Budget): unknown {
 }
 
 /** The artifact kinds a `requires` entry may name, in grim's sort order. */
-export const REQUIRES_KINDS = ["skill", "rule", "agent", "bundle", "mcp", "hook"];
+export const REQUIRES_KINDS = ["skill", "rule", "agent", "bundle", "mcp", "hook", "settings"];
 const REQUIRES_LIMIT = 64;
 
 /**
