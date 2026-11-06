@@ -82,7 +82,7 @@ const EXACT_NAME_PER_CHAR = 8;
 /** Name bonus when the term is one whole word of it (`grim` in `grim-usage`). */
 const NAME_WORD_PER_CHAR = 4;
 
-const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle", "hook", "plugin"]);
+const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "plugin"]);
 
 /** Every package that matched, by `ref`, with its relevance score. */
 export type Scores = ReadonlyMap<string, number>;
@@ -188,6 +188,21 @@ function withoutRegistryHost(path: string): string {
 }
 
 /**
+ * `skills` → `skill`. One trailing `s` only: `settingss` stems to `settings`,
+ * which is no kind's stem, so it stays a text term.
+ */
+const stem = (word: string) => (word.endsWith("s") ? word.slice(0, -1) : word);
+
+/**
+ * The canonical kind a token names, or `undefined`. Both sides are stemmed,
+ * as grim's own `kind_keyword` does, so `settings` and `setting` both match.
+ */
+function kindFor(token: string): string | undefined {
+  const stemmed = stem(token);
+  return [...KINDS].find((kind) => stem(kind) === stemmed);
+}
+
+/**
  * Split a query into text terms and kind filters. A bare kind word, singular
  * or plural, filters; everything else is a term.
  */
@@ -196,8 +211,8 @@ function parseQuery(raw: string): { terms: string[]; kinds: string[] } {
   const kinds: string[] = [];
   for (const token of raw.toLowerCase().split(/\s+/u)) {
     if (!token) continue;
-    const singular = token.endsWith("s") ? token.slice(0, -1) : token;
-    if (KINDS.has(singular)) kinds.push(singular);
+    const kind = kindFor(token);
+    if (kind) kinds.push(kind);
     else terms.push(token);
   }
   return { terms, kinds };

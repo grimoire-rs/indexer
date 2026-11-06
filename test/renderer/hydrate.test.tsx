@@ -1210,8 +1210,17 @@ describe("the index-updated stamp", () => {
 
   afterEach(() => {
     unmountAll();
-    vi.useRealTimers();
-    document.body.innerHTML = "";
+    // Preact flushes effects from a timer, and switching to real timers drops
+    // a pending fake one. Its queue then never drains: for the rest of the
+    // file an island's latest render never runs its effects, though an
+    // earlier render's still run when the island renders again. A throw from
+    // a timer must not leave fake timers on for the rest of the file either.
+    try {
+      vi.runOnlyPendingTimers();
+    } finally {
+      vi.useRealTimers();
+      document.body.innerHTML = "";
+    }
   });
 
   function stamp(host: HTMLElement): HTMLTimeElement {
@@ -1327,5 +1336,72 @@ describe("the kind colour", () => {
     expect(
       [...host.querySelectorAll<HTMLElement>(".t-kind")].map((el) => el.classList.contains("deprecated")),
     ).toEqual([false, false, true]);
+  });
+});
+
+describe("kind chips and the settings kind", () => {
+  const KINDED = [
+    { namespace: "acme", name: "p", kind: "plugin", logo: "/p.svg", ref: "r.test/acme/p" },
+    { namespace: "acme", name: "s", kind: "settings", logo: "/s.svg", ref: "r.test/acme/s" },
+    { namespace: "acme", name: "h", kind: "hook", logo: "/h.svg", ref: "r.test/acme/h" },
+  ] as unknown as CatalogPackage[];
+
+  function mountAt(url: string): HTMLElement {
+    history.replaceState({}, "", url);
+    const host = document.createElement("div");
+    document.body.append(host);
+    mounted.push(host);
+    render(<Catalog packages={KINDED} vscodeExtension={null} builtAt={BUILT_AT} />, host);
+    return host;
+  }
+
+  afterEach(() => {
+    unmountAll();
+    history.replaceState({}, "", "/");
+  });
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const labels = (host: HTMLElement) =>
+    [...host.querySelectorAll<HTMLElement>(".kind-chips button.chip")].map(
+      (b) => b.textContent?.trim().split(/\s/)[0],
+    );
+
+  const pressed = (host: HTMLElement, label: string) =>
+    [...host.querySelectorAll<HTMLElement>(".kind-chips button.chip")]
+      .find((b) => b.textContent?.trim().split(/\s/)[0] === label)
+      ?.getAttribute("aria-pressed");
+
+  it("restores several kinds from a comma list", async () => {
+    const host = mountAt("/?kind=settings,hook");
+    await settle();
+
+    expect(pressed(host, "settings")).toBe("true");
+    expect(pressed(host, "hook")).toBe("true");
+    expect(pressed(host, "plugin")).toBe("false");
+  });
+
+  it("drops an unknown kind from the list and keeps the valid one", async () => {
+    const host = mountAt("/?kind=settings,../etc");
+    await settle();
+
+    expect(pressed(host, "settings")).toBe("true");
+    expect(pressed(host, "hook")).toBe("false");
+    expect(pressed(host, "plugin")).toBe("false");
+    // The address is rewritten to what the chips show, so a shared link
+    // carries no kind the catalog refused.
+    await vi.waitFor(() => expect(location.search).toBe("?kind=settings"));
+  });
+
+  it("restores the settings chip from ?kind=settings and sorts hook, settings, plugin", async () => {
+    const host = mountAt("/?kind=settings");
+    await settle();
+
+    const chips = [...host.querySelectorAll<HTMLElement>(".kind-chips button.chip")];
+    const settings = chips.find((b) => b.textContent?.trim().split(/\s/)[0] === "settings");
+    expect(settings?.getAttribute("aria-pressed")).toBe("true");
+    expect(pressed(host, "hook")).toBe("false");
+    expect(pressed(host, "plugin")).toBe("false");
+    // Given in the order plugin, settings, hook; shown in chip order.
+    expect(labels(host)).toEqual(["all", "hook", "settings", "plugin"]);
   });
 });
