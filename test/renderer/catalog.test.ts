@@ -132,6 +132,20 @@ describe("resolveMemberRef", () => {
     );
   });
 
+  it("resolves nothing grim's member-ref grammar refuses", () => {
+    // Above the registry: grim's EscapesRegistryRoot. Popping the host would
+    // name, and link, a package grim never installs for this id.
+    expect(resolveMemberRef(BUNDLE, "../../../ghcr.io/acme/skills/code-review:0")).toBeNull();
+    expect(resolveMemberRef("localhost:5000/x", "../y:1")).toBeNull();
+    // `.` and `..` only as the leading run: grim's MisplacedDotSegment.
+    expect(resolveMemberRef(BUNDLE, "./../skills/code-review:0")).toBeNull();
+    expect(resolveMemberRef(BUNDLE, "../skills/../bundles/x:0")).toBeNull();
+    expect(resolveMemberRef(BUNDLE, "./a/./b")).toBeNull();
+    expect(resolveMemberRef(BUNDLE, "./")).toBeNull();
+    // The deepest climb grim allows lands on the registry root.
+    expect(resolveMemberRef(BUNDLE, "../../x:1@sha256:abc")).toBe("ghcr.io/x");
+  });
+
   it("does not mistake a registry port for a tag", () => {
     expect(resolveMemberRef("localhost:5000/acme/bundles/x", "../skills/y:0")).toBe(
       "localhost:5000/acme/skills/y",

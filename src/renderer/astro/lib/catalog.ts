@@ -368,21 +368,34 @@ export function bundleMembers(kind: string, data: unknown): BundleMember[] {
  * whole namespace is mirrored. The catalog keys on absolute, untagged refs,
  * which is what this returns; an id that is already absolute passes through
  * with only its tag or digest removed.
+ *
+ * Relative means grim's grammar: a leading `./` or a run of `../`, then no `.`
+ * or `..` segment, and never above the registry. `null` for an id grim
+ * refuses, which the page names without a link.
  */
-export function resolveMemberRef(bundleRef: string, id: string): string {
+export function resolveMemberRef(bundleRef: string, id: string): string | null {
   const pinned = id.split("@")[0] ?? id;
   // A tag is a colon *after* the last slash — `localhost:5000/x` is a host,
   // not a tag.
   const slash = pinned.lastIndexOf("/");
   const colon = pinned.lastIndexOf(":");
   const ref = colon > slash ? pinned.slice(0, colon) : pinned;
-  if (!ref.startsWith(".")) return ref;
+  if (!ref.startsWith("./") && !ref.startsWith("../")) return ref;
 
   // Relative: resolve against the directory the bundle itself lives in.
   const segments = bundleRef.split("/").slice(0, -1);
-  for (const segment of ref.split("/")) {
-    if (segment === "..") segments.pop();
-    else if (segment !== "." && segment !== "") segments.push(segment);
+  let rest = ref;
+  if (rest.startsWith("./")) {
+    rest = rest.slice(2);
+  } else {
+    while (rest.startsWith("../")) {
+      // segments[0] is the registry host, which grim never climbs past.
+      if (segments.length <= 1) return null;
+      segments.pop();
+      rest = rest.slice(3);
+    }
   }
-  return segments.join("/");
+  const tail = rest.split("/");
+  if (tail.some((segment) => segment === "" || segment === "." || segment === "..")) return null;
+  return [...segments, ...tail].join("/");
 }
