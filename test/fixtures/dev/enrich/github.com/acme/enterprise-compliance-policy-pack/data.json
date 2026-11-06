@@ -25,11 +25,12 @@
   ],
   "deprecated": null,
   "requires": [
+    {"kind":"skill","name":"audit-trail","id":"ghcr.io/acme-audit/audit-trail@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},
+    {"kind":"rule","name":"sox-controls-baseline-for-financial-reporting","id":"registry.internal.enterprise-platform.example/compliance-office/rules/sox-controls-baseline-for-financial-reporting:2026.4"},
+    {"kind":"agent","name":"sunset-agent","id":"./sunset-agent:2"},
     {"kind":"bundle","name":"starter-pack","id":"ghcr.io/acme/starter-pack:1"},
     {"kind":"hook","name":"tool-guard","id":"./tool-guard:1"},
-    {"kind":"agent","name":"sunset-agent","id":"./sunset-agent:2"},
-    {"kind":"rule","name":"sox-controls-baseline-for-financial-reporting","id":"registry.internal.enterprise-platform.example/compliance-office/rules/sox-controls-baseline-for-financial-reporting:2026.4"},
-    {"kind":"skill","name":"audit-trail","id":"ghcr.io/acme-audit/audit-trail@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}
+    {"kind":"settings","name":"team-defaults","id":"ghcr.io/acme-platform/settings/team-defaults:1"}
   ],
   "created": "2026-03-30T09:00:00+00:00",
   "updated": "2026-08-25T09:00:00+00:00",

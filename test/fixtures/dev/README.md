@@ -25,7 +25,7 @@ count, and nothing is written back here.
 | `old-helper` | rule | Deprecated with a **reason** and a `replacedBy`; hidden from the default browse |
 | `sunset-agent` | agent | Deprecated with a reason and **no** replacement |
 | `bare` | mcp | Pointer only — no `enrich/` sidecar at all, as an index that never ran `enrich` |
-| `tool-guard` | hook | The experimental kind: its own mark and colour, and no contents tab — `enrich` writes none for a hook |
+| `tool-guard` | hook | An experimental kind: its own mark and colour, and no contents tab — `enrich` writes none for a hook |
 | `context7` | mcp | `contents.json` descriptor with no `members` → raw JSON render |
 | `bean-counter` | skill | Stats entry carrying only a `downloads` blob → unrated, and an unknown key that must survive the build |
 | `enterprise-compliance-policy-pack` | rule | Long name, twelve keywords → overflow. Also the **long-description** case: a summary long enough to wrap several lines, beside a **3:1 wide** logo. Together they are what pins the detail header's logo alignment — centring the tile against the text pushed it down the header as the description grew |
@@ -34,6 +34,12 @@ count, and nothing is written back here.
 | `hex-plan` | skill | An indexed package named in `hex`'s README Contents section |
 | `gitlab.com/team/mirror` | rule | Second namespace, nested, GitLab `login` owner, non-`ghcr.io` host |
 | `long-address` | rule | A namespace far wider than the card's head, as the case for the address line's leading ellipsis — the card must trim `registry.internal.…/` off the front rather than wrap to a second line |
+
+The `settings` kind has no artifact here, only a dependency entry (below).
+`test/data/prechange.test.ts` compares the `all.json` this index compiles to
+with a golden built before the kind existed, so a settings package would fail
+it. Its mark, colour and Contents panel are covered by
+`test/renderer/fixture-floor/` and the renderer tests.
 
 Declared dependencies (`requires` in the sidecars) fill the detail page's
 Dependencies tab, listed exactly like a bundle's members: a target indexed here
@@ -47,7 +53,7 @@ to report them ("dependencies unknown").
 | `test-writer` | Two indexed, relative ids → both linked |
 | `code-review` | One external (`ghcr.io/other-org/…`, "not in this index") and one indexed `mcp` |
 | `sunset-agent` | Indexed through an **absolute** id rather than a relative one |
-| `enterprise-compliance-policy-pack` | The long list: every remaining kind (bundle, hook, agent), a registry-wide external ref that has to wrap, and a `@sha256:` pin |
+| `enterprise-compliance-policy-pack` | The long list: every remaining kind (bundle, hook, settings, agent), a registry-wide external ref that has to wrap, and a `@sha256:` pin |
 | `rust-style`, `changelog-only` | One indexed dependency each |
 | `bean-counter` & most others | `[]` → greyed tab, "no dependencies" |
 | `starter-pack`, `tool-guard` | `null` → greyed tab, "dependencies unknown" |
