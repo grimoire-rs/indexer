@@ -122,3 +122,49 @@ jobs:
       - run: ocx run -g default,node24 -- npm run conformance:check
         env:
           GRIM_CHECKOUT: .grim
+
+  # test/live: publishes to a scratch registry, then runs enrich and build over
+  # it with a real grim. The suite reads grim output no release carries yet, so
+  # grim is built from source at the commit test/live/GRIM_COMMIT pins.
+  # Outside `task check`: it needs a Rust toolchain and a registry.
+  live-grim:
+    name: live-grim
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      registry:
+        image: registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
+        ports:
+          - 5000:5000
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: pin
+        run: |
+          sha=$(<test/live/GRIM_COMMIT)
+          [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "::error::test/live/GRIM_COMMIT is not one full 40-character grim commit SHA" >&2; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: grimoire-rs/grimoire
+          ref: ${{ steps.pin.outputs.sha }}
+          path: .grim
+          # grim builds against patched crates vendored as submodules.
+          submodules: recursive
+          persist-credentials: false
+      # `rustup toolchain install` with no argument installs the channel
+      # .grim/rust-toolchain.toml pins.
+      - run: rustup toolchain install --no-self-update && cargo build --locked --bin grim
+        working-directory: .grim
+      - uses: ocx-sh/setup-ocx@de8e3366f812941423985eaccae28663ef192e8b # v1.3.0
+        with:
+          groups: default,node24
+      - run: ocx run -g default,node24 -- npm ci
+      - run: ocx run -g default,node24 -- npm run test:live
+        env:
+          GRIM_LIVE_BIN: ${{ github.workspace }}/.grim/target/debug/grim
+          # The service above; grim speaks plain HTTP to localhost:5000 by default.
+          GRIM_LIVE_REGISTRY: localhost:5000
