@@ -154,6 +154,38 @@ describe("enrichIndex", () => {
     expect(sidecar("github.com/acme", "foo").hasContents).toBe(false);
   });
 
+  describe("a JSON contents file the site build could not load", () => {
+    const nested = (levels: number) => '{"a":'.repeat(levels - 1) + "{}" + "}".repeat(levels - 1);
+    const contents = () => path.join(dir, "enrich/github.com/acme/foo/contents.json");
+
+    it.each([
+      ["an array at the top", "[1, 2]"],
+      ["a string at the top", '"members"'],
+      ["a null at the top", "null"],
+      ["a __proto__ key at the top", '{"__proto__": {"members": []}}'],
+      ["a __proto__ key deep inside", '{"members": [{"kind": "skill", "x": {"__proto__": 1}}]}'],
+      ["nesting past 64 levels", nested(65)],
+    ])("writes nothing for %s", async (_what, content) => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+      const { run } = fakeGrim({ describe: { kind: "bundle" }, content });
+
+      await enrichIndex({ root: dir, run });
+
+      expect(fs.existsSync(contents())).toBe(false);
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(false);
+    });
+
+    it("keeps a document nested exactly 64 levels deep", async () => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+      const { run } = fakeGrim({ describe: { kind: "bundle" }, content: nested(64) });
+
+      await enrichIndex({ root: dir, run });
+
+      expect(fs.readFileSync(contents(), "utf8")).toBe(nested(64));
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(true);
+    });
+  });
+
   it("caps a markdown contents file at the blob cap", async () => {
     addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
     const { run } = fakeGrim({ content: "y".repeat(1024 * 1024 + 10) });

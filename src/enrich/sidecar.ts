@@ -165,14 +165,36 @@ export function soleLogo(dir: string): string | undefined {
   return found.length === 1 ? found[0] : undefined;
 }
 
-/** The site build parses `contents.json`; ingest refuses a file that is not JSON, so a restore must too. */
-function parses(bytes: Buffer): boolean {
+/** Deeper than any real descriptor or document, and far inside what the build's serialisers can recurse. */
+const CONTENTS_DEPTH = 64;
+
+/**
+ * Whether `contents.json` text is a document the site build can load: JSON
+ * with an object at the top, at most `CONTENTS_DEPTH` levels deep, and no
+ * `__proto__` key. Astro refuses a primitive at the top, its store refuses a
+ * `__proto__` key, and deeper nesting overflows the stack; each fails the
+ * whole build, not one page. An array at the top is refused too, since no
+ * descriptor, bundle or settings document is one. The text comes from the
+ * registry unvalidated. Ingest and restore both apply it, so a rebuild matches.
+ */
+export function buildableJson(text: string): boolean {
+  let top: unknown;
   try {
-    JSON.parse(bytes.toString("utf8"));
-    return true;
+    top = JSON.parse(text);
   } catch {
     return false;
   }
+  if (top === null || typeof top !== "object" || Array.isArray(top)) return false;
+  const pending: [object, number][] = [[top, 1]];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const [value, depth] = next;
+    if (depth > CONTENTS_DEPTH) return false;
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "__proto__") return false;
+      if (child !== null && typeof child === "object") pending.push([child, depth + 1]);
+    }
+  }
+  return true;
 }
 
 /**
@@ -194,7 +216,7 @@ export function writeSidecarFiles(dir: string, files: ReadonlyMap<string, Buffer
     const low = name.toLowerCase();
     const logo = low.startsWith("logo.") && logoOk(low.slice(low.indexOf(".") + 1), bytes, PACKAGE_LOGOS);
     if (!COMPANION_FILES.includes(low) && !logo) continue;
-    if (low === "contents.json" && !parses(bytes)) continue;
+    if (low === "contents.json" && !buildableJson(bytes.toString("utf8"))) continue;
     fs.writeFileSync(path.join(dir, low), bytes);
     written.add(low);
   }

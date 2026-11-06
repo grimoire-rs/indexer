@@ -58,7 +58,7 @@ import {
 import { dedupeByRef } from "../emit/dedupe.js";
 import { collectEntries, readData } from "../state/entries.js";
 import { SHARD_CAP, bucketOf, type BucketStamp, type EnrichEntry } from "../state/plane.js";
-import { META_KEYS, SUPPORT_CHANNELS, clearCompanions, clearContents, clearSidecar, sidecarDir } from "./sidecar.js";
+import { META_KEYS, SUPPORT_CHANNELS, buildableJson, clearCompanions, clearContents, clearSidecar, sidecarDir } from "./sidecar.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -260,13 +260,9 @@ async function writeContents(
   }
   // A truncated JSON file would fail the site build that parses it, so an oversized one is dropped.
   if (Buffer.byteLength(content) > BLOB_CAP) return false;
-  // Reject anything that is not the JSON it claims to be rather than writing
-  // a file the site build would then fail to parse.
-  try {
-    JSON.parse(content);
-  } catch {
-    return false;
-  }
+  // Reject anything the site build could not load rather than writing a file
+  // that fails every page of it.
+  if (!buildableJson(content)) return false;
   fs.writeFileSync(path.join(out, "contents.json"), content);
   keep(Buffer.from(content));
   return true;

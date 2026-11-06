@@ -482,6 +482,21 @@ describe("hydrate (replaces the enrich.json seed)", () => {
     expect(data("foo")).not.toHaveProperty("contentDigest");
   });
 
+  it.each([
+    ["whose top level is an array", "[]"],
+    ["that holds a __proto__ key", '{"members":[{"__proto__":{}}]}'],
+    ["nested past 64 levels", '{"a":'.repeat(64) + "{}" + "}".repeat(64)],
+  ])("never writes a contents.json %s, which would fail the site build", (_what, text) => {
+    addPackage("foo", REF_A);
+    const e = withFiles({ "contents.json": Buffer.from(text) }, { data: { hasContents: true, contentDigest: "sha256:c", title: "T" } });
+
+    expect(restore({ [REF_A]: e })).toBe(1);
+
+    expect(fs.existsSync(path.join(sidecar("foo"), "contents.json"))).toBe(false);
+    expect(data("foo").hasContents).toBe(false);
+    expect(data("foo")).not.toHaveProperty("contentDigest");
+  });
+
   it("still writes a contents.json that is JSON", () => {
     addPackage("foo", REF_A);
     const e = withFiles({ "contents.json": Buffer.from('{"members":[]}') }, { data: { hasContents: true, contentDigest: "sha256:c", title: "T" } });
