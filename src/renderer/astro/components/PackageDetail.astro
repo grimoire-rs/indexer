@@ -121,8 +121,10 @@ const contentsData: unknown = (await getEntry("contentData", id))?.data;
 // before the map also keeps the per-member lookup off the other 4,968.
 const resolveMembers = (list: BundleMember[]) =>
   list.map((member) => {
-    const ref = member.id ? resolveMemberRef(pkg.ref, member.id) : null;
-    const target = ref ? packages.find((p) => p.ref === ref) : undefined;
+    const resolved = member.id ? resolveMemberRef(pkg.ref, member.id) : null;
+    const target = resolved ? packages.find((p) => p.ref === resolved) : undefined;
+    // An id grim would refuse resolves to nothing: shown as written, never linked.
+    const ref = resolved ?? member.id ?? null;
     return {
       kind: member.kind ?? "",
       name: member.name ?? ref ?? "",

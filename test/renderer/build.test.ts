@@ -260,6 +260,10 @@ describe("declared dependencies", () => {
     expect(panel).toMatch(/<span title="not in this index"[^>]*>ext<\/span>/);
     expect(panel).toContain("ghcr.io/other/ext");
     expect(panel).not.toContain('href="/p/github.com/other');
+    // Climbs above the registry, which grim refuses: named with its id as
+    // written, never linked to the package it would land on by popping the host.
+    expect(panel).toMatch(/<span title="not in this index"[^>]*>escape<\/span>/);
+    expect(panel).toMatch(/<code[^>]*>\.\.\/\.\.\/ghcr\.io\/acme\/rust-style:1<\/code>/);
   });
 
   it("greys the tab for an empty list and for an unknown one, each with its reason", async () => {
