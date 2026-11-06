@@ -22,7 +22,7 @@ import type { GrimRunner } from "./index.js";
 export const MARKETPLACE_DIR = path.join("enrich", "marketplace");
 const EXPORT_DIR = "export";
 const META_FILE = "meta.json";
-const MEMBER_KINDS = ["skill", "rule", "agent", "mcp", "hook"] as const;
+const MEMBER_KINDS = ["skill", "rule", "agent", "mcp", "hook", "settings"] as const;
 
 /** `grim export marketplace` fetches every member, so it gets far more than the shared per-call ceiling. */
 export const MARKETPLACE_EXPORT_TIMEOUT_MS = 10 * 60_000;

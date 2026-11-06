@@ -332,6 +332,43 @@ describe("marketplace gate: malformed input", () => {
     expect(reasons.some((r) => r.includes("mcp"))).toBe(true);
   });
 
+  it("reads [[settings]] rows like every other kind", async () => {
+    const ok = await gate(
+      { "marketplace.lock": lockRow("settings", `pinned = "reg.example.com/acme/tool${DIGEST}"`) },
+      ["marketplace.lock"],
+    );
+    expect(memberOnly(ok.reasons)).toEqual([]);
+    const registry = await gate(
+      { "marketplace.lock": lockRow("settings", `pinned = "reg.example.com/acme/missing${DIGEST}"`) },
+      ["marketplace.lock"],
+    );
+    expect(memberOnly(registry.reasons)[0]).toContain("reg.example.com/acme/missing");
+    const path = await gate(
+      { "marketplace.lock": lockRow("settings", `path = "./settings/local"\nhash = "sha256:0"`) },
+      ["marketplace.lock"],
+    );
+    expect(memberOnly(path.reasons)[0]).toContain("./settings/local");
+    expect(memberOnly(path.reasons)[0]).toContain("path");
+    const bundle = await gate(
+      {
+        "marketplace.lock": lockRow(
+          "settings",
+          `pinned = "reg.example.com/acme/tool${DIGEST}"\nbundle = "reg.example.com/acme/bundles/ghost"\nbundle_tag = "1"`,
+        ),
+      },
+      ["marketplace.lock"],
+    );
+    expect(memberOnly(bundle.reasons)).toHaveLength(1);
+    expect(memberOnly(bundle.reasons)[0]).toContain("reg.example.com/acme/bundles/ghost");
+  });
+
+  it("gives a reason naming settings for a non-array key and a non-table row", async () => {
+    const scalar = await gate({ "marketplace.lock": "settings = 3\n" }, ["marketplace.lock"]);
+    expect(memberOnly(scalar.reasons).some((r) => r.includes("settings"))).toBe(true);
+    const row = await gate({ "marketplace.lock": "settings = [1]\n" }, ["marketplace.lock"]);
+    expect(memberOnly(row.reasons).some((r) => r.includes("settings"))).toBe(true);
+  });
+
   it("reports a TOML syntax error by line and column, never its source text", async () => {
     for (const file of ["marketplace.toml", "marketplace.lock"]) {
       const result = await gate(
