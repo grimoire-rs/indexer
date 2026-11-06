@@ -215,6 +215,41 @@ describe("loadSearchIndex", () => {
     expect([...index.search("hooks").keys()]).toEqual(["r/guard"]);
   });
 
+  it("treats settings as a kind word in both spellings", async () => {
+    serve([
+      { ref: "r/team", name: "team", kind: "settings", description: "Shared permissions baseline" },
+      { ref: "r/settings-guide", name: "settings-guide", kind: "skill", description: "Shared permissions guide" },
+      { ref: "r/typo", name: "typo", kind: "rule", description: "Catches settingss in prose" },
+    ]);
+    const index = await loadSearchIndex("/all.json");
+
+    for (const q of ["settings", "setting", "SETTINGS"]) {
+      expect([...index.search(q).keys()], q).toEqual(["r/team"]);
+    }
+    // Two trailing `s` is a text term, not a filter: it finds the one record
+    // whose text holds the word, whatever its kind.
+    expect([...index.search("settingss").keys()]).toEqual(["r/typo"]);
+    // The kind word beside a term filters by kind and still requires the term.
+    expect([...index.search("settings permissions").keys()]).toEqual(["r/team"]);
+    expect([...index.search("settings nomatchterm").keys()]).toEqual([]);
+  });
+
+  it("maps every kind from its singular and plural spelling", async () => {
+    const kinds = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "plugin"];
+    const stems = kinds.map((kind) => (kind.endsWith("s") ? kind.slice(0, -1) : kind));
+    // Every word as text on a record of no listed kind: a word read as a text term finds it.
+    const decoy = { ref: "r/decoy", name: "decoy", kind: "widget", description: stems.map((s) => `${s} ${s}s`).join(" ") };
+    serve([...kinds.map((kind) => ({ ref: `r/${kind}-pkg`, name: "pkg", kind })), decoy]);
+    const index = await loadSearchIndex("/all.json");
+
+    for (const [i, kind] of kinds.entries()) {
+      const stem = stems[i]!;
+      for (const q of [stem, `${stem}s`, kind]) {
+        expect([...index.search(q).keys()], q).toEqual([`r/${kind}-pkg`]);
+      }
+    }
+  });
+
   it("requires every term, and does not care what order they came in", async () => {
     serve(RECORDS);
     const index = await loadSearchIndex("/all.json");
