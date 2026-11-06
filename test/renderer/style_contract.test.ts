@@ -305,3 +305,127 @@ describe("subgrid rows", () => {
     }
   });
 });
+
+/**
+ * WCAG 2.x contrast of two `#rrggbb` colours.
+ * https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
+ */
+function contrast(a: string, b: string): number {
+  const luminance = (hex: string): number => {
+    const [r, g, bl] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255).map((c) =>
+      c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+    );
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+/** A scheme's colour tokens with every `var()` resolved, the way the cascade sees them on `<html>`. */
+function palette(...blocks: string[]): Map<string, string> {
+  const raw = new Map<string, string>();
+  for (const css of blocks) {
+    for (const m of css.matchAll(/(--grim-color-[\w-]+)\s*:\s*([^;]+);/g)) raw.set(m[1]!, m[2]!.trim());
+  }
+  const resolve = (value: string, depth = 0): string => {
+    const ref = /^var\((--[\w-]+)\)$/.exec(value);
+    if (!ref) return value;
+    const next = raw.get(ref[1]!);
+    if (next === undefined || depth > 8) throw new Error(`cannot resolve ${value}`);
+    return resolve(next, depth + 1);
+  };
+  return new Map([...raw].map(([name, value]) => [name, resolve(value)]));
+}
+
+/** Splits at a comma or combinator outside parentheses, so `:is(.a, .b)` stays whole. */
+const TOP_LEVEL_COMMA = /,(?![^(]*\))/;
+const TOP_LEVEL_COMBINATOR = /[\s>+~]+(?![^(]*\))/;
+
+/** Whether a selector's subject, its last compound, is a letter tile: `.card-logo-fallback`, or `.tile` with `.letter`. */
+function isLetterTile(selector: string): boolean {
+  // An attribute value or a `:not()` says nothing about what the subject is.
+  const bare = selector.replace(/\[[^\]]*\]|:not\([^)]*\)/g, "").trim();
+  const subject = bare.split(TOP_LEVEL_COMBINATOR).at(-1) ?? "";
+  const classes = new Set([...subject.matchAll(/\.([\w-]+)/g)].map((m) => m[1]!));
+  return classes.has("card-logo-fallback") || (classes.has("tile") && classes.has("letter"));
+}
+
+/**
+ * Every `color:` that can paint the logo tile's letter, as `[rule, value]`:
+ * each declaration, not just the first, in every shipped rule whose selector
+ * list has a letter tile as a subject, so `.t-logo .card-logo-fallback` and
+ * `:is(…)[data-kind]` count too.
+ */
+function letterInks(): [string, string][] {
+  const inks: [string, string][] = [];
+  for (const [file, css] of BLOCKS) {
+    // Innermost `selector { … }` blocks: every rule here is flat, so the
+    // `@layer` and `@media` groups around them fall away.
+    for (const [, prelude = "", body = ""] of stripComments(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = prelude.slice(prelude.lastIndexOf(";") + 1).trim().replace(/\s+/g, " ");
+      if (!selector.split(TOP_LEVEL_COMMA).some(isLetterTile)) continue;
+      for (const m of body.matchAll(/(?:^|;)\s*color\s*:\s*([^;]+)/gi)) {
+        inks.push([`${file} ${selector}`, m[1]!.replace(/\s*!important\s*$/i, "").trim()]);
+      }
+    }
+  }
+  return inks;
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** An ink as a scheme paints it: a token through the scheme's palette, anything else as written. */
+const paint = (colours: Map<string, string>, value: string): string =>
+  colours.get(/^var\((--[\w-]+)\)$/.exec(value)?.[1] ?? "") ?? value;
+
+describe("contrast", () => {
+  const css = (file: string) => stripComments(SRC.find(([f]) => f === file)![1]);
+
+  it("gives the logo tile's letter 4.5:1 on every ground it can take, in both schemes", () => {
+    // Every ink the letter-tile rules can paint, and every ground the shared
+    // tile rules paint it on: the muted fallback and one colour per kind.
+    const inks = letterInks();
+    const grounds = [
+      ...css("layouts/Base.astro").matchAll(
+        /:is\(\.card-logo-fallback, \.tile\.letter\)(?:\[data-kind="[\w-]+"\])?\s*\{\s*background:\s*var\((--grim-color-[\w-]+)\);/g,
+      ),
+    ].map((m) => m[1]!);
+    // Both base rules are found, so a renamed selector cannot leave the scan
+    // with nothing to check.
+    expect(inks).toEqual(
+      expect.arrayContaining([
+        ["layouts/Base.astro .card-logo-fallback", "var(--grim-color-on-accent)"],
+        ["components/PackageDetail.astro .tile.letter", "var(--grim-color-on-accent)"],
+      ]),
+    );
+    // Every kind token paints a tile, so a kind whose rule is missing or
+    // spelled differently fails here instead of dropping out of the check.
+    const kinds = declared(LIGHT).filter((n) => n.startsWith("--grim-color-kind-"));
+    expect([...grounds].sort()).toEqual(["--grim-color-muted", ...kinds].sort());
+
+    const failures: string[] = [];
+    for (const [scheme, colours] of [["light", palette(LIGHT)], ["dark", palette(LIGHT, DARK)]] as const) {
+      for (const [rule, value] of inks) {
+        const ink = paint(colours, value);
+        if (!HEX.test(ink)) {
+          failures.push(`${scheme}: ${rule} paints ${value}, not a #rrggbb this test can measure`);
+          continue;
+        }
+        for (const ground of grounds) {
+          const ratio = contrast(ink, colours.get(ground)!);
+          if (!(ratio >= 4.5)) {
+            failures.push(`${scheme}: ${rule} paints ${ink} on ${ground} ${colours.get(ground)} at ${ratio.toFixed(2)}:1`);
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+
+    // The ink is a value of its own, not the card's: a consumer may make the
+    // card translucent, and the letter must not vanish with it.
+    for (const scheme of [[LIGHT], [LIGHT, DARK]]) {
+      const colours = palette(...scheme, "--grim-color-card: transparent;");
+      for (const [rule, value] of inks) expect(paint(colours, value), rule).toMatch(HEX);
+    }
+  });
+});
