@@ -38,6 +38,12 @@
     /* ---- Colour: accent -------------------------------------------- */
     --grim-color-accent: #6d4fc4;
     --grim-color-accent-soft: #efeafd;
+    /* The letter on a package's logo tile, whose ground is a kind colour or
+       the muted fallback. Each ground is tuned as text on the default card,
+       so the card's own value as ink keeps that ratio: white here, the dark
+       card in dark, where white read 1.9:1 to 3:1 on the light tiles. A
+       literal rather than `var(--grim-color-card)`: a translucent card
+       override must not take the letter with it. */
     --grim-color-on-accent: #ffffff;
 
     /* ---- Colour: package kind --------------------------------------
@@ -182,7 +188,7 @@
 
     --grim-color-accent: #a58cf0;
     --grim-color-accent-soft: #2c2540;
-    --grim-color-on-accent: #ffffff;
+    --grim-color-on-accent: #201f26;
 
     --grim-color-kind-skill: #a58cf0;
     --grim-color-kind-rule: #4cc2a9;
