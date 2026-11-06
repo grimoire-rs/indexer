@@ -119,6 +119,14 @@ describe("compileIndex", () => {
     expect(all[0]).toMatchObject({ name: "foo", kind: "hook" });
   });
 
+  it("compiles a settings pointer", async () => {
+    await compileIndex({ root: path.join(FIXTURES, "settings-kind"), outDir });
+
+    const all = JSON.parse(fs.readFileSync(path.join(outDir, "all.json"), "utf8"));
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ name: "foo", kind: "settings" });
+  });
+
   it("rejects an unknown kind", async () => {
     await expect(
       compileIndex({ root: path.join(FIXTURES, "bad-kind"), outDir }),

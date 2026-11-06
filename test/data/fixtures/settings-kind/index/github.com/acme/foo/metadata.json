@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "foo",
+  "kind": "settings",
+  "ref": "ghcr.io/acme/settings/foo",
+  "description": "A test settings package.",
+  "owner": { "github": "acme", "id": 1 }
+}
