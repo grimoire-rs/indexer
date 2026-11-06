@@ -219,12 +219,13 @@ function decode(member: CompanionFile): Buffer {
 
 /**
  * Kinds whose payload is the artifact's own entry-point markdown — a skill's
- * `SKILL.md`, a rule or an agent's single file. A bundle's member list and an
- * MCP descriptor are JSON, and everything else is left alone rather than
+ * `SKILL.md`, a rule or an agent's single file. A bundle's member list, an
+ * MCP descriptor and a settings package's one document are JSON, and
+ * everything else (a hook's content is TOML) is left alone rather than
  * guessed at.
  */
 const MARKDOWN_KINDS = new Set(["skill", "rule", "agent"]);
-const JSON_KINDS = new Set(["bundle", "mcp"]);
+const JSON_KINDS = new Set(["bundle", "mcp", "settings"]);
 
 const capped = (bytes: Buffer): Buffer => (bytes.length > BLOB_CAP ? bytes.subarray(0, BLOB_CAP) : bytes);
 
