@@ -59,8 +59,8 @@ usage: npm run dev -- [--root <index-repo>] [--marketplace-only] [--port <n>] [-
   --root   an index repo to render (a checkout of grimoire-rs/index, or your
            own). Default: test/fixtures/dev, the bundled dev index — one
            artifact per rendering state (rated/zero-vote/unrated, deprecated
-           with and without a replacement, logo present/absent/broken, all
-           five kinds, enriched and pointer-only).
+           with and without a replacement, logo present/absent/broken, every
+           kind but settings, enriched and pointer-only).
   --config an index.config.json to render with, overriding whatever the root
            carries. Restart to pick up an edit — config is baked at boot.
            Try a variant without the hero strip:

@@ -2,7 +2,7 @@
 
 CLI + Astro integration for running your own [Grimoire](https://github.com/grimoire-rs/grimoire)
 package index — a static site that lists the skills, rules, agents, mcp
-servers, bundles, and hooks available in one or more OCI registries.
+servers, bundles, hooks, and settings available in one or more OCI registries.
 
 **Documentation: <https://grimoire-rs.github.io/indexer/>** — source in
 [`docs/`](./docs/index.md).
@@ -133,8 +133,9 @@ it, `task docs:build` is the strict build the `pages` workflow gates PRs with.
 `test/fixtures/dev/` is what `task dev` renders, and it holds **one artifact
 per rendering state** — rated, zero-vote and unrated; deprecated with and
 without a replacement; a logo present, absent, and declared-but-not-shipped;
-every kind; enriched and pointer-only; a second namespace on a second forge.
-Its `README.md` is the table of which artifact exists for which state.
+every kind but `settings`; enriched and pointer-only; a second namespace on a
+second forge. Its `README.md` is the table of which artifact exists for which
+state.
 
 It ships an `index/` tree, so `task dev` runs the real `compileIndex` — which
 is the only way the three logo states differ, since publishing
