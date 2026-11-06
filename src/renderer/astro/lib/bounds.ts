@@ -121,13 +121,14 @@ export function boundLines(text: string, maxBytes: number = MCP_PREVIEW_BYTES): 
  * re-rendering, so everything it needs to word one is derived from these
  * names and the record.
  */
-export type Section = "members" | "plugin-members" | "mcp" | "tags" | "downloads" | "dependencies";
+export type Section = "members" | "plugin-members" | "mcp" | "settings" | "tags" | "downloads" | "dependencies";
 
 /** What each section says it holds, for the link-out sentence. */
 export const SECTION_NOUN: Record<Section, string> = {
   members: "members",
   "plugin-members": "members",
   mcp: "MCP descriptor",
+  settings: "settings document",
   tags: "older tags",
   downloads: "per-release download counts",
   dependencies: "dependencies",
@@ -138,6 +139,7 @@ export function sectionCommand(section: Section, pkg: { ref: string; name: strin
   switch (section) {
     case "members":
     case "mcp":
+    case "settings":
       return `grim fetch ${pkg.ref}`;
     case "plugin-members":
       return `grim export plugin --plugin ${pkg.name}`;

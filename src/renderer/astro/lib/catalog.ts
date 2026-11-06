@@ -329,6 +329,37 @@ export function addRegistryUrl(
   return `vscode://${extension}/add-registry?${query.toString()}`;
 }
 
+/** A bundle member as its `contents.json` names it; a field that is not a string is left out. */
+export interface BundleMember {
+  kind?: string;
+  name?: string;
+  id?: string;
+}
+
+/**
+ * The members a package's `contents.json` lists, or none.
+ *
+ * Only a bundle's document is a member list. A descriptor or a settings
+ * document that holds a `members` key is shown as the JSON it is, not as a
+ * list of packages it does not install. The file comes from the registry, so a
+ * `members` that is not an array, or an entry that is not an object, reads as
+ * nothing rather than failing the build.
+ */
+export function bundleMembers(kind: string, data: unknown): BundleMember[] {
+  if (kind !== "bundle" || data === null || typeof data !== "object") return [];
+  const list: unknown = (data as { members?: unknown }).members;
+  if (!Array.isArray(list)) return [];
+  return list.flatMap((entry: unknown) => {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const fields = entry as Record<string, unknown>;
+    const member: BundleMember = {};
+    if (typeof fields.kind === "string") member.kind = fields.kind;
+    if (typeof fields.name === "string") member.name = fields.name;
+    if (typeof fields.id === "string") member.id = fields.id;
+    return [member];
+  });
+}
+
 /**
  * A bundle member's `id` resolved to the reference the index stores.
  *

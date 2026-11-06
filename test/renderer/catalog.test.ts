@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   addRegistryUrl,
+  bundleMembers,
   externalUrl,
   indexAgo,
   lastUpdated,
@@ -79,6 +80,35 @@ describe("vscodeUrl", () => {
 
   it("is null when no extension is configured", () => {
     expect(vscodeUrl(null, "ghcr.io/acme/skills/foo")).toBeNull();
+  });
+});
+
+describe("bundleMembers", () => {
+  const member = { kind: "skill", name: "code-review", id: "../skills/code-review:0" };
+
+  it("reads a bundle's member list", () => {
+    expect(bundleMembers("bundle", { members: [member] })).toEqual([member]);
+  });
+
+  it.each(["settings", "mcp", "skill"])("lists no members for a %s document, whatever it holds", (kind) => {
+    expect(bundleMembers(kind, { members: [member] })).toEqual([]);
+  });
+
+  it.each([
+    ["no document", undefined],
+    ["a document with no members", { name: "x" }],
+    ["a members object", { members: { 0: member } }],
+    ["a members string", { members: "code-review" }],
+    ["a null members", { members: null }],
+  ])("reads %s as no members", (_what, data) => {
+    expect(bundleMembers("bundle", data)).toEqual([]);
+  });
+
+  it("drops an entry that is not an object, and a field that is not a string", () => {
+    expect(bundleMembers("bundle", { members: [null, "x", 3, [member], { kind: 1, name: "n", id: ["a"] }, member] })).toEqual([
+      { name: "n" },
+      member,
+    ]);
   });
 });
 
