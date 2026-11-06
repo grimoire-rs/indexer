@@ -14,7 +14,7 @@ export const MARKETPLACE_FILES = ["marketplace.toml", "marketplace.lock"] as con
 /** Largest marketplace file read; a lock grows with every pinned member. */
 export const MAX_MARKETPLACE_BYTES = 1024 * 1024;
 
-const LOCK_KINDS = ["skill", "rule", "agent", "mcp", "hook"] as const;
+const LOCK_KINDS = ["skill", "rule", "agent", "mcp", "hook", "settings"] as const;
 
 /** Mirrors grim's `is_path_value`, plus a Windows drive or UNC root. */
 const PATH_MEMBER = /^(\.{1,2}[\\/]|[\\/]|[A-Za-z]:[\\/])/;
