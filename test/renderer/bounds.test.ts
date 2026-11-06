@@ -78,6 +78,40 @@ describe("boundLines", () => {
     expect(json.startsWith(out.text + "\n")).toBe(true);
   });
 
+  it("keeps a pretty-printed settings document of exactly 2048 bytes whole and cuts one more line", () => {
+    const doc = (n: number, pad = 0) => {
+      const deny = Array.from({ length: n }, (_, i) => `Bash(t-${String(i).padStart(4, "0")}:*)`);
+      deny[n - 1] += "x".repeat(pad);
+      return JSON.stringify({ claude: { permissions: { deny } }, description: "Deny list for the cut boundary." }, null, 2);
+    };
+    const exact = doc(74, 2048 - bytes(doc(74)));
+    expect(bytes(exact)).toBe(2048);
+    expect(boundLines(exact, 2048)).toEqual({ text: exact, cut: false });
+
+    const over = doc(75);
+    expect(bytes(over)).toBeGreaterThan(2048);
+    const out = boundLines(over, 2048);
+    expect(out.cut).toBe(true);
+    expect(bytes(out.text)).toBeLessThanOrEqual(2048);
+    expect(over.startsWith(out.text + "\n")).toBe(true);
+    // As many whole lines as fit: the next one would have crossed the budget.
+    const next = over.split("\n")[out.text.split("\n").length]!;
+    expect(bytes(`${out.text}\n${next}`)).toBeGreaterThan(2048);
+  });
+
+  it("keeps lines that fill the budget exactly when more follow, and drops the one that crosses it", () => {
+    const doc = (pad: number) =>
+      JSON.stringify({ claude: { permissions: { deny: ["Bash(rm:*)", "x".repeat(pad)] } }, description: "Inner boundary." }, null, 2);
+    const exact = doc(2048 - bytes(doc(0)));
+    expect(bytes(exact)).toBe(2048);
+    // The lines of `exact` add up to the budget exactly, so a cut after them keeps every one.
+    expect(boundLines(`${exact}\n}`, 2048)).toEqual({ text: exact, cut: true });
+
+    const crossed = doc(2049 - bytes(doc(0)));
+    // One byte more, and the line that crossed the budget is the first one dropped.
+    expect(boundLines(`${crossed}\n}`, 2048)).toEqual({ text: crossed.slice(0, crossed.lastIndexOf("\n")), cut: true });
+  });
+
   it("cuts a single over-long line at a code point instead of returning nothing", () => {
     const out = boundLines("😀".repeat(100), 21);
     expect(out.cut).toBe(true);

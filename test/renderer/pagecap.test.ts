@@ -263,6 +263,7 @@ describe("capPages on the floor fixture", () => {
     expect(hardReport.cut).toBe(packages.length - 1);
     expect(hardReport.hardCut).toBe(hardReport.cut);
     expect(after["floor-readme"]).toBeLessThanOrEqual(CAP);
+    expect(after["floor-max-settings"]).toBeLessThanOrEqual(CAP);
     for (const p of packages.filter((q) => q.name !== "floor-small")) {
       const html = await fs.readFile(path.join(hard, file(p)), "utf8");
       expect(find(html, (el) => attr(el, "data-grim-preview") !== undefined), p.name).toEqual([]);

@@ -22,6 +22,7 @@ export const PAGES = {
   bundle: `p/${NS}/floor-bundle/index.html`,
   maxBundle: `p/${NS}/floor-max-bundle/index.html`,
   maxMcp: `p/${NS}/floor-max-mcp/index.html`,
+  maxSettings: `p/${NS}/floor-max-settings/index.html`,
   readme: `p/${NS}/floor-readme/index.html`,
   quotes: `p/${NS}/floor-quotes/index.html`,
   plugin: "marketplace/bigplug/index.html",
@@ -41,7 +42,7 @@ export function markdown(bytes: number): string {
 }
 
 /** A record with every listed field at its emit bound. */
-function maxRecord(kind: "bundle" | "mcp", name: string): Record<string, unknown> {
+function maxRecord(kind: "bundle" | "mcp" | "settings", name: string): Record<string, unknown> {
   const url = (host: string) => `https://${host}/` + fill("p", 2 * KiB - `https://${host}/`.length);
   const tags = Array.from({ length: BOUNDS.tags }, (_, i) => fill(`1.${i}.0-`, 7).padEnd(64, "x"));
   tags[0] = "latest";
@@ -107,6 +108,23 @@ function descriptor(): unknown {
   return { name: "floor-max-mcp", command: "npx", args: ["-y", "floor-max-mcp"], env };
 }
 
+/**
+ * A settings layer shaped as grim publishes one (keys sorted, the description
+ * beside the harness tables), plus a `members` key. grim refuses that key at
+ * build, but a registry serves the layer unchecked, and the page must show it
+ * as part of the document, never as a member list.
+ */
+function settingsDocument(): unknown {
+  // 2000 entries is about 62 KB pretty-printed, just under grim's 64 KiB (65,536 byte) settings layer cap.
+  const deny = (n: number) => Array.from({ length: n }, (_, i) => `Bash(tool-${String(i).padStart(6, "0")}:*)`);
+  return {
+    claude: { permissions: { deny: deny(2000) } },
+    codex: { approval_policy: "on-request" },
+    description: "A settings document at the layer cap.",
+    members: [{ kind: "skill", name: "not-a-member", id: "ghcr.io/other/not-a-member:1" }],
+  };
+}
+
 async function write(root: string, rel: string, content: string): Promise<void> {
   await fs.mkdir(path.dirname(path.join(root, rel)), { recursive: true });
   await fs.writeFile(path.join(root, rel), content);
@@ -121,6 +139,12 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string; c
 
   const bundle = maxRecord("bundle", "floor-max-bundle");
   const mcp = maxRecord("mcp", "floor-max-mcp");
+  const settings = maxRecord("settings", "floor-max-settings");
+  // Declared like any kind's, in grim's kind order: an indexed bundle, then a settings package published elsewhere.
+  settings.requires = [
+    { kind: "bundle", name: "floor-small", id: "./floor-small:1" },
+    { kind: "settings", name: "team-defaults", id: "ghcr.io/other/team-defaults:1" },
+  ];
   const quotes = quotesRecord("floor-quotes");
   const readme = { schema: 1, name: "floor-readme", kind: "skill", ref: "ghcr.io/acme/floor-readme", namespace: NS,
     owner: { github: "acme", id: 1 }, description: "A skill with a very long README.", repository: "https://github.com/acme/floor-readme",
@@ -130,7 +154,7 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string; c
     version: "1.0.0", tags: ["latest", "1", "1.0", "1.0.0", "0.9.0", "0.8.0"], hasReadme: false, hasChangelog: false,
     updated: "2026-07-01T10:00:00+00:00" };
   const all = JSON.parse(await fs.readFile(path.join(root, "all.json"), "utf8")) as unknown[];
-  await write(outDir, "all.json", JSON.stringify([...all, small, bundle, mcp, readme, quotes]));
+  await write(outDir, "all.json", JSON.stringify([...all, small, bundle, mcp, settings, readme, quotes]));
   await fs.rm(path.join(root, "all.json"));
 
   const stats = JSON.parse(await fs.readFile(path.join(root, ".stats.json"), "utf8")) as {
@@ -155,7 +179,8 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string; c
   await write(root, `${e("floor-small")}/contents.json`, JSON.stringify({ members: [
     { kind: "skill", name: "one", id: "ghcr.io/other/one:1" }, { kind: "rule", name: "two", id: "ghcr.io/other/two:1" } ] }));
   await write(root, `${e("floor-max-mcp")}/contents.json`, JSON.stringify(descriptor()));
-  for (const name of ["floor-max-bundle", "floor-max-mcp", "floor-readme", "floor-quotes"]) await write(root, `${e(name)}/readme.md`, markdown(200 * KiB));
+  await write(root, `${e("floor-max-settings")}/contents.json`, JSON.stringify(settingsDocument(), null, 2) + "\n");
+  for (const name of ["floor-max-bundle", "floor-max-mcp", "floor-max-settings", "floor-readme", "floor-quotes"]) await write(root, `${e(name)}/readme.md`, markdown(200 * KiB));
   for (const name of ["floor-max-bundle", "floor-quotes"]) await write(root, `${e(name)}/changelog.md`, markdown(200 * KiB));
 
   const config = { ...(JSON.parse(await fs.readFile(path.join(root, "index.config.json"), "utf8")) as SiteConfig), ...opts.config };

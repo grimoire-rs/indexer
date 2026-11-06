@@ -9,7 +9,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sectionCommand } from "../../src/renderer/astro/lib/bounds.js";
-import { BOUNDS, buildFloor, PAGES } from "./fixture-floor/floor.js";
+import { BOUNDS, buildFloor, NS, PAGES } from "./fixture-floor/floor.js";
 import { attr, classes, elements, type Element } from "./html.js";
 
 const PAGE = PAGES.bundle;
@@ -141,6 +141,7 @@ describe("preview markers", () => {
     expect(previews(page).sort()).toEqual(["downloads", "members", "tags"]);
     expect(previews(plugin)).toEqual(["plugin-members"]);
     expect(previews(await read(PAGES.maxMcp)).sort()).toEqual(["mcp", "tags"]);
+    expect(previews(await read(PAGES.maxSettings)).sort()).toEqual(["settings", "tags"]);
   });
 
   it("derives each link-out's command from the section and the record alone", () => {
@@ -149,6 +150,7 @@ describe("preview markers", () => {
     expect(sectionCommand("tags", pkg)).toBe(`grim describe ${REF}`);
     expect(sectionCommand("downloads", pkg)).toBe("grim search floor-bundle --format json");
     expect(sectionCommand("mcp", pkg)).toBe(`grim fetch ${REF}`);
+    expect(sectionCommand("settings", pkg)).toBe(`grim fetch ${REF}`);
     expect(sectionCommand("plugin-members", pkg)).toBe("grim export plugin --plugin floor-bundle");
   });
 
@@ -255,5 +257,35 @@ describe("a record at every emit bound", () => {
     expect(shown).not.toContain("FLOOR_VAR_000500");
     const note = notes(mcp).find((t) => t.includes("Descriptor cut at 2 KiB"));
     expect(note).toContain(`grim fetch ghcr.io/acme/floor-max-mcp`);
+  });
+
+  it("cuts a large settings document to whole lines within 2 KiB and links out", async () => {
+    const settings = await read(PAGES.maxSettings);
+    const [wrapper] = find(settings, (el) => attr(el, "data-grim-preview") === "settings");
+    const shown = text(kids(wrapper!, "div")[0]!);
+    expect(bytes(shown)).toBeLessThanOrEqual(2048);
+    expect(shown).toContain("tool-000000");
+    expect(shown).not.toContain("tool-001500");
+    const note = notes(settings).find((t) => t.includes("Settings document cut at 2 KiB"));
+    expect(note).toContain(`grim fetch ghcr.io/acme/floor-max-settings`);
+    expect(notes(settings).some((t) => t.includes("Descriptor cut"))).toBe(false);
+  });
+
+  it("never lists a settings document's members key as a bundle's members", async () => {
+    const settings = await read(PAGES.maxSettings);
+    const panel = settings.slice(settings.indexOf('id="tab-contents"'), settings.indexOf('id="tab-dependencies"'));
+    expect(panel).toContain('data-grim-preview="settings"');
+    expect(panel).not.toMatch(/<ul class="members"/);
+    expect(settings).not.toContain("not-a-member");
+  });
+
+  it("lists a settings package's dependencies beside its document", async () => {
+    const settings = await read(PAGES.maxSettings);
+    expect(previews(settings)).toContain("settings");
+    const panel = settings.slice(settings.indexOf('id="tab-dependencies"'));
+    expect(panel).toMatch(/<ul class="members"/);
+    expect(panel).toContain(`href="/p/${NS}/floor-small/"`);
+    expect(panel).toMatch(/<span class="badge kind-settings"[^>]*>settings<\/span>/);
+    expect(panel).toContain("ghcr.io/other/team-defaults");
   });
 });

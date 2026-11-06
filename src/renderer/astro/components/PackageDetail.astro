@@ -49,6 +49,7 @@ import {
   sectionCommand,
 } from "../lib/bounds";
 import {
+  bundleMembers,
   compareVersions,
   deprecationNote,
   exactCount,
@@ -59,6 +60,7 @@ import {
   versionCascade,
   vscodeUrl,
   vscodeVoteUrl,
+  type BundleMember,
   type CatalogPackage,
 } from "../lib/catalog";
 import type { Choice } from "../lib/commands";
@@ -105,21 +107,19 @@ const Readme = readmeEntry ? (await render(readmeEntry)).Content : null;
 const Changelog = changelogEntry ? (await render(changelogEntry)).Content : null;
 
 // What the artifact actually is, as opposed to what its README says about
-// itself. Three shapes, one per kind family: a skill, rule or agent carries
-// its entry-point markdown; a bundle carries the list it installs; an MCP
-// server carries its descriptor. `enrich` writes whichever applies.
+// itself. A skill, rule or agent carries its entry-point markdown; a bundle
+// carries the list it installs; an MCP server carries its descriptor and a
+// settings package its settings document. `enrich` writes whichever applies.
 const contentsEntry = await getEntry("contents", id);
 const Contents = contentsEntry ? (await render(contentsEntry)).Content : null;
-const contentsData = (await getEntry("contentData", id))?.data as
-  | { members?: { kind?: string; name?: string; id?: string }[] }
-  | undefined;
+const contentsData: unknown = (await getEntry("contentData", id))?.data;
 
 // Members resolved against this index: a member published elsewhere has no
 // page here, so it is named without a link rather than linked into a 404.
 // A page lists the first 32 and points at a command for the rest: the record
 // bounds a bundle at 5,000 members, and a page is capped in bytes. Slicing
 // before the map also keeps the per-member lookup off the other 4,968.
-const resolveMembers = (list: { kind?: string; name?: string; id?: string }[]) =>
+const resolveMembers = (list: BundleMember[]) =>
   list.map((member) => {
     const ref = member.id ? resolveMemberRef(pkg.ref, member.id) : null;
     const target = ref ? packages.find((p) => p.ref === ref) : undefined;
@@ -130,7 +130,7 @@ const resolveMembers = (list: { kind?: string; name?: string; id?: string }[]) =
       href: target ? withBase(`/p/${target.namespace}/${target.name}/`) : null,
     };
   });
-const { shown: memberList, more: moreMembers } = boundList(contentsData?.members ?? []);
+const { shown: memberList, more: moreMembers } = boundList(bundleMembers(pkg.kind, contentsData));
 const { shown: shownPluginMembers, more: morePluginMembers } = boundList(pluginMembers);
 const members = resolveMembers(memberList);
 // Declared dependencies: the Dependencies tab lists them exactly as Contents
@@ -144,6 +144,10 @@ const descriptor =
   pluginMembers.length === 0 && !Contents && members.length === 0
     ? boundLines(JSON.stringify(contentsData, null, 2) ?? "")
     : { text: "", cut: false };
+// A settings package's document is cut like a descriptor but named as what it
+// is; every other kind keeps the "Descriptor" wording.
+const previewSection = pkg.kind === "settings" ? "settings" : "mcp";
+const previewLead = previewSection === "settings" ? "Settings document" : "Descriptor";
 const tags = [...(pkg.tags ?? [])].sort(compareVersions);
 const cascade = versionCascade(pkg.version, tags);
 const { shown: shownOlder, more: moreOlder } = boundList(tags.filter((t) => !cascade.includes(t)));
@@ -487,11 +491,11 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
                   )}
                   </div>
                 ) : (
-                  <div data-grim-preview="mcp">
+                  <div data-grim-preview={previewSection}>
                     <CodeBlock code={descriptor.text} lang="json" name="contents" />
                     {descriptor.cut && (
                       <p class="empty">
-                        Descriptor cut at 2 KiB — run <code>{sectionCommand("mcp", pkg)}</code> for all of it
+                        {previewLead} cut at 2 KiB — run <code>{sectionCommand(previewSection, pkg)}</code> for all of it
                         {repository && (
                           <>
                             , or see the{" "}
@@ -915,9 +919,10 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
     color: var(--grim-color-muted);
     font-size: var(--grim-text-sm);
   }
-  /* The kind badge names a closed set of five and shouts accordingly. A
-     compatibility hint is a free string off the registry — upper-casing it
-     would misspell whatever the publisher actually wrote. */
+  /* The kind badge is one of the kind words the index admits, so
+     upper-casing it is safe. A compatibility hint is a free string off the
+     registry — upper-casing it would misspell whatever the publisher
+     actually wrote. */
   .badge.compat {
     text-transform: none;
     letter-spacing: normal;

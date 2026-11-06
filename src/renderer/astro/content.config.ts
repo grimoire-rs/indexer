@@ -2,10 +2,11 @@
 // Copyright 2026 The Grimoire Authors
 
 // Loads enrich/<namespace>/<name>/{readme,changelog,contents}.md plus the
-// `contents.json` a bundle or an MCP server carries instead. `base` is
-// resolved relative to the Astro root, which `buildSite` sets to the index
-// repo root — no cwd walk-up, no marker file. The tree is optional:
-// glob() degrades to an empty collection when its base dir doesn't exist.
+// `contents.json` a bundle, an MCP server or a settings package carries
+// instead. `base` is resolved relative to the Astro root, which `buildSite`
+// sets to the index repo root — no cwd walk-up, no marker file. The tree is
+// optional: glob() degrades to an empty collection when its base dir doesn't
+// exist.
 import { defineCollection } from "astro:content";
 import { glob } from "astro/loaders";
 
@@ -35,8 +36,9 @@ const contents = defineCollection({
   loader: glob({ pattern: "**/contents.md", base: "./enrich", generateId: idFromFile("contents") }),
 });
 
-// A bundle's member list and an MCP server's descriptor are JSON, not prose,
-// so they arrive as a data collection rather than a rendered one.
+// A bundle's member list, an MCP server's descriptor and a settings document
+// are JSON, not prose, so they arrive as a data collection rather than a
+// rendered one.
 const contentData = defineCollection({
   loader: glob({
     pattern: "**/contents.json",
