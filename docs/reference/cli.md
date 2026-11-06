@@ -190,6 +190,12 @@ digests the probe compares (below), so a settings package an older grim
 enriched gets its contents at its bucket's next full pass, at most seven days
 later, or on the next run with `--purge <ref>`.
 
+A package page's Dependencies tab lists what the artifact declares only when
+`enrich` ran with grim 0.16.0 or newer, the first grim whose `describe` reports
+declared dependencies. An older grim leaves the tab greyed as "dependencies
+unknown". The same upgrade rule applies: the list arrives at the bucket's next
+full pass, or with `--purge <ref>`.
+
 | Flag | Effect |
 |---|---|
 | `--grim <path>` | Which grim binary reads the registry (default `grim`) |
