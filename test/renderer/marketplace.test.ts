@@ -240,7 +240,7 @@ describe("listedPlugins", () => {
 
 describe("kindMark", () => {
   it("has a mark for every indexed kind, bundle and plugin included", () => {
-    for (const kind of ["skill", "rule", "agent", "mcp", "bundle", "hook", "plugin"]) {
+    for (const kind of ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "plugin"]) {
       expect(kindMark(kind), kind).toBeDefined();
     }
   });

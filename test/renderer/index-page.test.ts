@@ -13,7 +13,7 @@ import { buildSite } from "../../src/renderer/index.js";
 import type { SiteFacts } from "../../src/renderer/types.js";
 import { attr, elements } from "./html.js";
 
-const KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook"];
+const KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings"];
 /** What the island is handed as cards in scale mode (C-004). */
 const FIRST_SCREEN = 48;
 
@@ -157,6 +157,8 @@ describe("a catalog past the first screenful", () => {
     }
     expect(props.total).toBe(120);
     expect(props.kindCounts).toEqual(kindCounts);
+    // The catalog holds settings packages, so the comparison above covers their count.
+    expect(kindCounts.settings?.total).toBeGreaterThan(0);
     expect(props.flags).toEqual({
       hasDeprecated: true,
       // Only the last name is rated, so this cannot come from the 48 cards.

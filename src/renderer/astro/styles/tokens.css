@@ -47,9 +47,8 @@
     --grim-color-on-accent: #ffffff;
 
     /* ---- Colour: package kind --------------------------------------
-       Read through a name composed at runtime — `Catalog.tsx` and the detail
-       page build `var(--grim-color-kind-${pkg.kind})`. Grepping for one of
-       these finds the declaration and no use site; all seven are used. */
+       Read by the `.kind-*`, `[data-kind]` and `.t-kind[data-kind]` rules in
+       `layouts/Base.astro`, one set per kind; every token here is used. */
     --grim-color-kind-skill: #6d4fc4;
     --grim-color-kind-rule: #1a7f6b;
     /* ~5.2:1 on white. The predecessor #b0641a was 4.48:1 — under WCAG AA's
@@ -62,6 +61,8 @@
     --grim-color-kind-bundle: #a63d68;
     /* ~5.1:1 on white; the one free hue left between agent and rule. */
     --grim-color-kind-hook: #4a7a12;
+    /* 5.89:1 on white; hue ~285deg, the free gap between skill (255) and bundle (335). */
+    --grim-color-kind-settings: #933fae;
     /* ~5.7:1 on white; the marketplace's plugin, a kind of its own. */
     --grim-color-kind-plugin: #b3402a;
 
@@ -196,6 +197,8 @@
     --grim-color-kind-mcp: #6fa8f5;
     --grim-color-kind-bundle: #e07ba6;
     --grim-color-kind-hook: #9ccc5a;
+    /* 7.14:1 on --grim-color-card (#201f26) */
+    --grim-color-kind-settings: #d494e6;
     --grim-color-kind-plugin: #f0907c;
 
     /* ~7.6:1 on --grim-color-card (#201f26) */

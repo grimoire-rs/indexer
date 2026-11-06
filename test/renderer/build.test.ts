@@ -1374,8 +1374,36 @@ function outsideLayers(css: string): string {
   }
 }
 
+/**
+ * Every x and every y coordinate of an SVG path written with the absolute
+ * commands the inlined codicons use (M, L, C, H, V, Z). Anything else throws,
+ * a number straight after Z included, which would otherwise never be consumed.
+ */
+function pathPoints(d: string): { x: number[]; y: number[] } {
+  const argc: Record<string, number> = { M: 2, L: 2, C: 6, H: 1, V: 1, Z: 0 };
+  const tokens = d.match(/[A-Za-z]|-?\d*\.?\d+/g) ?? [];
+  const x: number[] = [];
+  const y: number[] = [];
+  let cmd = "";
+  for (let i = 0; i < tokens.length; ) {
+    const letter = /[A-Za-z]/.test(tokens[i]!);
+    if (letter) cmd = tokens[i++]!;
+    const n = argc[cmd];
+    if (n === undefined) throw new Error(`unexpected path command ${cmd}`);
+    if (n === 0) {
+      if (!letter) throw new Error(`a number after ${cmd}`);
+      continue;
+    }
+    const args = tokens.slice(i, i + n).map(Number);
+    if (args.length < n || args.some(Number.isNaN)) throw new Error(`too few arguments for ${cmd}`);
+    i += n;
+    args.forEach((v, j) => (cmd === "H" || (cmd !== "V" && j % 2 === 0) ? x : y).push(v));
+  }
+  return { x, y };
+}
+
 describe("theming", () => {
-  // The experimental kind gets the treatment the other five get: its own
+  // An experimental kind gets the treatment every other kind gets: its own
   // badge colour in both schemes and its own mark, not the neutral fallback.
   it("colours and marks the hook kind like any other", async () => {
     const page = await readOut("p/github.com/acme/tool-guard/index.html");
@@ -1385,6 +1413,41 @@ describe("theming", () => {
     expect(bundledCss).toMatch(/\[data-theme=("dark"|dark)\]\{[^}]*--grim-color-kind-hook:/);
     // Every kind the gate admits has a mark; a missing one renders a word.
     for (const kind of KINDS) expect(KIND_MARKS[kind], kind).toBeDefined();
+  });
+
+  // `settings` has no page in the build fixture, so this asserts the CSS
+  // and the mark only.
+  it("colours and marks the settings kind", () => {
+    expect(bundledCss).toMatch(/\.kind-settings\{color:var\(--grim-color-kind-settings\)/);
+    expect(bundledCss).toMatch(/:root\{[^}]*--grim-color-kind-settings:/);
+    expect(bundledCss).toMatch(/\[data-theme=("dark"|dark)\]\{[^}]*--grim-color-kind-settings:/);
+    expect(bundledCss).toMatch(/\[data-kind=("settings"|settings)\]\{background:var\(--grim-color-kind-settings\)/);
+    expect(bundledCss).toMatch(/\.t-kind\[data-kind=("settings"|settings)\]\{color:var\(--grim-color-kind-settings\)/);
+
+    const mark = KIND_MARKS.settings;
+    expect(mark).toBeDefined();
+    const [bx, by, side] = mark!.box;
+    expect(Math.abs(side - 12) / 12).toBeLessThan(0.1);
+    const xs = mark!.paths.flatMap(({ d }) => pathPoints(d).x);
+    const ys = mark!.paths.flatMap(({ d }) => pathPoints(d).y);
+    // Every coordinate of the path sits inside the box…
+    expect(xs.length).toBeGreaterThan(0);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(bx);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(bx + side);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(by);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(by + side);
+    // …and the box is centred on the glyph's extent, so the sliders sit in
+    // the middle of the tile rather than against one edge.
+    const mid = (v: number[]) => (Math.min(...v) + Math.max(...v)) / 2;
+    expect(bx + side / 2).toBeCloseTo(mid(xs), 2);
+    expect(by + side / 2).toBeCloseTo(mid(ys), 2);
+  });
+
+  it("refuses a mark path it cannot read instead of looping on it", () => {
+    expect(pathPoints("M2 3L4 5Z")).toEqual({ x: [2, 4], y: [3, 5] });
+    expect(() => pathPoints("M2 3Z4")).toThrow(/after Z/);
+    expect(() => pathPoints("M2 3L4")).toThrow(/arguments/);
+    expect(() => pathPoints("M2 3A1 1 0 0 1 4 5")).toThrow(/command A/);
   });
 
   it("emits no rule at all outside @layer grimoire", () => {
