@@ -3,6 +3,9 @@
 
 import { configDefaults, defineConfig } from "vitest/config";
 
+/** Runs a real grim against a registry: `npm run test:live` (vitest.live.config.ts), never the default suite. */
+export const LIVE = "test/live/**";
+
 export default defineConfig({
   oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
   test: {
@@ -12,7 +15,7 @@ export default defineConfig({
     // from here runs every test once per worktree and reports another work
     // package's red stubs as this tree's failures. Spread the defaults: a
     // bare `exclude` replaces them rather than adding to them.
-    exclude: [...configDefaults.exclude, "**/.agents/worktrees/**"],
+    exclude: [...configDefaults.exclude, "**/.agents/worktrees/**", LIVE],
     // `deriveHosts` reads these: under this repo's own CI every fixture would
     // otherwise be given grimoire-rs/indexer's site and repoUrl.
     env: { GITHUB_ACTIONS: "", GITLAB_CI: "" },

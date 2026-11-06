@@ -169,6 +169,23 @@ path is covered by `test/renderer/build.test.ts`.
 To rehearse the *published* package without publishing it, `npm pack` and
 install the resulting tarball into a scratch index repo.
 
+### The live-grim suite
+
+Every other test hands `enrich` a stand-in for `grim`. `npm run test:live`
+runs a real one: it publishes to a scratch registry, then runs `enrich` and
+`build` over an index that points there. It is not part of `task check`, and
+it fails rather than skips without its two inputs:
+
+```sh
+docker run -d --rm -p 127.0.0.1:5000:5000 registry:3
+GRIM_LIVE_BIN=$(command -v grim) GRIM_LIVE_REGISTRY=localhost:5000 npm run test:live
+```
+
+`GRIM_LIVE_BIN` is the absolute path of the grim under test, and
+`GRIM_LIVE_REGISTRY` the `host:port` of a writable plain-HTTP registry. CI's
+`live-grim` job builds grim from source at the commit `test/live/GRIM_COMMIT`
+names, because the suite reads grim output that no release carries yet.
+
 ## License
 
 Apache-2.0. See `NOTICE` for the third-party assets a built index carries:
