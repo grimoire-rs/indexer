@@ -6,10 +6,13 @@
  *
  * These are the *same glyphs* the Grimoire VS Code extension puts on its own
  * cards — its `KIND_ICONS` maps skill/rule/agent/mcp/bundle/hook to
- * sparkle/law/agent/mcp/package/symbol-event. The two surfaces show one catalogue, so an
- * artifact wearing a different mark in each was the thing to fix; a Lucide
- * look-alike per kind is close, not the same. `plugin` is this site's own
- * kind (marketplace entries) and wears `extensions`.
+ * sparkle/law/agent/mcp/package/symbol-event. This site gives the `settings`
+ * kind the codicon `settings` (the sliders); the extension has no entry for
+ * it yet, and its in-progress settings support uses the same glyph. The two
+ * surfaces show one catalogue, so an artifact wearing a different mark in
+ * each was the thing to fix; a Lucide look-alike per kind is close, not the
+ * same. `plugin` is this site's own kind (marketplace entries) and wears
+ * `extensions`.
  *
  * The extension consumes codicons as a webfont. This site ships no icon font
  * and never will — a 120 KB TTF for a handful of glyphs — so the path data is inlined
@@ -98,6 +101,12 @@ const CODICONS: Record<string, Glyph> = {
       { d: "M15 4.95703C15 4.58711 14.8563 4.24054 14.5949 3.97992L12.0096 1.39234C11.4879 0.86922 10.5788 0.86922 10.0571 1.39234L8 3.45119V3.32321C8 2.55068 7.37187 1.922 6.6 1.922H2.4C1.62813 1.922 1 2.55068 1 3.32321V13.5988C1 14.3713 1.62813 15 2.4 15H12.6667C13.4385 15 14.0667 14.3713 14.0667 13.5988V9.39514C14.0667 8.62261 13.4385 7.99393 12.6667 7.99393H12.5379L14.5949 5.93508C14.8553 5.67445 15 5.32602 15 4.95703ZM2.4 2.85521H6.6C6.85667 2.85521 7.06667 3.06446 7.06667 3.32228V7.99299H1.93333V3.32228C1.93333 3.06446 2.14333 2.85521 2.4 2.85521ZM1.93333 13.5979V8.92714H7.06667V14.0649H2.4C2.14333 14.0649 1.93333 13.8547 1.93333 13.5979ZM13.1333 9.39421V13.5979C13.1333 13.8547 12.9233 14.0649 12.6667 14.0649H8V8.92714H12.6667C12.9233 8.92714 13.1333 9.13638 13.1333 9.39421ZM8 7.99299V6.46287L9.5288 7.99299H8ZM13.9351 5.2737L11.3488 7.86221C11.1789 8.03223 10.8859 8.03223 10.716 7.86221L8.12973 5.2737C8.0448 5.18963 7.99813 5.07753 7.99813 4.95796C7.99813 4.83839 8.0448 4.7263 8.12973 4.64129L10.716 2.05278C10.8009 1.96777 10.9129 1.92106 11.0324 1.92106C11.1519 1.92106 11.2639 1.96777 11.3488 2.05278L13.9351 4.64129C14.02 4.72536 14.0667 4.83746 14.0667 4.95703C14.0667 5.0766 14.02 5.1887 13.9351 5.2737Z" },
     ],
   },
+  settings: {
+    box: [1.64, 1.64, 12.72],
+    paths: [
+      { d: "M6 9.5C6.93191 9.5 7.71496 10.1374 7.93699 11L13.5 11C13.7761 11 14 11.2239 14 11.5C14 11.7455 13.8231 11.9496 13.5899 11.9919L13.5 12L7.93673 12.001C7.71435 12.8631 6.93155 13.5 6 13.5C5.06845 13.5 4.28565 12.8631 4.06327 12.001L2.5 12C2.22386 12 2 11.7761 2 11.5C2 11.2545 2.17688 11.0504 2.41012 11.0081L2.5 11L4.06301 11C4.28504 10.1374 5.06809 9.5 6 9.5ZM6 10.5C5.44772 10.5 5 10.9477 5 11.5C5 12.0523 5.44772 12.5 6 12.5C6.55228 12.5 7 12.0523 7 11.5C7 10.9477 6.55228 10.5 6 10.5ZM10 2.5C10.9319 2.5 11.715 3.13738 11.937 3.99998L13.5 4C13.7761 4 14 4.22386 14 4.5C14 4.74546 13.8231 4.94961 13.5899 4.99194L13.5 5L11.9367 5.00102C11.7144 5.86312 10.9316 6.5 10 6.5C9.06845 6.5 8.28565 5.86312 8.06327 5.00102L2.5 5C2.22386 5 2 4.77614 2 4.5C2 4.25454 2.17688 4.05039 2.41012 4.00806L2.5 4L8.06301 3.99998C8.28504 3.13738 9.06809 2.5 10 2.5ZM10 3.5C9.44772 3.5 9 3.94772 9 4.5C9 5.05228 9.44772 5.5 10 5.5C10.5523 5.5 11 5.05228 11 4.5C11 3.94772 10.5523 3.5 10 3.5Z" },
+    ],
+  },
   warning: {
     box: [0.5, 0.58, 14.84],
     paths: [
@@ -118,6 +127,7 @@ export const KIND_MARKS: Record<string, Glyph> = {
   mcp: CODICONS.mcp!,
   bundle: CODICONS.package!,
   hook: CODICONS["symbol-event"]!,
+  settings: CODICONS.settings!,
   plugin: CODICONS.extensions!,
 };
 
