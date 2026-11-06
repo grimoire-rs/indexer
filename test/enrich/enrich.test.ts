@@ -186,6 +186,55 @@ describe("enrichIndex", () => {
     });
   });
 
+  describe("a settings package's document", () => {
+    const doc = JSON.stringify({ claude: { permissions: { deny: ["Bash(rm:*)"] } }, description: "Deny rm." }, null, 2) + "\n";
+    const contents = () => path.join(dir, "enrich/github.com/acme/foo/contents.json");
+
+    it("is kept verbatim as contents.json", async () => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+      const { run } = fakeGrim({ describe: { kind: "settings" }, content: doc });
+
+      await enrichIndex({ root: dir, run });
+
+      expect(fs.readFileSync(contents(), "utf8")).toBe(doc);
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(true);
+    });
+
+    it("writes nothing when the content is not JSON", async () => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+      const { run } = fakeGrim({ describe: { kind: "settings" }, content: "[claude]\nx = 1\n" });
+
+      await enrichIndex({ root: dir, run });
+
+      expect(fs.existsSync(contents())).toBe(false);
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(false);
+    });
+
+    it("keeps a document near grim's 64 KiB layer cap whole", async () => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+      const deny = Array.from({ length: 2000 }, (_, i) => `Bash(tool-${String(i).padStart(6, "0")}:*)`);
+      const content = JSON.stringify({ claude: { permissions: { deny } }, description: "Near the cap." }, null, 2) + "\n";
+      expect(Buffer.byteLength(content)).toBeGreaterThan(60 * 1024);
+      expect(Buffer.byteLength(content)).toBeLessThanOrEqual(64 * 1024);
+      const { run } = fakeGrim({ describe: { kind: "settings" }, content });
+
+      await enrichIndex({ root: dir, run });
+
+      expect(fs.readFileSync(contents(), "utf8")).toBe(content);
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(true);
+    });
+  });
+
+  it("writes no contents file for a hook package, whatever fetch returns", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const { run } = fakeGrim({ describe: { kind: "hook" }, content: '{"a":1}' });
+
+    await enrichIndex({ root: dir, run });
+
+    expect(fs.existsSync(path.join(dir, "enrich/github.com/acme/foo/contents.json"))).toBe(false);
+    expect(sidecar("github.com/acme", "foo").hasContents).toBe(false);
+  });
+
   it("caps a markdown contents file at the blob cap", async () => {
     addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
     const { run } = fakeGrim({ content: "y".repeat(1024 * 1024 + 10) });
