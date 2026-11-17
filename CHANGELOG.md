@@ -11,6 +11,34 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.7.0] - 2026-11-17
+
+### Added
+
+- Carry declared dependencies into the record *(enrich)*
+- List dependencies in their own ribbon tab *(renderer)*
+- Colour and mark the settings kind *(renderer)*
+- Admit the experimental settings kind
+- Keep a settings package's document as its contents *(enrich)*
+- Carry settings members like hooks *(marketplace)*
+- Filter by the settings kind in search and chips *(renderer)*
+- Show a settings document on its package page *(renderer)*
+- Keep settings dependencies in a record's requires *(emit)*
+- Show the version a dependency claims *(renderer)*
+
+### Documentation
+
+- Name the settings kind beside hooks
+- Say which grim a package's Dependencies tab needs
+
+### Fixed
+
+- Keep only a contents.json the site build can load *(enrich)*
+- Lift the logo tile's letter to WCAG AA in the dark scheme *(renderer)*
+- Link no dependency or member through an id grim refuses *(renderer)*
+- Read a description companion of the size grim 0.16.0 accepts *(enrich)*
+- Sort a prerelease tag below its release *(renderer)*
+
 ## [0.6.3] - 2026-10-27
 
 ### Added
@@ -414,6 +442,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.7.0]: https://github.com/grimoire-rs/indexer/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/grimoire-rs/indexer/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/grimoire-rs/indexer/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/grimoire-rs/indexer/compare/v0.6.0...v0.6.1
