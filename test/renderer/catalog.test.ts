@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addRegistryUrl,
   bundleMembers,
+  compareVersions,
   externalUrl,
   indexAgo,
   lastUpdated,
@@ -258,5 +259,35 @@ describe("indexAgo", () => {
 
   it("renders nothing for an unparseable stamp, as timeAgo does", () => {
     expect(indexAgo("not a date")).toBe("");
+  });
+});
+
+// Newest first: a negative result puts `a` ahead of `b`.
+describe("compareVersions", () => {
+  const sorted = (tags: string[]) => [...tags].sort(compareVersions);
+
+  it("sorts a release ahead of its own prerelease", () => {
+    expect(sorted(["1.2.0", "1.3.0-rc.1", "1.3.0"])).toEqual(["1.3.0", "1.3.0-rc.1", "1.2.0"]);
+    expect(sorted(["v1.3.0-rc.1", "v1.3.0"])).toEqual(["v1.3.0", "v1.3.0-rc.1"]);
+  });
+
+  it("orders prerelease identifiers field by field", () => {
+    expect(sorted(["1.0.0-rc.2", "1.0.0-rc.10"])).toEqual(["1.0.0-rc.10", "1.0.0-rc.2"]);
+    expect(sorted(["1.0.0-alpha", "1.0.0-beta"])).toEqual(["1.0.0-beta", "1.0.0-alpha"]);
+    expect(sorted(["1.0.0-rc.1", "1.0.0-rc.1.1"])).toEqual(["1.0.0-rc.1.1", "1.0.0-rc.1"]);
+    // A numeric identifier is lower than an alphanumeric one.
+    expect(sorted(["1.0.0-1", "1.0.0-alpha"])).toEqual(["1.0.0-alpha", "1.0.0-1"]);
+  });
+
+  it("sorts a prerelease of a higher core ahead of a lower release", () => {
+    expect(sorted(["1.9.9", "2.0.0-rc.1"])).toEqual(["2.0.0-rc.1", "1.9.9"]);
+  });
+
+  it("keeps the order of tags that are not versions", () => {
+    expect(compareVersions("latest", "canary")).toBeLessThan(0);
+    expect(compareVersions("1", "latest")).toBeGreaterThan(0);
+    expect(compareVersions("1", "1.2")).toBeGreaterThan(0);
+    expect(compareVersions("1.2", "1.2.0")).toBeGreaterThan(0);
+    expect(compareVersions("1.10.0", "1.9.0")).toBeLessThan(0);
   });
 });
