@@ -109,7 +109,7 @@ const DEFAULT_REVALIDATE_MS = 3_600_000;
  * change to what a deep enrich writes (a sidecar key, a companion file): every
  * ref is then rebuilt, three calls each, instead of being carried forward stale.
  */
-export const ENRICHER_VERSION = "1";
+export const ENRICHER_VERSION = "2";
 
 /** What an entry keeps besides its data and files: the bookkeeping the next run compares against. */
 export type RefState = Pick<EnrichEntry, "failing_since" | "failures" | "input" | "last_failure_at">;
