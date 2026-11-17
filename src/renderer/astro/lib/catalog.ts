@@ -151,6 +151,26 @@ export function versionCascade(version: string | undefined, tags: string[]): str
 // Tags are published version strings (e.g. "v1.2.0"); sort latest first,
 // numeric-aware so "1.10.0" outranks "1.9.0".
 export function compareVersions(a: string, b: string): number {
+  // Semver precedence: a prerelease ranks below its release, and its
+  // identifiers compare field by field. Only for tags that are versions; the
+  // rest keep the loose comparison below.
+  const sv = /^v?(\d+(?:\.\d+)*)-([0-9A-Za-z.-]+)$/i;
+  const [ma, mb] = [sv.exec(a), sv.exec(b)];
+  if (ma || mb) {
+    const [ca, cb] = [ma?.[1] ?? a, mb?.[1] ?? b];
+    const core = compareVersions(ca, cb);
+    if (core !== 0) return core;
+    if (!ma || !mb) return ma ? 1 : -1; // same core, only one side is a prerelease
+    const [ia, ib] = [ma[2]!.split("."), mb[2]!.split(".")];
+    for (let i = 0; i < Math.min(ia.length, ib.length); i++) {
+      if (ia[i] === ib[i]) continue;
+      const [na, nb] = [/^\d+$/.test(ia[i]!), /^\d+$/.test(ib[i]!)];
+      if (na && nb) return Number(ib[i]) - Number(ia[i]);
+      if (na !== nb) return na ? 1 : -1;
+      return ib[i]! < ia[i]! ? -1 : 1;
+    }
+    return ib.length - ia.length;
+  }
   const parts = (s: string) => s.replace(/^v/i, "").split(/[.-]/);
   const pa = parts(a);
   const pb = parts(b);
