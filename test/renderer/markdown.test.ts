@@ -7,8 +7,8 @@
 // an attribute exists is a question for parse5, not for a regex over markup.
 import { markdownConfigDefaults } from "@astrojs/markdown-remark";
 import { parseFragment } from "parse5";
-import { beforeAll, describe, expect, it } from "vitest";
-import { SHIKI_CLASSES, SHIKI_THEMES } from "../../src/renderer/astro/lib/code.js";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { SHIKI_CLASSES, SHIKI_LANGS, SHIKI_THEMES } from "../../src/renderer/astro/lib/code.js";
 import { markdownProcessor } from "../../src/renderer/markdown.js";
 import { attr, classes, elements, type Element } from "./html.js";
 import { expectInert, HOSTILE } from "./inert.js";
@@ -18,7 +18,7 @@ let render: (md: string) => Promise<string>;
 beforeAll(async () => {
   const renderer = await markdownProcessor().createRenderer({
     ...markdownConfigDefaults,
-    shikiConfig: { themes: SHIKI_THEMES, wrap: false, transformers: [SHIKI_CLASSES] },
+    shikiConfig: { themes: SHIKI_THEMES, langs: SHIKI_LANGS, wrap: false, transformers: [SHIKI_CLASSES] },
   });
   render = async (md) => (await renderer.render(md)).code;
 });
@@ -178,6 +178,27 @@ describe("a README that is not hostile", () => {
     expect(elements(html).filter((el) => attr(el, "style") !== undefined)).toEqual([]);
   });
 
+  it("highlights puml, gitignore and starlark fences instead of warning and falling back to plaintext", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const html = await render(
+        "```puml\n@startuml\nAlice -> Bob : hello\n@enduml\n```\n\n" +
+          "```gitignore\n# build\n!keep/\n*.log\n```\n\n" +
+          "```starlark\ndef f(x):\n    return \"a\" + x\n```\n",
+      );
+      expect(warn.mock.calls.filter((c) => String(c[0]).includes("doesn't exist"))).toEqual([]);
+      const blocks = html.split("<pre").slice(1);
+      expect(blocks).toHaveLength(3);
+      for (const block of blocks) {
+        const colours = new Set(byTag(`<pre${block}`, "span").flatMap((s) => classes(s)).filter((c) => c.startsWith("__shiki_")));
+        expect(colours.size).toBeGreaterThan(1);
+      }
+      expect(elements(html).filter((el) => attr(el, "style") !== undefined)).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("refuses a class on any other element, and an unknown class on a pre", async () => {
     const html = await render('<div class="x"></div><pre class="astro-code evil">p</pre><span class="line evil">s</span>');
     expect(byTag(html, "div").map((d) => attr(d, "class"))).toEqual([undefined]);
@@ -203,7 +224,7 @@ describe("a README image Astro would resolve on disk", () => {
   async function renderAt(processor: ReturnType<typeof markdownProcessor>, md: string) {
     const renderer = await processor.createRenderer({
       ...markdownConfigDefaults,
-      shikiConfig: { themes: SHIKI_THEMES, wrap: false, transformers: [SHIKI_CLASSES] },
+      shikiConfig: { themes: SHIKI_THEMES, langs: SHIKI_LANGS, wrap: false, transformers: [SHIKI_CLASSES] },
     });
     return renderer.render(md, { fileURL: FILE });
   }

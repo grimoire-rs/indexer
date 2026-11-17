@@ -1,0 +1,12 @@
+{
+  "name": "gitignore",
+  "scopeName": "source.ignore",
+  "patterns": [
+    { "name": "comment.line.number-sign.ignore", "match": "^\\s*#.*$" },
+    { "name": "keyword.operator.negation.ignore", "match": "^!" },
+    { "name": "keyword.operator.glob.ignore", "match": "\\*\\*|\\*|\\?" },
+    { "name": "constant.other.character-class.ignore", "match": "\\[[^\\]\\n]*\\]" },
+    { "name": "constant.character.escape.ignore", "match": "\\\\." },
+    { "name": "punctuation.separator.path.ignore", "match": "/" }
+  ]
+}

@@ -35,3 +35,30 @@ Qoder mark
   The mark from Qoder's own site logo, inlined as SVG path data in
   `src/renderer/astro/lib/commands.ts`. A trademark of its owner, used only to
   name the client.
+
+--------------------------------------------------------------------------
+Third-party grammars shipped in the package
+--------------------------------------------------------------------------
+
+TextMate grammars Shiki's bundle lacks, loaded at build time through
+`SHIKI_LANGS` in `src/renderer/astro/lib/code.ts` so fenced code blocks in
+rendered READMEs are highlighted. They are not part of the rendered site.
+
+PlantUML grammar
+  https://github.com/qjebbs/vscode-plantuml
+  Copyright (c) 2016 jebbs
+  Licensed under the MIT License; the licence text ships beside the grammar
+  as `plantuml.LICENSE.txt`.
+  `src/renderer/astro/lib/grammars/plantuml.tmLanguage.json`, converted from
+  `syntaxes/plantuml.yaml-tmLanguage` at commit
+  7bc1758ed73dc269f5721d78c6c6c01f461d7cb0; the YAML-to-JSON conversion
+  changes the format only, not the content.
+
+Starlark grammar
+  https://github.com/bazelbuild/vscode-bazel
+  Copyright 2018 The Bazel Authors
+  Licensed under the Apache License, Version 2.0.
+  `src/renderer/astro/lib/grammars/starlark.tmLanguage.json`, unmodified from
+  `syntaxes/starlark.tmLanguage.json` at commit
+  9b9deb61a9c21a73c4ec2fa7d88389f796f4489b. The upstream repository carries
+  no NOTICE file.

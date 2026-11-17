@@ -39,7 +39,7 @@ import {
 } from "../marketplace/read.js";
 import { navFor } from "./astro/lib/nav.js";
 import type { CatalogPackage, GrimoireData, SiteDigests, SiteFacts } from "./types.js";
-import { SHIKI_CLASSES, SHIKI_THEMES } from "./astro/lib/code.js";
+import { SHIKI_CLASSES, SHIKI_LANGS, SHIKI_THEMES } from "./astro/lib/code.js";
 import { markdownProcessor } from "./markdown.js";
 import { postProcessSite } from "./postprocess.js";
 import { capPages } from "./pagecap.js";
@@ -999,7 +999,7 @@ function inlineConfig(
       // READMEs are third-party HTML: Astro's default processor takes no
       // rehype plugins, so the sanitizing pipeline replaces it.
       processor: markdownProcessor(),
-      shikiConfig: { themes: SHIKI_THEMES, wrap: false, transformers: [SHIKI_CLASSES] },
+      shikiConfig: { themes: SHIKI_THEMES, langs: SHIKI_LANGS, wrap: false, transformers: [SHIKI_CLASSES] },
     },
     vite: {
       define: {

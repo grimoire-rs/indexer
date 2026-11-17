@@ -2,6 +2,11 @@
 // Copyright 2026 The Grimoire Authors
 
 import { transformerStyleToClass } from "@shikijs/transformers";
+import type { ShikiConfig } from "astro";
+
+import plantuml from "./grammars/plantuml.tmLanguage.json" with { type: "json" };
+import starlark from "./grammars/starlark.tmLanguage.json" with { type: "json" };
+import ignore from "./grammars/ignore.tmLanguage.json" with { type: "json" };
 
 /**
  * Light and dark code themes.
@@ -21,6 +26,17 @@ import { transformerStyleToClass } from "@shikijs/transformers";
  * enough to sit on this page without fighting the accent.
  */
 export const SHIKI_THEMES = { light: "github-light", dark: "github-dark" } as const;
+
+/**
+ * Grammars Shiki's bundle lacks, so these fences highlight instead of warning
+ * and falling back to plaintext. Vendored under `grammars/`; see NOTICE.
+ * Handed to `shikiConfig.langs` next to `SHIKI_THEMES`.
+ */
+export const SHIKI_LANGS = [
+  { ...plantuml, name: "plantuml", aliases: ["puml"] },
+  { ...starlark, name: "starlark", aliases: ["bzl", "bazel"] },
+  { ...ignore, name: "gitignore", aliases: ["ignore"] },
+] as unknown as NonNullable<ShikiConfig["langs"]>;
 
 type StyleToClass = ReturnType<typeof transformerStyleToClass>;
 const SHIKI_KEY = Symbol.for("grim.shiki.styleToClass");
