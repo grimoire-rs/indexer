@@ -266,6 +266,16 @@ describe("declared dependencies", () => {
     expect(panel).toMatch(/<code[^>]*>\.\.\/\.\.\/ghcr\.io\/acme\/rust-style:1<\/code>/);
   });
 
+  it("shows the tag a dependency is declared with, as authored, and nothing for an untagged one", async () => {
+    const html = await readOut("p/github.com/acme/test-writer/index.html");
+    const panel = html.slice(html.indexOf('id="tab-dependencies"'));
+    // `./rust-style:1` and `ghcr.io/other/ext:1`: a version claim, printed as written.
+    expect(panel).toMatch(/<code[^>]*>ghcr\.io\/acme\/rust-style:1<\/code>/);
+    expect(panel).toMatch(/<code[^>]*>ghcr\.io\/other\/ext:1<\/code>/);
+    // No tag: the reference alone, no colon, no empty chip.
+    expect(panel).toMatch(/<code[^>]*>ghcr\.io\/other\/bare<\/code>/);
+  });
+
   it("greys the tab for an empty list and for an unknown one, each with its reason", async () => {
     // `rust-style` declares `[]`; `code-review` carries no `requires` at all.
     const empty = await readOut("p/github.com/acme/rust-style/index.html");

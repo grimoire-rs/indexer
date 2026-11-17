@@ -114,6 +114,12 @@ const contentsEntry = await getEntry("contents", id);
 const Contents = contentsEntry ? (await render(contentsEntry)).Content : null;
 const contentsData: unknown = (await getEntry("contentData", id))?.data;
 
+// A tag is a colon after the last slash of the part before any `@digest`.
+const tagOf = (id: string): string | null => {
+  const pinned = id.split("@")[0] ?? id;
+  const colon = pinned.lastIndexOf(":");
+  return colon > pinned.lastIndexOf("/") ? pinned.slice(colon + 1) : null;
+};
 // Members resolved against this index: a member published elsewhere has no
 // page here, so it is named without a link rather than linked into a 404.
 // A page lists the first 32 and points at a command for the rest: the record
@@ -129,6 +135,8 @@ const resolveMembers = (list: BundleMember[]) =>
       kind: member.kind ?? "",
       name: member.name ?? ref ?? "",
       ref,
+      // The tag as authored; an id grim refuses is shown whole in `ref`, tag included.
+      tag: resolved ? tagOf(member.id) : null,
       href: target ? withBase(`/p/${target.namespace}/${target.name}/`) : null,
     };
   });
@@ -527,7 +535,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
                       <span title="not in this index">{dep.name}</span>
                     )}
                     <span class={kindMark(dep.kind) ? `badge kind-${dep.kind}` : "badge"}>{dep.kind}</span>
-                    <code>{dep.ref}</code>
+                    <code>{dep.tag ? `${dep.ref}:${dep.tag}` : dep.ref}</code>
                   </li>
                 ))}
               </ul>
