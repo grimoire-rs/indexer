@@ -20,9 +20,8 @@ export const MAX_RESPONSE_BYTES = 1024 * 1024;
  * ratings page, which carries every thread's full body — including bodies this
  * bot did not write.
  *
- * The same ceiling `enrich` already accepts from one `grim` subprocess
- * (`MAX_OUTPUT_BYTES`), so the largest thing this toolchain holds in memory is
- * one number rather than three.
+ * `enrich` accepts a larger report from one `grim` subprocess
+ * (`MAX_OUTPUT_BYTES`): grim 0.16.0 reads a description companion of up to 32 MiB.
  */
 export const LARGE_RESPONSE_BYTES = 16 * 1024 * 1024;
 

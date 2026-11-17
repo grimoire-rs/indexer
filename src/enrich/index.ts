@@ -64,7 +64,8 @@ const execFileAsync = promisify(execFile);
 
 /** Per-`grim`-call ceiling. A description companion is text plus one logo. */
 const TIMEOUT_MS = 60_000;
-const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
+// grim 0.16.0 fetches a description companion up to 32 MiB decoded, and the JSON report carries every member inline (base64 for a binary one, ~43 MiB).
+const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 /** grim's exit status for "no such artifact or companion". */
 const GRIM_NOT_FOUND = 79;
 
