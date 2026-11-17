@@ -881,6 +881,8 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
   }
   .detail-head-text {
     min-width: 0;
+    /* A name, summary or byline with no break point wraps inside the header. */
+    overflow-wrap: anywhere;
   }
   /* One fixed square, the same on every package — a size, not a frame: the
      logo slot draws no background, so what this reserves is the space the
@@ -912,6 +914,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
   .detail-head-text h1 {
     margin: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--grim-space-4);
     font-size: var(--grim-text-xl);

@@ -441,4 +441,13 @@ describe("detail layout bounds", () => {
     expect(block(detail, ".detail-rail {")).toMatch(/overflow-wrap:\s*anywhere/);
     expect(block(detail, ".keywords a {")).toMatch(/max-width:\s*100%/);
   });
+
+  it("keeps the header's text, name row and badges inside the header", () => {
+    // The compatibility badge is free text up to 256 bytes and was
+    // `flex-shrink: 0` in a row that never wrapped, so it ran out of the header.
+    expect(block(detail, ".detail-head-text {")).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(block(detail, ".detail-head-text h1 {")).toMatch(/flex-wrap:\s*wrap/);
+    const base = stripComments(SRC.find(([f]) => f === "layouts/Base.astro")![1]);
+    expect(block(base, ".badge {")).toMatch(/max-width:\s*100%/);
+  });
 });
