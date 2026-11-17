@@ -1140,6 +1140,8 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
   .detail-rail {
     display: flex;
     flex-direction: column;
+    /* A ref or a 64-byte keyword has no break point; wrap it inside the panel. */
+    overflow-wrap: anywhere;
     background: var(--grim-color-card);
     border: var(--grim-border-width) solid var(--grim-color-border);
     border-radius: var(--grim-radius-surface);
@@ -1309,6 +1311,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
      that answers differently reads as a different kind of thing. */
   .keywords a {
     display: inline-block;
+    max-width: 100%;
     border: var(--grim-border-width) solid var(--grim-color-border);
     border-radius: var(--grim-radius-pill);
     background: var(--grim-color-chip-bg);

@@ -429,3 +429,16 @@ describe("contrast", () => {
     }
   });
 });
+
+describe("detail layout bounds", () => {
+  const detail = stripComments(SRC.find(([f]) => f === "components/PackageDetail.astro")![1]);
+
+  it("wraps the rail's unbreakable tokens inside its box", () => {
+    // A ref in the keyword note, or a 64-byte keyword, has no break point: left
+    // alone it runs out of the fixed-width rail. `anywhere` also lowers the
+    // min-content size, so the one-column grid below 55rem stops stretching
+    // to fit it. A DOM emulator cannot lay this out; this reads the source.
+    expect(block(detail, ".detail-rail {")).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(block(detail, ".keywords a {")).toMatch(/max-width:\s*100%/);
+  });
+});
