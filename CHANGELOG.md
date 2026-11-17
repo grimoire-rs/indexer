@@ -11,6 +11,15 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.7.1] - 2026-11-17
+
+### Fixed
+
+- Rebuild sidecars written before dependencies were recorded *(enrich)*
+- Wrap the keyword overflow note inside the rail *(renderer)*
+- Highlight plantuml, gitignore and starlark fences *(renderer)*
+- Keep header badges and text inside the detail header *(renderer)*
+
 ## [0.7.0] - 2026-11-17
 
 ### Added
@@ -442,6 +451,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.7.1]: https://github.com/grimoire-rs/indexer/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/grimoire-rs/indexer/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/grimoire-rs/indexer/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/grimoire-rs/indexer/compare/v0.6.1...v0.6.2
