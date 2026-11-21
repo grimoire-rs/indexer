@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { compileIndex } from "../../src/data/index.js";
 import { enrichIndex, type GrimRunner } from "../../src/enrich/index.js";
 import { pipeline } from "./pipeline.js";
 
@@ -222,6 +223,62 @@ describe("enrichIndex", () => {
 
       expect(fs.readFileSync(contents(), "utf8")).toBe(content);
       expect(sidecar("github.com/acme", "foo").hasContents).toBe(true);
+    });
+  });
+
+  describe("serves, the harnesses a mod's manifest annotation names", () => {
+    const CLIENTS = "com.grimoire.mod.clients";
+    const serves = async (describe: Record<string, unknown>): Promise<unknown> => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/mods/foo");
+      await enrichIndex({ root: dir, run: fakeGrim({ describe }).run });
+      return sidecar("github.com/acme", "foo").serves;
+    };
+    const mod = (value: unknown, extra: Record<string, unknown> = {}) => ({ kind: "mod", annotations: { [CLIENTS]: value }, ...extra });
+
+    it("is sorted and deduplicated, and sits right after requires", async () => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/mods/foo");
+      await enrichIndex({ root: dir, run: fakeGrim({ describe: mod("opencode,claude,claude") }).run });
+      const data = sidecar("github.com/acme", "foo");
+      expect(data.serves).toEqual(["claude", "opencode"]);
+      const keys = Object.keys(data);
+      expect(keys[keys.indexOf("requires") + 1]).toBe("serves");
+    });
+
+    it.each([
+      ["an uppercase name", "Claude"],
+      ["an empty segment", "claude,,codex"],
+      ["an empty value", ""],
+      ["a name over 64 bytes", "a".repeat(65)],
+      ["17 names", Array.from({ length: 17 }, (_, i) => `h${i}`).join(",")],
+      ["a value over 512 bytes", Array.from({ length: 80 }, (_, i) => `harness${i}`).join(",")],
+      ["a non-string value", ["claude"]],
+    ])("writes none for %s", async (_why, value) => {
+      expect(await serves(mod(value))).toBeUndefined();
+    });
+
+    it("keeps a name of exactly 64 bytes and 16 names", async () => {
+      const names = Array.from({ length: 16 }, (_, i) => `h${String.fromCharCode(97 + i)}`);
+      expect(await serves(mod(names.join(",")))).toEqual(names);
+    });
+
+    it("writes none for a skill that carries the annotation", async () => {
+      expect(await serves({ kind: "skill", annotations: { [CLIENTS]: "claude" } })).toBeUndefined();
+    });
+
+    it("writes none for a mod without the annotation, and ignores describe's own serves", async () => {
+      expect(await serves({ kind: "mod", annotations: {}, serves: ["claude"] })).toBeUndefined();
+      expect(await serves({ kind: "mod", serves: ["claude"] })).toBeUndefined();
+    });
+
+    it("keeps a mod's summary and keywords, and they reach the record", async () => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/mods/foo");
+      await enrichIndex({ root: dir, run: fakeGrim({ describe: mod("claude", { summary: "A mod.", keywords: ["theme", "ui"] }) }).run });
+      const data = sidecar("github.com/acme", "foo");
+      expect(data).toMatchObject({ summary: "A mod.", keywords: ["theme", "ui"], serves: ["claude"] });
+      const out = path.join(dir, "out");
+      await compileIndex({ root: dir, outDir: out });
+      const [rec] = JSON.parse(fs.readFileSync(path.join(out, "all.json"), "utf8")) as Record<string, unknown>[];
+      expect(rec).toMatchObject({ summary: "A mod.", keywords: ["theme", "ui"], serves: ["claude"] });
     });
   });
 

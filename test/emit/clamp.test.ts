@@ -6,7 +6,7 @@
 // the bytes it would give the raw payload.
 import { describe, expect, it } from "vitest";
 
-import { boundRecord, boundRequires, clampData } from "../../src/emit/records.js";
+import { boundRecord, boundRequires, boundServes, clampData, parseServes } from "../../src/emit/records.js";
 
 const MiB = 1024 * 1024;
 
@@ -123,5 +123,38 @@ describe("boundRequires", () => {
     expect(boundRequires(every)).toEqual(every);
     // The wire name is plural; the singular is not a kind.
     expect(boundRequires([{ kind: "setting", name: "s", id: "./s:1" }])).toEqual([]);
+  });
+});
+
+describe("serves", () => {
+  const names = Array.from({ length: 16 }, (_, i) => `h${String.fromCharCode(97 + i)}`);
+
+  it("keeps a valid sorted unique list, in a record and in a stored sidecar", () => {
+    expect(JSON.parse(emit({ serves: ["claude", "opencode"] })).serves).toEqual(["claude", "opencode"]);
+    expect(clampData({ serves: ["claude"] }, overlay).serves).toEqual(["claude"]);
+    expect(boundServes(names)).toEqual(names);
+  });
+
+  it.each([
+    ["an unsorted list", ["opencode", "claude"]],
+    ["a duplicated one", ["claude", "claude"]],
+    ["an empty list", []],
+    ["an invalid name", ["Claude"]],
+    ["an empty name", [""]],
+    ["a name with a comma", ["a,b"]],
+    ["an oversized name", ["a".repeat(65)]],
+    ["17 names", [...names, "zz"]],
+    ["a list over 512 bytes", Array.from({ length: 16 }, (_, i) => `${"a".repeat(40)}${String.fromCharCode(97 + i)}`)],
+    ["a string", "claude"],
+    ["null", null],
+  ])("drops the key for %s", (_why, value) => {
+    expect(JSON.parse(emit({ serves: value }))).not.toHaveProperty("serves");
+    expect(clampData({ title: "t", serves: value }, overlay)).not.toHaveProperty("serves");
+    expect(boundRecord({ serves: value })).not.toHaveProperty("serves");
+  });
+
+  it("parses the annotation the way grim's reader does", () => {
+    expect(parseServes("b,a,b")).toEqual(["a", "b"]);
+    expect(parseServes("a,,b")).toBeUndefined();
   });
 });

@@ -179,6 +179,30 @@ export function boundRequires(value: unknown): { kind: string; name: string; id:
   return out;
 }
 
+const SERVES_VALUE_MAX = 512;
+const SERVES_NAME_MAX = 64;
+const SERVES_MAX = 16;
+
+/**
+ * The harnesses a mod serves, from its `com.grimoire.mod.clients` annotation: a comma-separated string.
+ * Same normalisation as grim's reader (names sorted and deduplicated, an empty name refuses the whole value),
+ * plus the caps a publisher-controlled value needs. `undefined` for any violation, never `[]`.
+ */
+export function parseServes(value: unknown): string[] | undefined {
+  if (typeof value !== "string" || Buffer.byteLength(value) > SERVES_VALUE_MAX) return undefined;
+  const names = value.split(",");
+  if (!names.every((n) => n.length <= SERVES_NAME_MAX && /^[a-z0-9]+$/.test(n))) return undefined;
+  const list = [...new Set(names)].sort();
+  return list.length <= SERVES_MAX ? list : undefined;
+}
+
+/** A `serves` list already in a record: itself when `parseServes` of it is itself (sorted, unique, within the caps), else `undefined`. */
+export function boundServes(value: unknown): string[] | undefined {
+  if (!isStrings(value)) return undefined;
+  const parsed = parseServes(value.join(","));
+  return parsed !== undefined && parsed.length === value.length && parsed.every((n, i) => n === value[i]) ? value : undefined;
+}
+
 const isU32 = (v: unknown): boolean => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 0xffffffff;
 
 function boundField(key: string, value: unknown, budget: Budget): unknown {
@@ -187,6 +211,7 @@ function boundField(key: string, value: unknown, budget: Budget): unknown {
   const list = LISTS.get(key);
   if (list) return boundList(value, list);
   if (key === "requires") return boundRequires(value);
+  if (key === "serves") return boundServes(value);
   if (IDENTITY.has(key)) {
     if (key === "schema") return isU32(value) ? value : 0;
     return typeof value === "string" ? stripControls(value, false) : "";
@@ -202,15 +227,20 @@ function boundField(key: string, value: unknown, budget: Budget): unknown {
 
 /**
  * Allow-list, per-field bounds and the unlisted-key budget, with `STRIP_SET`
- * removed from every text value. Clamps in place and never drops or reorders a
- * key: a listed text field of the wrong shape and an unlisted value past the
+ * removed from every text value. Clamps in place and never reorders a key, and
+ * drops one only when its bounded value is `undefined` (a failed `serves`): a listed text field of the wrong shape and an unlisted value past the
  * budget become `null`, a list `[]`, an identity key `""` (`schema`: `0`).
  * Idempotent, so clamping on ingest and again at emit agree.
  */
 export function boundRecord<T extends Record<string, unknown>>(rec: T): T {
   const budget: Budget = { left: UNLISTED_BUDGET };
   // `fromEntries` defines own properties, so a `__proto__` key survives as data.
-  return Object.fromEntries(Object.entries(rec).map(([key, value]) => [key, boundField(key, value, budget)])) as T;
+  // A `serves` that fails its bound is dropped, not nulled: absent is the only "serves nothing" a reader accepts.
+  return Object.fromEntries(
+    Object.entries(rec)
+      .map(([key, value]) => [key, boundField(key, value, budget)] as const)
+      .filter(([, value]) => value !== undefined),
+  ) as T;
 }
 
 /**
@@ -231,6 +261,8 @@ export function clampData<T extends Record<string, unknown>>(data: T, overlay: R
   const own = Object.entries(data).filter(([key]) => !POINTER_KEYS.has(key));
   const merged = boundRecord({ ...Object.fromEntries(own), ...overlay });
   return Object.fromEntries(
-    own.map(([key, value]) => [key, Object.hasOwn(overlay, key) ? boundField(key, value, { left: UNLISTED_BUDGET }) : merged[key]]),
+    own
+      .map(([key, value]) => [key, Object.hasOwn(overlay, key) ? boundField(key, value, { left: UNLISTED_BUDGET }) : merged[key]] as const)
+      .filter(([, value]) => value !== undefined),
   ) as T;
 }

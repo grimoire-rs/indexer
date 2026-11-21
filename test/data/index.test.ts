@@ -135,6 +135,61 @@ describe("compileIndex", () => {
     expect(all[0]).toMatchObject({ name: "foo", kind: "mod" });
   });
 
+  describe("a tree built in a temp dir", () => {
+    let root: string;
+    const write = (rel: string, json: unknown) => {
+      fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      fs.writeFileSync(path.join(root, rel), JSON.stringify(json));
+    };
+    const pointer = (extra: Record<string, unknown> = {}) =>
+      write("index/github.com/acme/foo/metadata.json", {
+        schema: 1,
+        name: "foo",
+        kind: "mod",
+        ref: "ghcr.io/acme/mods/foo",
+        description: "A mod.",
+        owner: { github: "acme", id: 1 },
+        ...extra,
+      });
+    const compiled = async () => {
+      await compileIndex({ root, outDir });
+      return JSON.parse(fs.readFileSync(path.join(outDir, "all.json"), "utf8"))[0] as Record<string, unknown>;
+    };
+    beforeEach(() => {
+      root = fs.mkdtempSync(path.join(os.tmpdir(), "index-tree-"));
+    });
+    afterEach(() => {
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("ignores a pointer's serves and keeps the sidecar's", async () => {
+      pointer({ serves: ["opencode"] });
+      write("enrich/github.com/acme/foo/data.json", { serves: ["claude"] });
+      expect((await compiled()).serves).toEqual(["claude"]);
+    });
+
+    it("gives a record no serves when only the pointer names one", async () => {
+      pointer({ serves: ["opencode"] });
+      expect(await compiled()).not.toHaveProperty("serves");
+    });
+
+    it("drops a hand-edited sidecar serves that is not sorted and unique", async () => {
+      pointer();
+      write("enrich/github.com/acme/foo/data.json", { serves: ["opencode", "claude"] });
+      expect(await compiled()).not.toHaveProperty("serves");
+    });
+
+    // The shape grim's index reader must accept under both spellings: the pointer says `deprecated`
+    // without `replaced_by`, and the sidecar's `replacedBy` is the successor.
+    it("publishes a successor as replacedBy and never as replaced_by", async () => {
+      pointer({ deprecated: "use bar" });
+      write("enrich/github.com/acme/foo/data.json", { replacedBy: "ghcr.io/acme/mods/bar" });
+      const rec = await compiled();
+      expect(rec.replacedBy).toBe("ghcr.io/acme/mods/bar");
+      expect(rec).not.toHaveProperty("replaced_by");
+    });
+  });
+
   it("rejects an unknown kind", async () => {
     await expect(
       compileIndex({ root: path.join(FIXTURES, "bad-kind"), outDir }),
