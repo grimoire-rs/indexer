@@ -5,6 +5,7 @@
 // The fake-grim unit tests can only print what grim is believed to print for
 // an agent, bundle, MCP server, hook or settings package; this reads it.
 // Needs the same two variables as dependencies.test.ts; see its header.
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,6 +25,7 @@ const LIVE = KINDS.filter((k) => k !== "mod" || HAS_MOD);
 
 let tmp: string;
 let root: string;
+let prefix: string;
 
 const enrichFile = (name: string, file: string): string => path.join(root, "enrich", NS, name, file);
 const sidecar = (name: string): Record<string, unknown> =>
@@ -32,7 +34,7 @@ const sidecar = (name: string): Record<string, unknown> =>
 beforeAll(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "index-live-kinds-"));
   root = path.join(tmp, "index-root");
-  const prefix = freshPrefix();
+  prefix = freshPrefix();
   stubGrimEnv(tmp);
 
   const src = path.join(tmp, "src");
@@ -136,6 +138,20 @@ describe("every artifact kind from a real grim", () => {
       { kind: "skill", name: "skill", id: "./skill:1" },
       { kind: "rule", name: "rule", id: "./rule:1" },
     ]);
+  });
+
+  it.skipIf(!HAS_MOD)("mod: enrich writes the mod.toml and the file list", () => {
+    // What grim itself returns for the package: the packed text and file list, not a hand-written copy.
+    const fetched = JSON.parse(execFileSync(BIN!, ["fetch", `${prefix}/kinds/mod`, "--format", "json"], { encoding: "utf8", timeout: 60_000 })) as {
+      content: string;
+      files: { path: string; size: number }[];
+    };
+    const contents = JSON.parse(fs.readFileSync(enrichFile("mod", "contents.json"), "utf8")) as { document: string; files: { path: string; size: number }[] };
+    expect(contents.document).toBe(fetched.content);
+    expect(contents.document).toContain('name = "mod"');
+    expect(contents.files.map((f) => f.path)).toEqual(["mod/claude/mod.ts", "mod/mod.toml", "mod/opencode/mod.ts"]);
+    expect(contents.files).toEqual(fetched.files.map(({ path: p, size }) => ({ path: p, size })));
+    expect(sidecar("mod").hasContents).toBe(true);
   });
 
   it("mcp: enrich writes the server descriptor", () => {
