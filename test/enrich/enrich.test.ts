@@ -67,6 +67,8 @@ interface FakeOptions {
   files?: Array<{ path: string; content: string; encoding?: string }>;
   /** The artifact payload `grim fetch <ref>` prints — the contents sidecar. */
   content?: string;
+  /** The `files` list `grim fetch <ref>` reports for a mod. */
+  fetchFiles?: unknown;
 }
 
 /** Records every `grim` invocation so "did it re-download?" is assertable. */
@@ -85,7 +87,7 @@ function fakeGrim(opts: FakeOptions = {}): { run: GrimRunner; calls: string[][] 
     }
     // `fetch <ref>` with nothing else is the artifact itself.
     if (!args.includes("--description")) {
-      return Promise.resolve({ content: opts.content ?? "# Entry\n" });
+      return Promise.resolve({ content: opts.content ?? "# Entry\n", ...(opts.fetchFiles === undefined ? {} : { files: opts.fetchFiles }) });
     }
     return Promise.resolve({ digest: opts.digest ?? "sha256:aaa", files: opts.files ?? COMPANION });
   };
@@ -280,6 +282,79 @@ describe("enrichIndex", () => {
       const [rec] = JSON.parse(fs.readFileSync(path.join(out, "all.json"), "utf8")) as Record<string, unknown>[];
       expect(rec).toMatchObject({ summary: "A mod.", keywords: ["theme", "ui"], serves: ["claude"] });
     });
+  });
+
+  describe("a mod's document and file list", () => {
+    const contents = () => path.join(dir, "enrich/github.com/acme/foo/contents.json");
+    const TOML = 'schema = 1\nname = "status-band"\n\n[claude]\nentry = "status-band.js"\n';
+    const READY = [
+      { path: "status-band/claude/status-band.js", size: 19 },
+      { path: "status-band/mod.toml", size: 207 },
+      { path: "status-band/opencode/status-band.ts", size: 19 },
+    ];
+    const enrichMod = async (opts: { content?: string; fetchFiles?: unknown }) => {
+      addPackage("github.com/acme", "foo", "ghcr.io/acme/mods/foo");
+      const g = fakeGrim({ describe: { kind: "mod" }, content: TOML, ...opts });
+      await enrichIndex({ root: dir, run: g.run });
+      return g;
+    };
+    const written = () => JSON.parse(fs.readFileSync(contents(), "utf8")) as { document: string; files: unknown[] };
+
+    it("writes the document verbatim and the files as grim reports them", async () => {
+      await enrichMod({ fetchFiles: READY });
+      expect(written()).toEqual({ document: TOML, files: READY });
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(true);
+    });
+
+    it("gives an empty list for a missing or non-array files", async () => {
+      await enrichMod({});
+      expect(written().files).toEqual([]);
+    });
+
+    it.each([
+      ["a non-string path", { path: 3, size: 1 }],
+      ["a path over 512 bytes", { path: "a".repeat(513), size: 1 }],
+      ["a backslash", { path: "a\\b", size: 1 }],
+      ["a leading slash", { path: "/a/b", size: 1 }],
+      ["an empty segment", { path: "a//b", size: 1 }],
+      ["a dot segment", { path: "a/./b", size: 1 }],
+      ["a dot-dot segment", { path: "a/../b", size: 1 }],
+      ["a control character", { path: "a/b\u0007c", size: 1 }],
+      ["a negative size", { path: "a/b", size: -1 }],
+      ["a fractional size", { path: "a/b", size: 1.5 }],
+      ["a string size", { path: "a/b", size: "1" }],
+      ["an unsafe integer", { path: "a/b", size: 2 ** 53 }],
+      ["a non-object entry", "a/b"],
+    ])("drops an entry with %s and keeps the rest", async (_why, bad) => {
+      await enrichMod({ fetchFiles: [READY[0], bad, READY[1]] });
+      expect(written().files).toEqual([READY[0], READY[1]]);
+    });
+
+    it("keeps at most 2,000 entries", async () => {
+      await enrichMod({ fetchFiles: Array.from({ length: 2500 }, (_, i) => ({ path: `m/f${i}`, size: i })) });
+      const files = written().files as { path: string }[];
+      expect(files).toHaveLength(2000);
+      expect(files[1999]?.path).toBe("m/f1999");
+    });
+
+    it("writes none for an empty content", async () => {
+      await enrichMod({ content: "  \n", fetchFiles: READY });
+      expect(fs.existsSync(contents())).toBe(false);
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(false);
+    });
+
+    it("writes none when the wrapped document is over the blob cap", async () => {
+      await enrichMod({ content: "x".repeat(1024 * 1024 + 10), fetchFiles: READY });
+      expect(fs.existsSync(contents())).toBe(false);
+      expect(sidecar("github.com/acme", "foo").hasContents).toBe(false);
+    });
+  });
+
+  it("makes no fetch of the artifact for a hook package", async () => {
+    addPackage("github.com/acme", "foo", "ghcr.io/acme/skills/foo");
+    const { run, calls } = fakeGrim({ describe: { kind: "hook" } });
+    await enrichIndex({ root: dir, run });
+    expect(calls.some((c) => c[0] === "fetch" && !c.includes("--description") && !c.includes("--digest-only"))).toBe(false);
   });
 
   it("writes no contents file for a hook package, whatever fetch returns", async () => {
