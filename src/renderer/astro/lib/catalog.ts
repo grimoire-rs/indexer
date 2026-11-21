@@ -48,6 +48,7 @@ export type CardPackage = Pick<
   | "logo"
   | "rating"
   | "downloads"
+  | "serves"
 >;
 
 /** The keys of `CardPackage`, as one list the projection actually iterates. */
@@ -67,6 +68,7 @@ const CARD_FIELDS = [
   "logo",
   "rating",
   "downloads",
+  "serves",
 ] as const satisfies readonly (keyof CardPackage)[];
 
 /**
@@ -81,7 +83,20 @@ export function cardPackage(p: CatalogPackage): CardPackage {
   for (const key of CARD_FIELDS) {
     if (p[key] !== undefined) out[key] = p[key];
   }
+  // Re-checked where it is read: the record is publisher-adjacent wire data.
+  const serves = validServes(p.serves);
+  if (serves) out.serves = serves;
+  else delete out.serves;
   return out as CardPackage;
+}
+
+/** A harness name as grim writes it: lowercase letters and digits only. */
+export const HARNESS_NAME = /^[a-z0-9]+$/u;
+
+/** The harnesses a record serves, or `undefined` when the field is absent, empty or not an array of valid names. */
+export function validServes(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  return value.every((v) => typeof v === "string" && HARNESS_NAME.test(v)) ? (value as string[]) : undefined;
 }
 
 /** Where a package card links by default; `{namespace}` and `{name}` are filled per record. */

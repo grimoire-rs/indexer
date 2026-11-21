@@ -10,6 +10,7 @@
 // contract, and they are the reason component overrides are documented as
 // unstable for now.
 import { ArrowBigUp, ArrowDownToLine } from "lucide-preact";
+import { Harnesses } from "./Harnesses.js";
 import { CardLogo } from "./CardLogo.js";
 import { DEPRECATED_MARK, KindMark, kindMark } from "./KindMark.js";
 import {
@@ -103,7 +104,10 @@ export function PackageRow({ pkg: p, hasRatings, hasDownloads, href, onKeyDown }
         <span class="t-name" data-slot="package-name">
           {p.name}
         </span>
-        <span class="t-desc">{p.description}</span>
+        <span class="t-desc">
+          <Harnesses serves={p.serves} />
+          {p.description}
+        </span>
         <span class="t-updated" data-slot="package-meta">
           {ago && at && (
             <time datetime={at} title={at}>

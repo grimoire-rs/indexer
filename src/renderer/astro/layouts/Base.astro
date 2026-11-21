@@ -2045,6 +2045,36 @@ for (const btn of document.querySelectorAll("[data-copy]")) {
           }
         }
 
+        /* The harnesses a package serves: small bordered names in the record's
+           order, `claude` led by its mark. Tokens only; the mark takes the
+           badge's own colour. */
+        .harnesses {
+          display: inline-flex;
+          flex-wrap: wrap;
+          gap: var(--grim-space-2);
+          margin-inline-end: var(--grim-space-3);
+          vertical-align: middle;
+        }
+        .harness {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--grim-space-2);
+          font-size: var(--grim-text-2xs);
+          color: var(--grim-color-muted);
+          background: var(--grim-color-chip-bg);
+          border: var(--grim-border-width) solid var(--grim-color-border);
+          border-radius: var(--grim-radius-pill);
+          padding: 0.05rem var(--grim-space-3);
+        }
+        @media (forced-colors: active) {
+          .harness {
+            border-color: CanvasText;
+            color: CanvasText;
+          }
+          .harness svg {
+            fill: CanvasText;
+          }
+        }
         .badge {
           flex-shrink: 0;
           max-width: 100%;

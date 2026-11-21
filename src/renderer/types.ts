@@ -45,6 +45,8 @@ export interface CatalogPackage extends IndexRecord {
   documentation?: string;
   /** A skill's editor/runtime hint. Absent for every other kind. */
   compatibility?: string;
+  /** Harness names a package serves (`mod` today), sorted and unique. Read through `validServes`. */
+  serves?: string[];
   /**
    * Where to get help, from the description companion's manifest. Every
    * channel is optional and the object itself is absent for a repository

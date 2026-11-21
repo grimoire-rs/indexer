@@ -234,8 +234,17 @@ describe("loadSearchIndex", () => {
     expect([...index.search("settings nomatchterm").keys()]).toEqual([]);
   });
 
+  it("treats mod as a kind word, singular and plural", async () => {
+    serve([
+      { ref: "r/skin", name: "skin", kind: "mod", description: "Retheme the UI" },
+      { ref: "r/guide", name: "guide", kind: "skill", description: "Retheme guide" },
+    ]);
+    const index = await loadSearchIndex("/all.json");
+    for (const q of ["mod", "mods"]) expect([...index.search(q).keys()], q).toEqual(["r/skin"]);
+  });
+
   it("maps every kind from its singular and plural spelling", async () => {
-    const kinds = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "plugin"];
+    const kinds = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "mod", "plugin"];
     const stems = kinds.map((kind) => (kind.endsWith("s") ? kind.slice(0, -1) : kind));
     // Every word as text on a record of no listed kind: a word read as a text term finds it.
     const decoy = { ref: "r/decoy", name: "decoy", kind: "widget", description: stems.map((s) => `${s} ${s}s`).join(" ") };

@@ -13,7 +13,7 @@ import {
   encodeSearchFile,
 } from "../../src/renderer/astro/lib/searchfile.js";
 
-/** Every one of the 19 fields set to a distinct, recognisable value. */
+/** Every one of the 20 fields set to a distinct, recognisable value. */
 const FULL: Record<string, unknown> = {
   ref: "github.com/acme/code-review",
   kind: "skill",
@@ -34,9 +34,10 @@ const FULL: Record<string, unknown> = {
   deprecated: "use code-audit",
   replacedBy: "github.com/acme/code-audit",
   logo: "logos/code-review.svg",
+  serves: ["claude", "opencode"],
 };
 
-/** The record a round trip must hand back: the 19 fields, minus the absent ones. */
+/** The record a round trip must hand back: the 20 fields, minus the absent ones. */
 const project = (p: Record<string, unknown>) =>
   Object.fromEntries(SEARCH_FIELDS.filter((f) => p[f] != null).map((f) => [f, p[f]]));
 
@@ -50,22 +51,22 @@ const file = (over: Record<string, unknown> = {}): unknown => ({
 });
 
 describe("encodeSearchFile", () => {
-  it("lists the 19 fields in the pinned order", () => {
+  it("lists the 20 fields in the pinned order", () => {
     expect(SEARCH_SCHEMA).toBe(1);
     expect(SEARCH_FIELDS.join(",")).toBe(
-      "ref,kind,name,title,keywords,tags,summary,description,namespace,vendor,authors,license,compatibility,version,created,updated,deprecated,replacedBy,logo",
+      "ref,kind,name,title,keywords,tags,summary,description,namespace,vendor,authors,license,compatibility,version,created,updated,deprecated,replacedBy,logo,serves",
     );
   });
 
   it("writes compact JSON, rows in input order, null for an absent field", () => {
     const bytes = encodeSearchFile([
       { ref: "h/a/x", kind: "rule", name: "x", extra: "ignored" },
-      { ref: "h/a/y", kind: "skill", name: "y", keywords: ["k"], logo: null },
+      { ref: "h/a/y", kind: "skill", name: "y", keywords: ["k"], logo: null, serves: ["claude", "zed"] },
     ]);
     expect(bytes).toBe(
-      '{"schema":1,"fields":["ref","kind","name","title","keywords","tags","summary","description","namespace","vendor","authors","license","compatibility","version","created","updated","deprecated","replacedBy","logo"],' +
-        '"rows":[["h/a/x","rule","x",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],' +
-        '["h/a/y","skill","y",null,["k"],null,null,null,null,null,null,null,null,null,null,null,null,null,null]]}',
+      '{"schema":1,"fields":["ref","kind","name","title","keywords","tags","summary","description","namespace","vendor","authors","license","compatibility","version","created","updated","deprecated","replacedBy","logo","serves"],' +
+        '"rows":[["h/a/x","rule","x",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],' +
+        '["h/a/y","skill","y",null,["k"],null,null,null,null,null,null,null,null,null,null,null,null,null,null,["claude","zed"]]]}',
     );
   });
 
@@ -120,14 +121,14 @@ describe("decodeSearchFile rejections", () => {
 
   it.each([
     ["not an array", "row"],
-    ["too short", new Array(18).fill(null)],
-    ["too long", new Array(20).fill(null)],
+    ["too short", new Array(19).fill(null)],
+    ["too long", new Array(21).fill(null)],
   ])("rejects a row that is %s", (_label, row) => {
     expect(() => decodeSearchFile(file({ rows: [row] }))).toThrow(SearchFileError);
   });
 
   it("names the offending row", () => {
-    const good = new Array(19).fill(null);
+    const good = new Array(20).fill(null);
     expect(() => decodeSearchFile(file({ rows: [good, []] }))).toThrow(/row 1/);
   });
 });
