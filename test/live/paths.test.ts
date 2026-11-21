@@ -236,8 +236,11 @@ describe("the marketplace export and the emitted index, read by a real grim", ()
     expect((await rows()).old?.replaced_by).toBe(successor());
   });
 
-  it.skipIf(!HAS_MOD)("a package whose pointer and enrich step both name the successor is still listed, with it", async () => {
-    expect((await rows()).both?.replaced_by).toBe(successor());
+  // Contract C4: the indexer emits both spellings of the successor when a pointer and the enrich step each name one.
+  // A grim with the mod kind must still list the record, with the pointer's value; this guards the pin against a grim that drops it.
+  it("a package whose pointer and enrich step both name the successor is still listed, with it", async () => {
+    const row = (await rows()).both;
+    expect(row?.replaced_by, `grim answered: ${JSON.stringify(row)}`).toBe(successor());
   });
 
   it.skipIf(!HAS_MOD)("a mod's row carries the harnesses it serves", async () => {
