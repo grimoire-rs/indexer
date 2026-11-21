@@ -259,6 +259,40 @@ describe("enrichMarketplace", () => {
     });
   });
 
+  it("lists a [[mod]] row as a mod member and collapses a bundled one", async () => {
+    curator(
+      [
+        '[[plugin]]\nname = "dev"\n',
+        "[[mod]]",
+        'name = "m1"',
+        'plugin = "dev"',
+        `pinned = "ghcr.io/acme/m1${SHA}"`,
+        "",
+        "[[mod]]",
+        'name = "m2"',
+        'plugin = "dev"',
+        `pinned = "ghcr.io/acme/m2${SHA}"`,
+        'bundle = "ghcr.io/acme/stack"',
+        'bundle_tag = "1"',
+        "",
+        "[[mod]]",
+        'name = "m3"',
+        'plugin = "dev"',
+        `pinned = "ghcr.io/acme/m3${SHA}"`,
+        'bundle = "ghcr.io/acme/stack"',
+        'bundle_tag = "1"',
+        "",
+      ].join("\n"),
+    );
+    await enrichMarketplace(dir, reporting());
+    expect(meta().members).toEqual({
+      dev: [
+        { kind: "mod", name: "m1", ref: "ghcr.io/acme/m1" },
+        { kind: "bundle", name: "stack", ref: "ghcr.io/acme/stack" },
+      ],
+    });
+  });
+
   it.each([
     ["a port and a digest", "localhost:5000/acme/x@sha256:" + "a".repeat(64), "localhost:5000/acme/x"],
     ["a tag and a digest", "ghcr.io/acme/x:1@sha256:" + "a".repeat(64), "ghcr.io/acme/x"],
