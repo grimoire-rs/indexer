@@ -665,6 +665,8 @@ const RUNTIME_DEPS = [
   "@mdi/js",
   // `lib/code.ts` imports it, and Vite bundles that from the staged root.
   "@shikijs/transformers",
+  // `lib/mod.ts` parses a mod's `mod.toml` at build time.
+  "smol-toml",
 ];
 
 // Node refuses to create a directory symlink on Windows without elevation;

@@ -23,6 +23,8 @@ import Base from "../layouts/Base.astro";
 import VersionMenu from "./VersionMenu.astro";
 import CommandBar from "./CommandBar.astro";
 import CodeBlock from "./CodeBlock.astro";
+import ModContents from "./ModContents.astro";
+import { modContents } from "../lib/mod";
 import { BrandMark } from "./BrandMark.tsx";
 import { Harnesses } from "./Harnesses.tsx";
 import { KindMark, kindMark } from "./KindMark.tsx";
@@ -151,8 +153,11 @@ const dependencies = resolveMembers(depList);
 
 // Pretty JSON, cut at a line boundary: an MCP descriptor may be 1 MiB. Only the
 // branch of the Contents panel that prints it pays for the serialisation.
+// A mod's contents are its layer listing, never a descriptor: when its file is
+// not that shape the page shows no mod section at all.
+const mod = pkg.kind === "mod" ? modContents(contentsData) : null;
 const descriptor =
-  pluginMembers.length === 0 && !Contents && members.length === 0
+  pkg.kind !== "mod" && pluginMembers.length === 0 && !Contents && members.length === 0
     ? boundLines(JSON.stringify(contentsData, null, 2) ?? "")
     : { text: "", cut: false };
 // A settings package's document is cut like a descriptor but named as what it
@@ -205,7 +210,10 @@ const repoMark = FORGES.find((f) => f.match.test(repoHost))?.path ?? mdiGit;
 const filled = {
   readme: Readme !== null,
   contents:
-    Contents !== null || members.length > 0 || contentsData !== undefined || pluginMembers.length > 0,
+    Contents !== null ||
+    members.length > 0 ||
+    (contentsData !== undefined && (pkg.kind !== "mod" || mod !== null)) ||
+    pluginMembers.length > 0,
   changelog: Changelog !== null,
   dependencies: dependencies.length > 0,
 };
@@ -473,7 +481,9 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
                     </p>
                   )}
                   </div>
-                ) : Contents ? (
+                ) : mod ? (
+                  <ModContents contents={mod} pkg={pkg} repository={Boolean(repository)} />
+                ) : pkg.kind === "mod" ? null : Contents ? (
                   <Contents />
                 ) : members.length > 0 ? (
                   <div data-grim-preview="members">

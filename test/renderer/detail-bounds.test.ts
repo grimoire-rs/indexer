@@ -7,6 +7,7 @@
 // at a grim command that lists them all. One Astro build serves every test.
 import fs from "node:fs/promises";
 import path from "node:path";
+import { serializeOuter } from "parse5";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sectionCommand } from "../../src/renderer/astro/lib/bounds.js";
 import { BOUNDS, buildFloor, NS, PAGES } from "./fixture-floor/floor.js";
@@ -287,5 +288,68 @@ describe("a record at every emit bound", () => {
     expect(panel).toContain(`href="/p/${NS}/floor-small/"`);
     expect(panel).toMatch(/<span class="badge kind-settings"[^>]*>settings<\/span>/);
     expect(panel).toContain("ghcr.io/other/team-defaults");
+  });
+});
+
+describe("a mod's contents", () => {
+  const choices = (html: string) => byClass(html, "label", "mod-choice").map((l) => text(l).trim());
+
+  it("offers one choice per harness directory, sorted, then mod.toml, as native radios", async () => {
+    const html = await read(PAGES.mod);
+    expect(choices(html)).toEqual(["claude", "opencode", "mod.toml"]);
+    const radios = find(html, (el) => el.tagName === "input" && attr(el, "name") === "mod-view");
+    expect(radios.map((r) => attr(r, "type"))).toEqual(["radio", "radio", "radio"]);
+    expect(radios.map((r) => attr(r, "checked") !== undefined)).toEqual([true, false, false]);
+    // No script and no inline style: it has to run under the site's CSP.
+    const inside = (el: Element): Element[] => [el, ...el.childNodes.flatMap((n) => ("tagName" in n ? inside(n as Element) : []))];
+    const section = find(html, (el) => classes(el).includes("mod-contents"))[0]!;
+    for (const el of inside(section)) {
+      expect(el.tagName).not.toBe("script");
+      expect(el.attrs.map((a) => a.name).filter((n) => n === "style" || n.startsWith("on"))).toEqual([]);
+    }
+  });
+
+  it("shows each harness's entry and files, and the default-entry line when none is set", async () => {
+    const html = await read(PAGES.mod);
+    const panels = byClass(html, "div", "mod-panel").map(text);
+    expect(panels[0]).toContain("Entry: floor-mod.js");
+    expect(panels[0]).toContain("floor-mod.js");
+    expect(panels[0]).toContain("19 B");
+    expect(panels[1]).toContain("No entry is set");
+    expect(panels[1]).toContain("floor-mod.ts");
+    expect(panels[2]).toContain('name = "floor-mod"');
+  });
+
+  it("renders the harness badges on the package page", async () => {
+    const html = await read(PAGES.mod);
+    const [group] = byClass(html, "span", "harnesses");
+    expect(attr(group!, "aria-label")).toBe("Serves claude, opencode");
+  });
+
+  it("cuts a maximal mod: harnesses, files per harness, paths and the document, each with a note", async () => {
+    const html = await read(PAGES.maxMod);
+    expect(choices(html)).toEqual(["aardvark", "claude", "opencode", "x-1", "mod.toml"]);
+    const panels = byClass(html, "div", "mod-panel");
+    for (const panel of panels.slice(0, -1)) expect(kids(panel, "ul")[0] && kids(kids(panel, "ul")[0]!, "li").length).toBeLessThanOrEqual(4);
+    const all = notes(html);
+    expect(all.filter((t) => t.includes("more files not shown")).length).toBe(4);
+    expect(all.some((t) => t.includes("3 more harnesses not shown") && t.includes("grim fetch ghcr.io/acme/floor-max-mod"))).toBe(true);
+    expect(all.some((t) => t.includes("mod.toml cut at 2 KiB") && t.includes("grim fetch ghcr.io/acme/floor-max-mod"))).toBe(true);
+    const doc = text(panels[panels.length - 1]!);
+    expect(bytes(doc)).toBeLessThan(3 * 1024);
+    expect(doc).not.toContain("key_00500");
+    expect(previews(html)).toContain("mod");
+    // The whole section, markup included, is a bounded share of the 24 KiB page.
+    const section = serializeOuter(find(html, (el) => classes(el).includes("mod-contents"))[0]!);
+    process.stderr.write(`mod section bytes: ${bytes(section)}; panels: ${byClass(html, "div", "mod-panel").map((p) => bytes(serializeOuter(p))).join(",")}\n`);
+    expect(bytes(section)).toBeLessThan(13 * 1024);
+    expect(sectionCommand("mod", { ref: "r", name: "n" })).toBe("grim fetch r");
+  });
+
+  it("renders no mod section, and no descriptor, for a contents file of the wrong shape", async () => {
+    const html = await read(PAGES.badMod);
+    expect(html).not.toContain("mod-contents");
+    expect(html).not.toContain("data-grim-preview");
+    expect(html).toContain("floor-bad-mod");
   });
 });

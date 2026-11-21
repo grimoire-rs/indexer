@@ -1,0 +1,179 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 The Grimoire Authors
+
+// A mod's Contents: one choice per harness directory of its layer, then
+// `mod.toml` itself. Native radios and sibling selectors, so it works without
+// script, under the site's CSP (no inline style, no handler) and by keyboard
+// (arrow keys move between the radios). Nothing here knows a harness by name.
+import CodeBlock from "./CodeBlock.astro";
+import {
+  MCP_PREVIEW_BYTES,
+  MOD_FILES,
+  MOD_HARNESSES,
+  MOD_PATH_BYTES,
+  REPOSITORY_ANCHOR,
+  boundBytes,
+  boundLines,
+  sectionCommand,
+} from "../lib/bounds";
+import { exactCount } from "../lib/catalog";
+import { modEntry, modHarnesses, type ModContents } from "../lib/mod";
+
+interface Props {
+  contents: ModContents;
+  pkg: { ref: string; name: string };
+  /** Whether the page links the repository, which a cut note then points at. */
+  repository: boolean;
+}
+
+const { contents, pkg, repository } = Astro.props;
+const all = modHarnesses(contents.files);
+const harnesses = all.slice(0, MOD_HARNESSES).map((h) => ({
+  name: boundBytes(h.name, MOD_PATH_BYTES),
+  entry: modEntry(contents.document, h.name),
+  files: h.files.slice(0, MOD_FILES).map((f) => ({ path: boundBytes(f.path, MOD_PATH_BYTES), size: f.size })),
+  more: Math.max(0, h.files.length - MOD_FILES),
+}));
+const lessHarnesses = Math.max(0, all.length - MOD_HARNESSES);
+const raw = boundLines(contents.document);
+const command = sectionCommand("mod", pkg);
+---
+
+<div class="mod-contents" data-grim-preview="mod">
+  <div class="mod-view" role="radiogroup" aria-label="Show a harness's files or mod.toml">
+    {
+      harnesses.map((h, i) => (
+        <>
+          <input type="radio" name="mod-view" id={`mod-view-${i}`} class="mod-radio" checked={i === 0} />
+          <label for={`mod-view-${i}`} class="mod-choice">{h.name}</label>
+          <div class="mod-panel">
+            {h.entry === undefined ? null : h.entry === null ? (
+              <p class="mod-entry">No entry is set: the default is the file named after the mod.</p>
+            ) : (
+              <p class="mod-entry">Entry: <code>{boundBytes(h.entry, MOD_PATH_BYTES)}</code></p>
+            )}
+            <ul class="mod-files">
+              {h.files.map((f) => (
+                <li><code>{f.path}</code><span class="mod-size">{exactCount(f.size)} B</span></li>
+              ))}
+            </ul>
+            {h.more > 0 && (
+              <p class="empty">
+                {exactCount(h.more)} more files not shown — run <code>{command}</code> to list them all
+                {repository && (<>, or see the <a href={`#${REPOSITORY_ANCHOR}`}>repository</a></>)}.
+              </p>
+            )}
+          </div>
+        </>
+      ))
+    }
+    <input
+      type="radio"
+      name="mod-view"
+      id="mod-view-toml"
+      class="mod-radio"
+      checked={harnesses.length === 0}
+    />
+    <label for="mod-view-toml" class="mod-choice">mod.toml</label>
+    <div class="mod-panel">
+      <CodeBlock code={raw.text} lang="toml" name="mod.toml" />
+      {raw.cut && (
+        <p class="empty">
+          mod.toml cut at {MCP_PREVIEW_BYTES / 1024} KiB — run <code>{command}</code> for all of it
+          {repository && (<>, or see the <a href={`#${REPOSITORY_ANCHOR}`}>repository</a></>)}.
+        </p>
+      )}
+    </div>
+  </div>
+  {lessHarnesses > 0 && (
+    <p class="empty">
+      {exactCount(lessHarnesses)} more harnesses not shown — run <code>{command}</code> to list them all
+      {repository && (<>, or see the <a href={`#${REPOSITORY_ANCHOR}`}>repository</a></>)}.
+    </p>
+  )}
+</div>
+
+<style>
+  @layer grimoire {
+    .mod-view {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--grim-space-3);
+    }
+    /* Visually hidden but still focusable, so the arrow keys and the focus ring
+       work on the native radios. */
+    .mod-radio {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      opacity: 0;
+    }
+    .mod-choice {
+      order: 1;
+      cursor: pointer;
+      font-size: var(--grim-text-sm);
+      color: var(--grim-color-muted);
+      background: var(--grim-color-chip-bg);
+      border: var(--grim-border-width) solid var(--grim-color-border);
+      border-radius: var(--grim-radius-pill);
+      padding: var(--grim-space-2) var(--grim-space-5);
+    }
+    .mod-choice:hover {
+      color: var(--grim-color-fg);
+    }
+    .mod-radio:checked + .mod-choice {
+      border-color: var(--grim-color-accent);
+      color: var(--grim-color-accent);
+      font-weight: 600;
+    }
+    .mod-radio:focus-visible + .mod-choice {
+      outline: 2px solid var(--grim-color-accent);
+      outline-offset: 2px;
+    }
+    .mod-panel {
+      order: 2;
+      flex-basis: 100%;
+      display: none;
+    }
+    .mod-radio:checked + .mod-choice + .mod-panel {
+      display: block;
+    }
+    .mod-files {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--grim-space-3) var(--grim-space-5);
+    }
+    .mod-files li {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+    }
+    .mod-files code {
+      overflow-wrap: anywhere;
+    }
+    .mod-size {
+      color: var(--grim-color-muted);
+      font-size: var(--grim-text-sm);
+      text-align: end;
+    }
+    @media (forced-colors: active) {
+      .mod-choice {
+        border-color: ButtonText;
+        color: ButtonText;
+      }
+      .mod-radio:checked + .mod-choice {
+        border-color: Highlight;
+        color: Highlight;
+      }
+      .mod-radio:focus-visible + .mod-choice {
+        outline-color: Highlight;
+      }
+    }
+  }
+</style>
