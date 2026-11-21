@@ -123,6 +123,11 @@ const special = [
   acme("keep-zwj", { title: "\u{1F468}‍\u{1F469}‍\u{1F467}" }),
   acme("keep-lrm-rlm", { title: "a‎b‏c‌d" }),
 
+  // A record carrying both spellings of the successor, as a pointer plus an enrich step produced before the emitter kept one.
+  acme("successor-both-spellings", { deprecated: "use the successor", replaced_by: "ghcr.io/acme/successor", replacedBy: "ghcr.io/acme/successor" }),
+  // The mod kind: a record the grim reader must list as `mod`.
+  record({ namespace: "github.com/acme", name: "mod-sample", kind: "mod", summary: "A sample mod for the conformance tree." }),
+
   acme("bucket-305", { ref: BUCKET_10, version: "1.0.0" }),
   acme("bucket-519", { ref: BUCKET_0A, version: "1.0.0" }),
 ];
