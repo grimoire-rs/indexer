@@ -123,10 +123,13 @@ const special = [
   acme("keep-zwj", { title: "\u{1F468}‍\u{1F469}‍\u{1F467}" }),
   acme("keep-lrm-rlm", { title: "a‎b‏c‌d" }),
 
-  // A record carrying both spellings of the successor, as a pointer plus an enrich step produced before the emitter kept one.
+  // What the indexer emits today when a pointer's `replaced_by` meets an enrich successor: both spellings on one record.
   acme("successor-both-spellings", { deprecated: "use the successor", replaced_by: "ghcr.io/acme/successor", replacedBy: "ghcr.io/acme/successor" }),
-  // The mod kind: a record the grim reader must list as `mod`.
-  record({ namespace: "github.com/acme", name: "mod-sample", kind: "mod", summary: "A sample mod for the conformance tree." }),
+  // A successor that comes from the enrich step only: the sidecar's `replacedBy`, no pointer successor.
+  acme("successor-enrich-only", { deprecated: "use the successor", replacedBy: "ghcr.io/acme/successor" }),
+  // The mod kind, with the harnesses it serves (from the manifest annotation, via the enrich step).
+  record({ namespace: "github.com/acme", name: "settings-sample", kind: "settings", summary: "A sample settings package for the conformance tree." }),
+  record({ namespace: "github.com/acme", name: "mod-sample", kind: "mod", summary: "A sample mod for the conformance tree.", serves: ["claude", "opencode"] }),
 
   acme("bucket-305", { ref: BUCKET_10, version: "1.0.0" }),
   acme("bucket-519", { ref: BUCKET_0A, version: "1.0.0" }),
@@ -156,6 +159,9 @@ export const records = [...special, ...ordinary];
 export const enriched = [
   ...ordinary.filter((_, i) => i % 6 === 0).map((r) => r.ref),
   "ghcr.io/acme/shared",
+  "ghcr.io/acme/successor-enrich-only",
+  "ghcr.io/acme/mod-sample",
+  "ghcr.io/acme/settings-sample",
   BUCKET_10,
   BUCKET_0A,
 ];
