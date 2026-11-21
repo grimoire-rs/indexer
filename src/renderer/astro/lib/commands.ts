@@ -166,7 +166,7 @@ export function addArtifactChoices(ref: string): Choice[] {
  * pixels, eye slots left empty) — the starburst is Claude the model, not the
  * CLI. No upstream SVG exists to copy, so this one is ours.
  */
-const CLAWD =
+export const CLAWD =
   "M4 5h16v3H4z M4 8h4v3H4z M10 8h4v3h-4z M16 8h4v3h-4z M2 9h2v3H2z M20 9h2v3h-2z " +
   "M4 11h16v5H4z M5 16h2v3H5z M8 16h2v3H8z M14 16h2v3h-2z M17 16h2v3h-2z";
 

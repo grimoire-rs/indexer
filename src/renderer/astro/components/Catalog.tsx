@@ -23,8 +23,10 @@ import { PackageRow } from "./PackageRow.js";
 import { keywordFrequency, selectRailKeywords } from "../lib/keywordRail.js";
 import {
   PACKAGE_HREF,
+  HARNESS_NAME,
   cardPackage,
   indexAgo,
+  validServes,
   type CardPackage,
 } from "../lib/catalog.js";
 import { withBase } from "../lib/base.js";
@@ -41,7 +43,7 @@ export { compare, NATURAL, type Dir, type Sort };
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
-const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "plugin"];
+const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "mod", "plugin"];
 
 function kindOrder(kind: string): number {
   const i = KNOWN_KINDS.indexOf(kind);
@@ -400,6 +402,9 @@ export default function Catalog({
   // click *widens* the result set reads as broken.
   const [kinds, setKinds] = useState<string[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
+  // Harnesses combine with OR, like kinds: a package serves several, and
+  // asking for two should widen to either, not demand both.
+  const [harnesses, setHarnesses] = useState<string[]>([]);
   const [sort, setSort] = useState<Sort>("name");
   // Direction, not "reversed": what the arrow draws is the order itself.
   const [dir, setDir] = useState<Dir>(NATURAL.name);
@@ -433,6 +438,8 @@ export default function Catalog({
   const [stats, setStats] = useState<ReadonlyMap<string, StatEntry> | null>(null);
   // The keywords the loaded rows carry; `null` until then.
   const vocabulary = useRef<ReadonlySet<string> | null>(null);
+  // Same for the harness names the loaded rows serve.
+  const harnessVocabulary = useRef<ReadonlySet<string> | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLElement>(null);
@@ -773,6 +780,14 @@ export default function Catalog({
     setQuery(params.get("q") ?? "");
     setKinds(list(params.get("kind")).filter((k) => KNOWN_KINDS.includes(k)));
     setKeywords(list(params.get("kw")).filter((k) => !published || published.has(k)));
+    const serving = scale
+      ? harnessVocabulary.current
+      : new Set(packages.flatMap((p) => validServes(p.serves) ?? []));
+    setHarnesses(
+      list(params.get("harness")).filter(
+        (h) => HARNESS_NAME.test(h) && (!serving || serving.has(h)),
+      ),
+    );
     setSort(field);
     setDir(d === "asc" || d === "desc" ? d : NATURAL[field]);
     // A flag: stored at all means on.
@@ -835,6 +850,7 @@ export default function Catalog({
     set("q", query || null);
     set("kind", kinds.length > 0 ? kinds.join(",") : null);
     set("kw", keywords.length > 0 ? keywords.join(",") : null);
+    set("harness", harnesses.length > 0 ? harnesses.join(",") : null);
     const search = params.toString();
     const next = `${location.pathname}${search ? `?${search}` : ""}${location.hash}`;
     if (next !== `${location.pathname}${location.search}${location.hash}`) {
@@ -842,7 +858,7 @@ export default function Catalog({
     }
     // `keywords` is compared by identity, which is what we want: the array is
     // replaced on every toggle and never mutated in place.
-  }, [seeded, query, kinds, keywords]);
+  }, [seeded, query, kinds, keywords, harnesses]);
 
   // The preferences, into storage — so the next visit opens the way this one
   // ended. Each is stored only when it is not the default, so a reader who
@@ -921,17 +937,18 @@ export default function Catalog({
       const card =
         active instanceof HTMLElement ? active.closest("li.card, a.row") : null;
       // Nothing selected: not our key.
-      if (!query && kinds.length === 0 && keywords.length === 0 && !card)
+      if (!query && kinds.length === 0 && keywords.length === 0 && harnesses.length === 0 && !card)
         return;
       event.preventDefault();
       setQuery("");
       setKinds([]);
       setKeywords([]);
+      setHarnesses([]);
       if (card) (active as HTMLElement).blur();
     };
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
-  }, [query, kinds, keywords]);
+  }, [query, kinds, keywords, harnesses]);
 
   /** Both facets toggle the same way; only the relation between values differs. */
   const toggle =
@@ -940,6 +957,7 @@ export default function Catalog({
         was.includes(value) ? was.filter((v) => v !== value) : [...was, value],
       );
   const toggleKind = toggle(setKinds);
+  const toggleHarness = toggle(setHarnesses);
   // Appends rather than inserts, so the pinned chips below stay in the order
   // they were picked — the rail reorders underneath them, the actives do not.
   const toggleKeyword = toggle(setKeywords);
@@ -1031,7 +1049,8 @@ export default function Catalog({
       event.key === "Escape" &&
       !query &&
       kinds.length === 0 &&
-      keywords.length === 0
+      keywords.length === 0 &&
+      harnesses.length === 0
     ) {
       // Clearing is the document handler's job; this is only the second
       // press, once there is nothing left to clear — so Escape leaves the
@@ -1126,6 +1145,13 @@ export default function Catalog({
     );
   }, [counted, kindCounts, showDeprecated]);
 
+  // The harness names the loaded data serves, sorted. Never a fixed list; the
+  // filter shows only when at least one package serves any.
+  const harnessNames = useMemo(
+    () => [...new Set(pool.flatMap((p) => validServes(p.serves) ?? []))].sort(),
+    [pool],
+  );
+
   const q = query.trim().toLowerCase();
 
   /**
@@ -1202,6 +1228,12 @@ export default function Catalog({
           const kept = was.filter((k) => words.has(k));
           return kept.length === was.length ? was : kept;
         });
+        const serving = new Set(cards.flatMap((p) => validServes(p.serves) ?? []));
+        harnessVocabulary.current = serving;
+        setHarnesses((was) => {
+          const kept = was.filter((h) => serving.has(h));
+          return kept.length === was.length ? was : kept;
+        });
         setCutoff(() => search.applyCutoff);
         setIndex(search.createSearchIndex(decoded));
         setRows(cards);
@@ -1218,6 +1250,7 @@ export default function Catalog({
     query !== "" ||
     kinds.length > 0 ||
     keywords.length > 0 ||
+    harnesses.length > 0 ||
     sort !== "name" ||
     dir !== NATURAL[sort] ||
     showDeprecated;
@@ -1252,6 +1285,10 @@ export default function Catalog({
       pool.filter((p) => {
         if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
         if (!keywords.every((kw) => p.keywords?.includes(kw))) return false;
+        if (harnesses.length > 0) {
+          const serves = validServes(p.serves);
+          if (!serves || !harnesses.some((h) => serves.includes(h))) return false;
+        }
         if (!q) return true;
         // The search index, once it is here: grim's relevance model —
         // multi-term, order-independent, abbreviation-tolerant on names, and
@@ -1271,7 +1308,7 @@ export default function Catalog({
           (p.keywords ?? []).join(" "),
         ].some((field) => field.toLowerCase().includes(q));
       }),
-    [pool, kinds, keywords, q, scores],
+    [pool, kinds, keywords, harnesses, q, scores],
   );
   const showWeak = weakFor === q;
   const [filtered, filteredWeak] = useMemo(() => {
@@ -1350,7 +1387,7 @@ export default function Catalog({
   // clearing the filter again would leave the whole catalog built. Keyed on
   // the query, not on `shown`: the same answer rebuilt (the stats landing)
   // must not collapse a reader who has scrolled past the first slice.
-  const queryKey = JSON.stringify([q, kinds, keywords, sort, dir, showDeprecated, showWeak]);
+  const queryKey = JSON.stringify([q, kinds, keywords, harnesses, sort, dir, showDeprecated, showWeak]);
   const queryRef = useRef(queryKey);
   if (queryRef.current !== queryKey) {
     queryRef.current = queryKey;
@@ -1697,6 +1734,28 @@ export default function Catalog({
               </button>
             ))}
           </div>
+          {harnessNames.length > 0 && (
+            <div
+              class="chips harness-chips"
+              role="group"
+              aria-label="Filter by harness"
+            >
+              {harnessNames.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  class={harnesses.includes(h) ? "chip active" : "chip"}
+                  data-slot="filter-chip"
+                  data-harness={h}
+                  aria-pressed={harnesses.includes(h)}
+                  onKeyDown={onChipKeyDown}
+                  onClick={() => toggleHarness(h)}
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Divides "what sort of thing" from "about what" — two
               questions sharing a row. Decorative: each group carries its own
               aria-label, so this is drawn, not announced. */}

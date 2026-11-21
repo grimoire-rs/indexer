@@ -24,6 +24,7 @@ import VersionMenu from "./VersionMenu.astro";
 import CommandBar from "./CommandBar.astro";
 import CodeBlock from "./CodeBlock.astro";
 import { BrandMark } from "./BrandMark.tsx";
+import { Harnesses } from "./Harnesses.tsx";
 import { KindMark, kindMark } from "./KindMark.tsx";
 import {
   mdiBitbucket,
@@ -326,6 +327,7 @@ const voteUrl = vscodeVoteUrl(config.vscodeExtension, pkg.ref);
               )}
             </h1>
             {description && <p class="summary">{description}</p>}
+            <Harnesses serves={pkg.serves} />
             {byline && <p class="byline">by {byline}</p>}
           </div>
         </header>

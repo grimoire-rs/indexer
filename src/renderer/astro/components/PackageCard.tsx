@@ -14,6 +14,7 @@ import { mdiMicrosoftVisualStudioCode } from "@mdi/js";
 import { BrandMark } from "./BrandMark.js";
 import { CardLogo } from "./CardLogo.js";
 import { CopyButton } from "./CopyButton.js";
+import { Harnesses } from "./Harnesses.js";
 import {
   compactCount,
   exactCount,
@@ -212,6 +213,7 @@ export function PackageCard({
           )}
         </div>
         {p.description && <p class="description">{p.description}</p>}
+        <Harnesses serves={p.serves} />
         <div class="card-foot">
           {/* Bottom left, opposite the figures. They sat top right, where
               they cost a long name its width — and an index with long names

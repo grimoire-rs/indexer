@@ -1344,6 +1344,7 @@ describe("kind chips and the settings kind", () => {
     { namespace: "acme", name: "p", kind: "plugin", logo: "/p.svg", ref: "r.test/acme/p" },
     { namespace: "acme", name: "s", kind: "settings", logo: "/s.svg", ref: "r.test/acme/s" },
     { namespace: "acme", name: "h", kind: "hook", logo: "/h.svg", ref: "r.test/acme/h" },
+    { namespace: "acme", name: "m", kind: "mod", logo: "/m.svg", ref: "r.test/acme/m" },
   ] as unknown as CatalogPackage[];
 
   function mountAt(url: string): HTMLElement {
@@ -1402,6 +1403,16 @@ describe("kind chips and the settings kind", () => {
     expect(pressed(host, "hook")).toBe("false");
     expect(pressed(host, "plugin")).toBe("false");
     // Given in the order plugin, settings, hook; shown in chip order.
-    expect(labels(host)).toEqual(["all", "hook", "settings", "plugin"]);
+    expect(labels(host)).toEqual(["all", "hook", "settings", "mod", "plugin"]);
+  });
+
+  it("restores the mod chip from ?kind=mod and places it between settings and plugin", async () => {
+    const host = mountAt("/?kind=mod");
+    await settle();
+
+    expect(pressed(host, "mod")).toBe("true");
+    expect(pressed(host, "settings")).toBe("false");
+    expect(labels(host)).toEqual(["all", "hook", "settings", "mod", "plugin"]);
+    expect([...host.querySelectorAll("li.card h2 a")].map((a) => a.textContent?.trim())).toEqual(["m"]);
   });
 });

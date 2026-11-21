@@ -37,6 +37,7 @@ export const SEARCH_FIELDS = [
   "deprecated",
   "replacedBy",
   "logo",
+  "serves",
 ] as const;
 
 export type SearchField = (typeof SEARCH_FIELDS)[number];
