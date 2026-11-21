@@ -221,6 +221,9 @@ describe("capPages budget", () => {
   });
 });
 
+/** Floor packages whose pages are already inside the cap. */
+const UNDER_CAP = ["floor-small", "floor-mod", "floor-bad-mod"];
+
 describe("capPages on the floor fixture", () => {
   let site: { root: string; outDir: string };
   let packages: CatalogPackage[];
@@ -259,12 +262,13 @@ describe("capPages on the floor fixture", () => {
   it("leaves no markdown body or preview behind after the hard cut, and ends the README page in the cap", async () => {
     const after = await sizes(hard);
     process.stderr.write(`hard cap: ${JSON.stringify(hardReport)} ${JSON.stringify(after)}\n`);
-    // floor-small is under the cap and is never opened.
-    expect(hardReport.cut).toBe(packages.length - 1);
+    // The small packages are under the cap and never opened.
+    expect(hardReport.cut).toBe(packages.length - UNDER_CAP.length);
     expect(hardReport.hardCut).toBe(hardReport.cut);
     expect(after["floor-readme"]).toBeLessThanOrEqual(CAP);
     expect(after["floor-max-settings"]).toBeLessThanOrEqual(CAP);
-    for (const p of packages.filter((q) => q.name !== "floor-small")) {
+    expect(after["floor-max-mod"]).toBeLessThanOrEqual(CAP);
+    for (const p of packages.filter((q) => !UNDER_CAP.includes(q.name))) {
       const html = await fs.readFile(path.join(hard, file(p)), "utf8");
       expect(find(html, (el) => attr(el, "data-grim-preview") !== undefined), p.name).toEqual([]);
       expect(html, p.name).not.toContain("Lorem ipsum");

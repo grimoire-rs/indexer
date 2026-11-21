@@ -5,8 +5,8 @@
 import { render } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import Catalog from "../../src/renderer/astro/components/Catalog.tsx";
-import { Harnesses } from "../../src/renderer/astro/components/Harnesses.tsx";
+import Catalog from "../../src/renderer/astro/components/Catalog.js";
+import { Harnesses } from "../../src/renderer/astro/components/Harnesses.js";
 import { cardPackage, validServes } from "../../src/renderer/astro/lib/catalog.js";
 import type { CatalogPackage } from "../../src/renderer/types.js";
 

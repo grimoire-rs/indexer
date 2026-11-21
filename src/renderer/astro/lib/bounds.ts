@@ -98,6 +98,11 @@ export function boundBytes(text: string, maxBytes: number = SUMMARY_BYTES): stri
 /** The MCP descriptor preview's byte budget. */
 export const MCP_PREVIEW_BYTES = 2048;
 
+/** A mod page lists at most this many harness directories, each with at most `MOD_FILES` files of paths cut at `MOD_PATH_BYTES`. */
+export const MOD_HARNESSES = 4;
+export const MOD_FILES = 4;
+export const MOD_PATH_BYTES = 64;
+
 /**
  * `text` as whole lines within `maxBytes` of UTF-8. A first line past the
  * budget is cut at a code point instead, so the preview is never empty.
@@ -121,7 +126,7 @@ export function boundLines(text: string, maxBytes: number = MCP_PREVIEW_BYTES): 
  * re-rendering, so everything it needs to word one is derived from these
  * names and the record.
  */
-export type Section = "members" | "plugin-members" | "mcp" | "settings" | "tags" | "downloads" | "dependencies";
+export type Section = "members" | "plugin-members" | "mcp" | "settings" | "mod" | "tags" | "downloads" | "dependencies";
 
 /** What each section says it holds, for the link-out sentence. */
 export const SECTION_NOUN: Record<Section, string> = {
@@ -129,6 +134,7 @@ export const SECTION_NOUN: Record<Section, string> = {
   "plugin-members": "members",
   mcp: "MCP descriptor",
   settings: "settings document",
+  mod: "mod files and mod.toml",
   tags: "older tags",
   downloads: "per-release download counts",
   dependencies: "dependencies",
@@ -140,6 +146,7 @@ export function sectionCommand(section: Section, pkg: { ref: string; name: strin
     case "members":
     case "mcp":
     case "settings":
+    case "mod":
       return `grim fetch ${pkg.ref}`;
     case "plugin-members":
       return `grim export plugin --plugin ${pkg.name}`;

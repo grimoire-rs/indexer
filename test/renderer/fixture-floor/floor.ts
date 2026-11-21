@@ -23,6 +23,9 @@ export const PAGES = {
   maxBundle: `p/${NS}/floor-max-bundle/index.html`,
   maxMcp: `p/${NS}/floor-max-mcp/index.html`,
   maxSettings: `p/${NS}/floor-max-settings/index.html`,
+  maxMod: `p/${NS}/floor-max-mod/index.html`,
+  mod: `p/${NS}/floor-mod/index.html`,
+  badMod: `p/${NS}/floor-bad-mod/index.html`,
   readme: `p/${NS}/floor-readme/index.html`,
   quotes: `p/${NS}/floor-quotes/index.html`,
   plugin: "marketplace/bigplug/index.html",
@@ -42,7 +45,7 @@ export function markdown(bytes: number): string {
 }
 
 /** A record with every listed field at its emit bound. */
-function maxRecord(kind: "bundle" | "mcp" | "settings", name: string): Record<string, unknown> {
+function maxRecord(kind: "bundle" | "mcp" | "settings" | "mod", name: string): Record<string, unknown> {
   const url = (host: string) => `https://${host}/` + fill("p", 2 * KiB - `https://${host}/`.length);
   const tags = Array.from({ length: BOUNDS.tags }, (_, i) => fill(`1.${i}.0-`, 7).padEnd(64, "x"));
   tags[0] = "latest";
@@ -125,6 +128,25 @@ function settingsDocument(): unknown {
   };
 }
 
+/**
+ * A mod at the bounds: a mod.toml of 64 KiB and 2,000 files with 512-byte
+ * paths over seven harness directories, one of them unknown to any harness
+ * list and three more than a page lists.
+ */
+function maxMod(): unknown {
+  const lines = ['schema = 1', 'name = "floor-max-mod"', 'description = "A mod at the bounds."'];
+  for (let i = 0; lines.join("\n").length < 64 * KiB - 128; i++) lines.push(`key_${String(i).padStart(5, "0")} = "${fill("v", 40)}"`);
+  lines.push("", "[aardvark]", 'entry = "a.js"', "", "[claude]", 'entry = "floor-max-mod.js"', "", "[opencode]", "");
+  const dirs = ["aardvark", "claude", "opencode", "x-1", "x-2", "x-3", "x-4"];
+  const files = Array.from({ length: 2000 }, (_, i) => {
+    const dir = dirs[i % dirs.length]!;
+    const head = `floor-max-mod/${dir}/`;
+    const tail = `f${String(i).padStart(4, "0")}.js`;
+    return { path: head + fill("d", 512 - head.length - tail.length - 1) + "/" + tail, size: 100 + i };
+  });
+  return { document: lines.join("\n") + "\n", files: files.sort((a, b) => (a.path < b.path ? -1 : 1)) };
+}
+
 async function write(root: string, rel: string, content: string): Promise<void> {
   await fs.mkdir(path.dirname(path.join(root, rel)), { recursive: true });
   await fs.writeFile(path.join(root, rel), content);
@@ -145,6 +167,14 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string; c
     { kind: "bundle", name: "floor-small", id: "./floor-small:1" },
     { kind: "settings", name: "team-defaults", id: "ghcr.io/other/team-defaults:1" },
   ];
+  const mod = maxRecord("mod", "floor-max-mod");
+  mod.serves = ["aardvark", "claude", "opencode"];
+  const plainMod = { schema: 1, name: "floor-mod", kind: "mod", ref: "ghcr.io/acme/floor-mod", namespace: NS,
+    owner: { github: "acme", id: 1 }, description: "A mod well inside every bound.", repository: "https://github.com/acme/floor-mod",
+    version: "1.0.0", tags: ["latest", "1.0.0"], serves: ["claude", "opencode"], hasReadme: false, hasChangelog: false,
+    updated: "2026-07-01T10:00:00+00:00" };
+  const badMod = { ...plainMod, name: "floor-bad-mod", ref: "ghcr.io/acme/floor-bad-mod", description: "A mod whose contents are the wrong shape.",
+    repository: "https://github.com/acme/floor-bad-mod" };
   const quotes = quotesRecord("floor-quotes");
   const readme = { schema: 1, name: "floor-readme", kind: "skill", ref: "ghcr.io/acme/floor-readme", namespace: NS,
     owner: { github: "acme", id: 1 }, description: "A skill with a very long README.", repository: "https://github.com/acme/floor-readme",
@@ -154,7 +184,7 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string; c
     version: "1.0.0", tags: ["latest", "1", "1.0", "1.0.0", "0.9.0", "0.8.0"], hasReadme: false, hasChangelog: false,
     updated: "2026-07-01T10:00:00+00:00" };
   const all = JSON.parse(await fs.readFile(path.join(root, "all.json"), "utf8")) as unknown[];
-  await write(outDir, "all.json", JSON.stringify([...all, small, bundle, mcp, settings, readme, quotes]));
+  await write(outDir, "all.json", JSON.stringify([...all, small, bundle, mcp, settings, mod, plainMod, badMod, readme, quotes]));
   await fs.rm(path.join(root, "all.json"));
 
   const stats = JSON.parse(await fs.readFile(path.join(root, ".stats.json"), "utf8")) as {
@@ -180,6 +210,16 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string; c
     { kind: "skill", name: "one", id: "ghcr.io/other/one:1" }, { kind: "rule", name: "two", id: "ghcr.io/other/two:1" } ] }));
   await write(root, `${e("floor-max-mcp")}/contents.json`, JSON.stringify(descriptor()));
   await write(root, `${e("floor-max-settings")}/contents.json`, JSON.stringify(settingsDocument(), null, 2) + "\n");
+  await write(root, `${e("floor-max-mod")}/contents.json`, JSON.stringify(maxMod()));
+  await write(root, `${e("floor-mod")}/contents.json`, JSON.stringify({
+    document: 'schema = 1\nname = "floor-mod"\n\n[claude]\nentry = "floor-mod.js"\n',
+    files: [
+      { path: "floor-mod/claude/floor-mod.js", size: 19 },
+      { path: "floor-mod/mod.toml", size: 62 },
+      { path: "floor-mod/opencode/floor-mod.ts", size: 19 },
+    ],
+  }));
+  await write(root, `${e("floor-bad-mod")}/contents.json`, JSON.stringify({ document: 7, files: "none" }));
   for (const name of ["floor-max-bundle", "floor-max-mcp", "floor-max-settings", "floor-readme", "floor-quotes"]) await write(root, `${e(name)}/readme.md`, markdown(200 * KiB));
   for (const name of ["floor-max-bundle", "floor-quotes"]) await write(root, `${e(name)}/changelog.md`, markdown(200 * KiB));
 
