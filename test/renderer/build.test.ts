@@ -1457,6 +1457,31 @@ describe("theming", () => {
     expect(by + side / 2).toBeCloseTo(mid(ys), 2);
   });
 
+  // `mod` has no page in the build fixture either. The plug is taller than it
+  // is wide, so its box is sized by its height, not held near 12.
+  it("colours and marks the mod kind", () => {
+    expect(bundledCss).toMatch(/\.kind-mod\{color:var\(--grim-color-kind-mod\)/);
+    expect(bundledCss).toMatch(/:root\{[^}]*--grim-color-kind-mod:/);
+    expect(bundledCss).toMatch(/\[data-theme=("dark"|dark)\]\{[^}]*--grim-color-kind-mod:/);
+    expect(bundledCss).toMatch(/\[data-kind=("mod"|mod)\]\{background:var\(--grim-color-kind-mod\)/);
+    expect(bundledCss).toMatch(/\.t-kind\[data-kind=("mod"|mod)\]\{color:var\(--grim-color-kind-mod\)/);
+
+    const mark = KIND_MARKS.mod;
+    expect(mark).toBeDefined();
+    expect(mark).not.toBe(KIND_MARKS.plugin);
+    const [bx, by, side] = mark!.box;
+    const xs = mark!.paths.flatMap(({ d }) => pathPoints(d).x);
+    const ys = mark!.paths.flatMap(({ d }) => pathPoints(d).y);
+    expect(xs.length).toBeGreaterThan(0);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(bx);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(bx + side);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(by);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(by + side);
+    const mid = (v: number[]) => (Math.min(...v) + Math.max(...v)) / 2;
+    expect(bx + side / 2).toBeCloseTo(mid(xs), 2);
+    expect(by + side / 2).toBeCloseTo(mid(ys), 2);
+  });
+
   it("refuses a mark path it cannot read instead of looping on it", () => {
     expect(pathPoints("M2 3L4 5Z")).toEqual({ x: [2, 4], y: [3, 5] });
     expect(() => pathPoints("M2 3Z4")).toThrow(/after Z/);

@@ -11,10 +11,10 @@ import { boundRecord } from "../emit/records.js";
 import { MAX_LOGO_BYTES, PACKAGE_LOGOS, logoExtType, logoOk } from "../logo.js";
 import { readRegular } from "../marketplace/read.js";
 
-const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle", "hook", "settings"]);
+const KINDS = new Set(["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "mod"]);
 const REQUIRED = ["schema", "name", "kind", "ref", "description", "owner"] as const;
 
-export type PackageKind = "skill" | "rule" | "agent" | "mcp" | "bundle" | "hook" | "settings";
+export type PackageKind = "skill" | "rule" | "agent" | "mcp" | "bundle" | "hook" | "settings" | "mod";
 
 export interface IndexOwner {
   id: number;

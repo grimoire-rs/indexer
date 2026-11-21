@@ -63,6 +63,8 @@
     --grim-color-kind-hook: #4a7a12;
     /* 5.89:1 on white; hue ~285deg, the free gap between skill (255) and bundle (335). */
     --grim-color-kind-settings: #933fae;
+    /* 5.41:1 on white; hue ~134deg, the gap between hook (88) and rule (168). */
+    --grim-color-kind-mod: #26793a;
     /* ~5.7:1 on white; the marketplace's plugin, a kind of its own. */
     --grim-color-kind-plugin: #b3402a;
 
@@ -199,6 +201,8 @@
     --grim-color-kind-hook: #9ccc5a;
     /* 7.14:1 on --grim-color-card (#201f26) */
     --grim-color-kind-settings: #d494e6;
+    /* 8.68:1 on --grim-color-card (#201f26) */
+    --grim-color-kind-mod: #6fd18a;
     --grim-color-kind-plugin: #f0907c;
 
     /* ~7.6:1 on --grim-color-card (#201f26) */
