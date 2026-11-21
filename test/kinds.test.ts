@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { h, render } from "preact";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KINDS as DATA_KINDS, compileIndex } from "../src/data/index.js";
 import { boundRequires, REQUIRES_KINDS } from "../src/emit/records.js";
@@ -29,6 +29,7 @@ import type { CatalogPackage } from "../src/renderer/types.js";
 import { KINDS, validateMetadata, type Kind } from "../src/validate/core/metadata.js";
 import { LOCK_KINDS } from "../src/validate/core/marketplace.js";
 import { runValidate } from "../src/validate/index.js";
+import { buildKinds, NS } from "./renderer/fixture-floor/floor.js";
 import { makeTree, metadata, stubFetch } from "./validate/helpers.js";
 
 (globalThis as Record<string, unknown>).__GRIMOIRE_BASE__ = "/";
@@ -299,5 +300,43 @@ describe("search file", () => {
     const row = { ref: `r.test/${kind}`, kind, name: `p-${kind}`, summary: "s", keywords: ["k"] };
     const [back] = decodeSearchFile(JSON.parse(encodeSearchFile([row])));
     expect(back).toEqual(row);
+  });
+});
+
+describe("package page", () => {
+  // One build of one package per kind. A page shows contents as markdown, a
+  // JSON descriptor, or (mod) its layer listing; a hook has none, by design.
+  const SHOWS: Record<Kind, "markdown" | "json" | "mod" | "none"> = {
+    skill: "markdown",
+    rule: "markdown",
+    agent: "markdown",
+    bundle: "json",
+    mcp: "json",
+    settings: "json",
+    mod: "mod",
+    hook: "none",
+  };
+  let site: { root: string; outDir: string };
+  const page = (kind: string) => fs.readFileSync(path.join(site.outDir, `p/${NS}/k-${kind}/index.html`), "utf8");
+
+  beforeAll(async () => {
+    site = await buildKinds(KINDS);
+  }, 300_000);
+  afterAll(() => fs.rmSync(site.root, { recursive: true, force: true }));
+
+  it("the table names every kind", () => {
+    expect(Object.keys(SHOWS).sort()).toEqual([...KINDS].sort());
+  });
+
+  it.each(KINDS)("a %s page renders with its badge and its contents", (kind) => {
+    const html = page(kind);
+    expect(html).toContain(`class="badge kind-${kind}"`);
+    expect(html).toContain(`>${kind}</span>`);
+    const shows = SHOWS[kind];
+    expect(html.includes('id="tab-contents"')).toBe(shows !== "none");
+    expect(html.includes(`Contents of ${kind}`)).toBe(shows === "markdown");
+    expect(html.includes('data-grim-preview="mod"')).toBe(shows === "mod");
+    expect(html.includes("mod-contents")).toBe(shows === "mod");
+    expect(html.includes('<div data-grim-preview="')).toBe(shows === "json");
   });
 });
