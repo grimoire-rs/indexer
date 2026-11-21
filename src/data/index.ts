@@ -194,7 +194,9 @@ export async function compileIndex(opts: CompileOptions): Promise<CompileResult>
     validate(root, file, meta);
 
     const ns = namespaceOf(indexDir, file);
-    const withNamespace: Record<string, unknown> = { ...meta, namespace: ns };
+    // `serves` comes from the manifest annotation via the sidecar; a pointer is pull-request content.
+    const { serves: _pointerServes, ...pointer } = meta;
+    const withNamespace: Record<string, unknown> = { ...pointer, namespace: ns };
 
     const dataPath = path.join(enrichDir, ns, meta.name as string, "data.json");
     let record: Record<string, unknown> = withNamespace;

@@ -30,7 +30,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { findMetadataFiles, namespaceOf } from "../data/index.js";
-import { clampData } from "../emit/records.js";
+import { clampData, parseServes } from "../emit/records.js";
 import { parseGrimVersion } from "../grim.js";
 import { PACKAGE_LOGOS, logoOk } from "../logo.js";
 import { BLOB_CAP, blobRefOf, type BlobStore } from "../state/blobstore.js";
@@ -201,6 +201,14 @@ function mapMeta(desc: Record<string, unknown>): Record<string, unknown> {
   if (desc.replaced_by) data.replacedBy = desc.replaced_by;
   // Declared dependencies; an older grim omits the field, which reads as `null`. Bounded in `clampData`.
   data.requires = desc.requires ?? null;
+  // Only a mod entry carries `serves`, and no index could hold a mod entry before the kind was admitted, so no carried entry needs a rebuild (ENRICHER_VERSION stays).
+  // From the manifest annotation, never describe's own `serves`; re-checked in `boundRecord`.
+  const annotations = desc.annotations;
+  const serves =
+    desc.kind === "mod" && typeof annotations === "object" && annotations !== null
+      ? parseServes((annotations as Record<string, unknown>)["com.grimoire.mod.clients"])
+      : undefined;
+  if (serves) data.serves = serves;
   return data;
 }
 
