@@ -60,7 +60,7 @@ usage: npm run dev -- [--root <index-repo>] [--marketplace-only] [--port <n>] [-
            own). Default: test/fixtures/dev, the bundled dev index — one
            artifact per rendering state (rated/zero-vote/unrated, deprecated
            with and without a replacement, logo present/absent/broken, every
-           kind but settings, enriched and pointer-only).
+           kind but settings and mod, enriched and pointer-only).
   --config an index.config.json to render with, overriding whatever the root
            carries. Restart to pick up an edit — config is baked at boot.
            Try a variant without the hero strip:
