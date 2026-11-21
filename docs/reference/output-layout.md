@@ -111,8 +111,8 @@ The inflated JSON has no whitespace:
 ```
 
 - `schema` is `1`.
-- `fields` lists the 19 column names, always in the order below.
-- Each row is one package, an array of 19 cells in the order of `fields`. A
+- `fields` lists the 20 column names, always in the order below.
+- Each row is one package, an array of 20 cells in the order of `fields`. A
   field the package lacks is `null`. `logo` is the path the site serves.
 - Rows follow the order of the site's package list. A later release may add
   columns at the end, and never reorders or removes one.
@@ -122,11 +122,56 @@ The columns, in order:
 ```
 ref kind name title keywords tags summary description namespace vendor
 authors license compatibility version created updated deprecated replacedBy logo
+serves
 ```
 
 The inflated file is at most 32 MiB. Past that, the build writes no file, sets
 `root.search` to `null`, and prints an error line. The site then searches only
 the cards it rendered. The build still exits 0.
+
+## The `serves` field {#serves}
+
+A mod record may carry `serves`, the harnesses the mod supports. `enrich` reads
+it from the `com.grimoire.mod.clients` annotation on the mod's manifest, as
+`grim describe` reports it. No other kind carries `serves`, even one that has
+the annotation.
+
+The annotation is a comma-separated string of at most 512 B. Every name must
+match `[a-z0-9]+` and be at most 64 B, so an empty segment or an uppercase
+letter spoils the whole value. The names are sorted and deduplicated, and at
+most 16 may remain. Any other value writes no `serves`. A pointer cannot set the
+field: the build ignores a `serves` in `metadata.json`.
+
+The build applies the same check again to a sidecar's `serves`, because a
+sidecar is a committed file. A list that is unsorted, has a duplicate, or
+breaks a limit is dropped from `all.json`.
+
+## A mod's contents and package page
+
+For a mod, `enrich` writes `enrich/<namespace>/<name>/contents.json` from
+`grim fetch <ref>`:
+
+```json
+{"document":"<the packed mod.toml, verbatim>","files":[{"path":"name/mod.toml","size":207}]}
+```
+
+No contents are written when the document is empty, when the JSON would pass
+the 1 MiB blob cap, or when it cannot be read back. Each `files` entry is kept
+only if its `path` is at most 512 B, uses `/` only, is relative, has no empty,
+`.` or `..` segment and no control character, and its `size` is a non-negative
+integer. Other entries are dropped. The order is grim's, and at most 2,000
+entries are kept. A missing `files` gives `[]`.
+
+The package page lists the first 4 harness directories, which it takes from the
+second path segment of each file. Each shows at most 4 files, with paths cut at
+64 B. Each shows the `entry` that `mod.toml` names for it. The `mod.toml` view
+is cut at 2 KiB. When anything is cut, the page names `grim fetch <ref>`, which
+prints all of it. The [page cap](#page-cap) can remove the whole section the
+same way.
+
+The catalog filters by harness with the `harness` URL parameter, for example
+`?harness=claude,opencode`. The chips list the harnesses the loaded packages
+serve, and a package matches when it serves any chosen one.
 
 ## The enrich plane
 
@@ -255,6 +300,7 @@ budget of its own, so the other unlisted keys cannot displace it.
 | `tags` | 128 items of 64 B |
 | `authors` | 16 items of 256 B. One string is cut to the same total |
 | `requires` | `null`, or at most 64 `{kind, name, id}` entries (`name` 256 B, `id` 512 B). An entry of the wrong shape or an unknown `kind` is dropped; a non-list is `null` |
+| `serves` | Absent, or a list of 1 to 16 harness names, each `[a-z0-9]+` and at most 64 B, sorted and unique. Any other value drops the key, and the key is never `[]`. See [`serves`](#serves) |
 | Any other key | A string 1 KiB, a list of strings 32 items of 256 B, and 8 KiB across all such keys together |
 
 Bounds count UTF-8 bytes. Past the shared 8 KiB, an unlisted value is cut to

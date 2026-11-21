@@ -35,11 +35,11 @@ count, and nothing is written back here.
 | `gitlab.com/team/mirror` | rule | Second namespace, nested, GitLab `login` owner, non-`ghcr.io` host |
 | `long-address` | rule | A namespace far wider than the card's head, as the case for the address line's leading ellipsis — the card must trim `registry.internal.…/` off the front rather than wrap to a second line |
 
-The `settings` kind has no artifact here, only a dependency entry (below).
-`test/data/prechange.test.ts` compares the `all.json` this index compiles to
-with a golden built before the kind existed, so a settings package would fail
-it. Its mark, colour and Contents panel are covered by
-`test/renderer/fixture-floor/` and the renderer tests.
+The `settings` kind has no artifact here, only a dependency entry (below). The
+`mod` kind has neither. `test/data/prechange.test.ts` compares the `all.json`
+this index compiles to with a golden built before those kinds existed, so a
+settings or mod package would fail it. Their marks, colours and Contents panels
+are covered by `test/renderer/fixture-floor/` and the renderer tests.
 
 Declared dependencies (`requires` in the sidecars) fill the detail page's
 Dependencies tab, listed exactly like a bundle's members: a target indexed here

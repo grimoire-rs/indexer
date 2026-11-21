@@ -190,6 +190,12 @@ digests the probe compares (below), so a settings package an older grim
 enriched gets its contents at its bucket's next full pass, at most seven days
 later, or on the next run with `--purge <ref>`.
 
+A `mod` package shows its `mod.toml` and file list under Contents only when
+`enrich` ran with a grim that ships the `mod` kind. An older grim reports the
+artifact with no kind, so `enrich` writes no contents and no `serves`. The same
+upgrade rule applies: they arrive at the bucket's next full pass, or with
+`--purge <ref>`.
+
 A package page's Dependencies tab lists what the artifact declares only when
 `enrich` ran with grim 0.16.0 or newer, the first grim whose `describe` reports
 declared dependencies. An older grim leaves the tab greyed as "dependencies
