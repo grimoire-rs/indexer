@@ -201,7 +201,7 @@ function mapMeta(desc: Record<string, unknown>): Record<string, unknown> {
   if (desc.replaced_by) data.replacedBy = desc.replaced_by;
   // Declared dependencies; an older grim omits the field, which reads as `null`. Bounded in `clampData`.
   data.requires = desc.requires ?? null;
-  // Only a mod entry carries `serves`, and no index could hold a mod entry before the kind was admitted, so no carried entry needs a rebuild (ENRICHER_VERSION stays).
+  // Only a mod entry carries `serves` or `contents.json`, and no index could hold a mod entry before the kind was admitted, so no carried entry needs a rebuild (ENRICHER_VERSION stays).
   // From the manifest annotation, never describe's own `serves`; re-checked in `boundRecord`.
   const annotations = desc.annotations;
   const serves =
@@ -229,12 +229,36 @@ function decode(member: CompanionFile): Buffer {
 /**
  * Kinds whose payload is the artifact's own entry-point markdown — a skill's
  * `SKILL.md`, a rule or an agent's single file. A bundle's member list, an
- * MCP descriptor and a settings package's one document are JSON, and
+ * MCP descriptor and a settings package's one document are JSON, a mod's
+ * `mod.toml` and file list are wrapped into JSON (`modContents`), and
  * everything else (a hook's content is TOML) is left alone rather than
  * guessed at.
  */
 const MARKDOWN_KINDS = new Set(["skill", "rule", "agent"]);
-const JSON_KINDS = new Set(["bundle", "mcp", "settings"]);
+const JSON_KINDS = new Set(["bundle", "mcp", "settings", "mod"]);
+
+const MOD_FILES_MAX = 2000;
+const MOD_PATH_MAX = 512;
+
+/** A layer-relative path the renderer may show: forward slashes, no empty, `.` or `..` segment, no control character. */
+const modPathOk = (p: unknown): p is string =>
+  typeof p === "string" &&
+  Buffer.byteLength(p) <= MOD_PATH_MAX &&
+  !/[\\\u0000-\u001f\u007f-\u009f]/.test(p) &&
+  p.split("/").every((seg) => seg !== "" && seg !== "." && seg !== "..");
+
+/** The renderer's contract for a mod: `mod.toml` verbatim plus the publisher's file list, bad entries dropped, grim's order kept. */
+function modContents(content: string, files: unknown): string {
+  const list = Array.isArray(files) ? files : [];
+  const kept: { path: string; size: number }[] = [];
+  for (const f of list) {
+    if (kept.length >= MOD_FILES_MAX) break;
+    const e = f as { path?: unknown; size?: unknown } | null;
+    if (e === null || typeof e !== "object" || !modPathOk(e.path) || !Number.isSafeInteger(e.size) || (e.size as number) < 0) continue;
+    kept.push({ path: e.path, size: e.size as number });
+  }
+  return JSON.stringify({ document: content, files: kept });
+}
 
 const capped = (bytes: Buffer): Buffer => (bytes.length > BLOB_CAP ? bytes.subarray(0, BLOB_CAP) : bytes);
 
@@ -255,9 +279,10 @@ async function writeContents(
   const markdown = MARKDOWN_KINDS.has(kind);
   if (!markdown && !JSON_KINDS.has(kind)) return false;
 
-  const fetched = (await run(["fetch", ref])) as { content?: string };
-  const content = fetched.content;
-  if (typeof content !== "string" || content.trim() === "") return false;
+  const fetched = (await run(["fetch", ref])) as { content?: string; files?: unknown };
+  const fetchedContent = fetched.content;
+  if (typeof fetchedContent !== "string" || fetchedContent.trim() === "") return false;
+  const content = kind === "mod" ? modContents(fetchedContent, fetched.files) : fetchedContent;
 
   fs.mkdirSync(out, { recursive: true });
   clearContents(out);
