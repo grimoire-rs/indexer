@@ -234,8 +234,8 @@ function decode(member: CompanionFile): Buffer {
  * everything else (a hook's content is TOML) is left alone rather than
  * guessed at.
  */
-const MARKDOWN_KINDS = new Set(["skill", "rule", "agent"]);
-const JSON_KINDS = new Set(["bundle", "mcp", "settings", "mod"]);
+export const MARKDOWN_KINDS = new Set(["skill", "rule", "agent"]);
+export const JSON_KINDS = new Set(["bundle", "mcp", "settings", "mod"]);
 
 const MOD_FILES_MAX = 2000;
 const MOD_PATH_MAX = 512;

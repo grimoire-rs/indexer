@@ -43,7 +43,7 @@ export { compare, NATURAL, type Dir, type Sort };
 
 // Known kinds get stable chip ordering + badge colors; unknown kinds
 // (future schema growth) still render with a neutral badge.
-const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "mod", "plugin"];
+export const KNOWN_KINDS = ["skill", "rule", "agent", "mcp", "bundle", "hook", "settings", "mod", "plugin"];
 
 function kindOrder(kind: string): number {
   const i = KNOWN_KINDS.indexOf(kind);
