@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "foo",
+  "kind": "mod",
+  "ref": "ghcr.io/acme/mods/foo",
+  "description": "A test mod.",
+  "owner": { "github": "acme", "id": 1 }
+}
