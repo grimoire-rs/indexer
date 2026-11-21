@@ -118,8 +118,8 @@ describe("boundRequires", () => {
     expect(boundRecord({ requires: [ok] }).requires).toEqual([ok]);
   });
 
-  it("keeps an entry of every kind grim declares a dependency on, settings included", () => {
-    const every = ["skill", "rule", "agent", "bundle", "mcp", "hook", "settings"].map((kind) => ({ kind, name: kind, id: `./${kind}:1` }));
+  it("keeps an entry of every kind grim declares a dependency on, settings and mod included", () => {
+    const every = ["skill", "rule", "agent", "bundle", "mcp", "hook", "settings", "mod"].map((kind) => ({ kind, name: kind, id: `./${kind}:1` }));
     expect(boundRequires(every)).toEqual(every);
     // The wire name is plural; the singular is not a kind.
     expect(boundRequires([{ kind: "setting", name: "s", id: "./s:1" }])).toEqual([]);
