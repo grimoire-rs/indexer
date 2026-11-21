@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Grimoire Authors
 
-// One minimal package of each of the seven kinds, published with a real grim.
+// One minimal package of each kind, published with a real grim.
 // The fake-grim unit tests can only print what grim is believed to print for
 // an agent, bundle, MCP server, hook or settings package; this reads it.
 // Needs the same two variables as dependencies.test.ts; see its header.
-import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,26 +14,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { build } from "../../src/cli/build.js";
 import { enrich } from "../../src/cli/enrich.js";
 import { EXIT } from "../../src/cli/exit.js";
+import { KINDS as PROGRAM_KINDS } from "../../src/validate/core/metadata.js";
+import { BIN, HAS_MOD, NS, freshPrefix, release, stubGrimEnv, write } from "./harness.js";
 
-const BIN = process.env.GRIM_LIVE_BIN;
-const REGISTRY = process.env.GRIM_LIVE_REGISTRY;
-if (!BIN || !path.isAbsolute(BIN) || !REGISTRY) {
-  throw new Error(
-    "test/live needs GRIM_LIVE_BIN (absolute path of a grim binary) and GRIM_LIVE_REGISTRY (host:port of a writable plain-HTTP OCI registry)",
-  );
-}
-
-const NS = "github.com/acme";
-const KINDS = ["skill", "rule", "agent", "bundle", "mcp", "hook", "settings"] as const;
+// Every kind the program knows, each with a case below: a kind added to the program without one fails the first test.
+const KINDS = ["skill", "rule", "agent", "bundle", "mcp", "hook", "settings", "mod"] as const;
+// The kinds this grim can publish.
+const LIVE = KINDS.filter((k) => k !== "mod" || HAS_MOD);
 
 let tmp: string;
 let root: string;
-
-function write(file: string, text: string): string {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, text);
-  return file;
-}
 
 const enrichFile = (name: string, file: string): string => path.join(root, "enrich", NS, name, file);
 const sidecar = (name: string): Record<string, unknown> =>
@@ -44,16 +32,8 @@ const sidecar = (name: string): Record<string, unknown> =>
 beforeAll(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "index-live-kinds-"));
   root = path.join(tmp, "index-root");
-  const prefix = `${REGISTRY}/live-${randomBytes(4).toString("hex")}`;
-
-  vi.stubEnv("GRIM_HOME", path.join(tmp, "grim-home"));
-  vi.stubEnv("DOCKER_CONFIG", path.join(tmp, "docker"));
-  vi.stubEnv("GRIM_INSECURE_REGISTRIES", REGISTRY);
-  vi.stubEnv("GRIM_OFFLINE", undefined);
-  vi.stubEnv("GRIM_DEFAULT_REGISTRY", undefined);
-  // Hooks and settings are experimental kinds: grim publishes them only once
-  // the global config opts in.
-  write(path.join(tmp, "grim-home", "grimoire.toml"), "[options.experimental]\nsettings = true\nhooks = true\n");
+  const prefix = freshPrefix();
+  stubGrimEnv(tmp);
 
   const src = path.join(tmp, "src");
   write(path.join(src, "skill", "SKILL.md"), "---\nname: skill\ndescription: The skill.\n---\n# skill\n");
@@ -84,6 +64,14 @@ beforeAll(async () => {
   write(path.join(src, "hook", "run.sh"), "exit 0\n");
   write(path.join(src, "settings.toml"), 'description = "The settings."\n[claude]\nmodel = "sonnet"\n');
 
+  // A mod is `<name>/mod.toml` and one directory per harness; the entry defaults to the file named like the mod.
+  write(
+    path.join(src, "mod", "mod.toml"),
+    'schema = 1\nname = "mod"\ndescription = "The mod."\nsummary = "Build status band"\nkeywords = "ci,status"\n',
+  );
+  write(path.join(src, "mod", "claude", "mod.ts"), "export default {};\n");
+  write(path.join(src, "mod", "opencode", "mod.ts"), "export default {};\n");
+
   const source: Record<(typeof KINDS)[number], string> = {
     skill: path.join(src, "skill"),
     rule: path.join(src, "rule.md"),
@@ -92,20 +80,18 @@ beforeAll(async () => {
     mcp: path.join(src, "mcp.toml"),
     hook: path.join(src, "hook"),
     settings: path.join(src, "settings.toml"),
+    mod: path.join(src, "mod"),
   };
-  for (const kind of KINDS) {
+  for (const kind of LIVE) {
     const ref = `${prefix}/kinds/${kind}`;
-    execFileSync(BIN!, ["release", source[kind], `${ref}:1.0.0`, "--kind", kind, "--no-git", "--format", "json"], {
-      encoding: "utf8",
-      timeout: 60_000,
-    });
+    release(source[kind], ref, kind);
     write(
       path.join(root, "index", NS, kind, "metadata.json"),
       JSON.stringify({ schema: 1, name: kind, kind, ref, description: `The ${kind}.`, owner: { id: 1, github: "octocat" } }),
     );
   }
 
-  expect(await enrich(root, { grim: BIN })).toBe(EXIT.ok);
+  expect(await enrich(root, { grim: BIN! })).toBe(EXIT.ok);
   expect(await build(root, { outDir: path.join(tmp, "out") })).toBe(EXIT.ok);
 });
 
@@ -115,9 +101,28 @@ afterAll(() => {
 });
 
 describe("every artifact kind from a real grim", () => {
+  it("has a live case for every kind the program knows", () => {
+    expect([...KINDS].sort()).toEqual([...PROGRAM_KINDS].sort());
+  });
+
   it("the published record carries each package's kind", () => {
     const records = JSON.parse(fs.readFileSync(path.join(tmp, "out", "all.json"), "utf8")) as { name: string; kind: string }[];
-    expect(Object.fromEntries(records.map((r) => [r.name, r.kind]))).toEqual(Object.fromEntries(KINDS.map((k) => [k, k])));
+    expect(Object.fromEntries(records.map((r) => [r.name, r.kind]))).toEqual(Object.fromEntries(LIVE.map((k) => [k, k])));
+  });
+
+  const record = (name: string): Record<string, unknown> | undefined =>
+    (JSON.parse(fs.readFileSync(path.join(tmp, "out", "all.json"), "utf8")) as Record<string, unknown>[]).find((r) => r.name === name);
+
+  it.skipIf(!HAS_MOD)("mod: enrich records the harnesses it serves, sorted, and the record carries them", () => {
+    expect(sidecar("mod").serves).toEqual(["claude", "opencode"]);
+    expect(record("mod")?.serves).toEqual(["claude", "opencode"]);
+  });
+
+  it.skipIf(!HAS_MOD)("mod: the authored summary and keywords reach the sidecar and the record", () => {
+    expect(sidecar("mod").summary).toBe("Build status band");
+    expect(sidecar("mod").keywords).toEqual(["ci", "status"]);
+    expect(record("mod")?.summary).toBe("Build status band");
+    expect(record("mod")?.keywords).toEqual(["ci", "status"]);
   });
 
   it.each(["skill", "rule", "agent"])("%s: enrich records the package and its entry-point markdown", (kind) => {
