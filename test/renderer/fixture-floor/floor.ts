@@ -231,3 +231,36 @@ export async function buildFloor(opts: { pageCap?: number; customCss?: string; c
   await buildSite({ root, outDir, config, pageCap: opts.pageCap });
   return { root, outDir };
 }
+
+/**
+ * One small package of each kind, built into a site: for a check that every
+ * kind has a page that renders, not for bounds. Contents follow the kind: a
+ * markdown body, a JSON document, a mod layer listing, or nothing for a hook.
+ */
+export async function buildKinds(kinds: readonly string[]): Promise<{ root: string; outDir: string }> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "floor-"));
+  const outDir = path.join(root, "dist");
+  await fs.cp(HERE, root, { recursive: true, filter: (src) => !src.endsWith(".ts") });
+  await fs.mkdir(outDir, { recursive: true });
+  const records = kinds.map((kind) => ({
+    schema: 1, name: `k-${kind}`, kind, ref: `ghcr.io/acme/k-${kind}`, namespace: NS, owner: { github: "acme", id: 1 },
+    description: `A ${kind}.`, version: "1.0.0", tags: ["latest", "1.0.0"], hasReadme: false, hasChangelog: false,
+    updated: "2026-07-01T10:00:00+00:00",
+  }));
+  await write(outDir, "all.json", JSON.stringify(records));
+  await fs.rm(path.join(root, "all.json"));
+  const json: Record<string, unknown> = {
+    bundle: { members: [{ kind: "skill", name: "one", id: "ghcr.io/other/one:1" }] },
+    mcp: { name: "k-mcp", command: "npx", args: ["-y", "k-mcp"] },
+    settings: { claude: { permissions: { deny: ["Bash(rm:*)"] } }, description: "d" },
+    mod: { document: 'schema = 1\nname = "k-mod"\n\n[claude]\nentry = "k-mod.js"\n', files: [{ path: "k-mod/claude/k-mod.js", size: 3 }] },
+  };
+  for (const kind of kinds) {
+    const dir = `enrich/${NS}/k-${kind}`;
+    if (kind in json) await write(root, `${dir}/contents.json`, JSON.stringify(json[kind]));
+    else if (kind !== "hook") await write(root, `${dir}/contents.md`, `# Contents of ${kind}\n\nBody text.\n`);
+  }
+  const config = JSON.parse(await fs.readFile(path.join(root, "index.config.json"), "utf8")) as SiteConfig;
+  await buildSite({ root, outDir, config });
+  return { root, outDir };
+}

@@ -18,6 +18,7 @@ import {
   vscodeUrl,
 } from "../../src/renderer/astro/lib/catalog.js";
 import type { CatalogPackage } from "../../src/renderer/types.js";
+import { KINDS } from "../../src/validate/core/metadata.js";
 
 const EXT = "grimoire-rs.grimoire-vscode";
 
@@ -91,7 +92,7 @@ describe("bundleMembers", () => {
     expect(bundleMembers("bundle", { members: [member] })).toEqual([member]);
   });
 
-  it.each(["settings", "mcp", "skill"])("lists no members for a %s document, whatever it holds", (kind) => {
+  it.each(KINDS.filter((k) => k !== "bundle"))("lists no members for a %s document, whatever it holds", (kind) => {
     expect(bundleMembers(kind, { members: [member] })).toEqual([]);
   });
 
