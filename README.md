@@ -156,6 +156,8 @@ preview is the release output, not an approximation. Edits under
 `styles/tokens.css`) reload in place; changing the renderer's own
 TypeScript needs a restart, because `task dev` builds `dist/` on start.
 
+The `mod` kind is not in this index, so it is checked by hand: `test/manual/mod-kind.md` previews a small mod index of its own.
+
 The scratch index root lives in the gitignored `.dev/`, rebuilt on every
 run — the repo you point `--root` at is copied, never rendered in place.
 

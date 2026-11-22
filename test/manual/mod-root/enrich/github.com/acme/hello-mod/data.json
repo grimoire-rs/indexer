@@ -1,0 +1,26 @@
+{
+  "title": "hello-mod",
+  "summary": "Status line entry, toast and /grim-hello in Claude Code; /grim-hello and a shell variable in OpenCode",
+  "version": "1.0.0",
+  "keywords": [
+    "demo",
+    "hello",
+    "mod"
+  ],
+  "tags": [
+    "1",
+    "1.0",
+    "1.0.0",
+    "latest"
+  ],
+  "deprecated": null,
+  "requires": [],
+  "serves": [
+    "claude",
+    "opencode"
+  ],
+  "created": "2026-07-01T10:00:00+00:00",
+  "updated": "2026-07-01T10:00:00+00:00",
+  "hasReadme": false,
+  "hasChangelog": false
+}
