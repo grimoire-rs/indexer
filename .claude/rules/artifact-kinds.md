@@ -114,3 +114,5 @@ Release order:
 - `test/data/prechange.test.ts`: a golden built before the newer kinds.
   Regenerating it is a human Principle 9 decision. That is why no new kind joins
   `test/fixtures/dev`.
+- Manual check: a new kind also gets a hand-run entry in `test/manual/`, as
+  `mod-kind.md` does for `mod`, with a sample root a person can preview.

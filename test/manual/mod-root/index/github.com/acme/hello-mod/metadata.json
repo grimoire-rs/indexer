@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "hello-mod",
+  "kind": "mod",
+  "ref": "ghcr.io/acme/hello-mod",
+  "description": "A visible hello for a logged-in Claude Code and OpenCode",
+  "repository": "https://github.com/acme/hello-mod",
+  "keywords": [
+    "demo",
+    "hello",
+    "mod"
+  ],
+  "owner": {
+    "github": "acme",
+    "id": 1
+  }
+}

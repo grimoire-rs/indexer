@@ -1,0 +1,8 @@
+{
+  "document": "schema = 1\nname = \"hello-mod\"\ndescription = \"A visible hello for a logged-in Claude Code and OpenCode\"\nsummary = \"Status line entry, toast and /grim-hello in Claude Code; /grim-hello and a shell variable in OpenCode\"\nkeywords = \"demo,hello,mod\"\n\n[claude]\nentry = \"hello-mod.js\"\n\n[opencode]\nentry = \"hello-mod.ts\"\n",
+  "files": [
+    { "path": "hello-mod/claude/hello-mod.js", "size": 537 },
+    { "path": "hello-mod/mod.toml", "size": 313 },
+    { "path": "hello-mod/opencode/hello-mod.ts", "size": 762 }
+  ]
+}
