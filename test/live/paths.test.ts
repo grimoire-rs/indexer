@@ -21,6 +21,7 @@ import { enrichIndex, spawnGrim, type GrimRunner } from "../../src/enrich/index.
 import { BlobStore } from "../../src/state/blobstore.js";
 import { bucketNumber, isDue, isRot, rotationMs } from "../../src/state/detect.js";
 import { STATE_DIR } from "../../src/state/handoff.js";
+import { bucketOf, type BucketStamp } from "../../src/state/plane.js";
 import { BIN, HAS_MOD, NS, freshPrefix, release, stubGrimEnv, write } from "./harness.js";
 
 const skill = (name: string, extra = ""): string => `---\nname: ${name}\ndescription: The ${name} skill.\n${extra}---\n# ${name}\n`;
@@ -28,8 +29,23 @@ const pointer = (name: string, kind: string, ref: string, more: Record<string, u
   JSON.stringify({ schema: 1, name, kind, ref, description: `The ${name} ${kind}.`, owner: { id: 1, github: "octocat" }, ...more });
 const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
 
+const WINDOW = 3_600_000;
+
+/** The first start, a window or more after `t0`, at which every bucket is due again but none is a rotation, which would go deep. */
+function firstLater(t0: number, stamps: [string, Partial<BucketStamp>][]): number | undefined {
+  for (let delta = WINDOW; delta < 3 * WINDOW; delta += 60_000) {
+    const now = t0 + delta;
+    const ok = stamps.every(
+      ([id, stamp]) =>
+        isDue({ now, windowMs: WINDOW, bucket: bucketNumber(id), stamp, pointers: stamp.pointers!, version: stamp.enricher! }) &&
+        !isRot({ now, rotationMs: rotationMs(WINDOW), bucket: bucketNumber(id), stamp }),
+    );
+    if (ok) return now;
+  }
+  return undefined;
+}
+
 describe("the probe and the description companion", () => {
-  const WINDOW = 3_600_000;
   let tmp: string;
   let root: string;
   let refs: { plain: string; docs: string };
@@ -73,9 +89,15 @@ describe("the probe and the description companion", () => {
       return real(args, opts);
     };
     const store = new BlobStore(path.join(root, STATE_DIR));
-    const t0 = Math.floor(Date.now() / 1000) * 1000;
+    // A rotation boundary within a couple of windows after the start leaves no later start that is due without being a rotation:
+    // step the start back until both buckets have one.
+    const wholeSecond = Math.floor(Date.now() / 1000) * 1000;
+    const stampsAt = (t: number): [string, Partial<BucketStamp>][] =>
+      [refs.plain, refs.docs].map((ref) => [bucketOf(ref), { checked: new Date(t).toISOString(), deep: new Date(t).toISOString(), pointers: "p", enricher: "e" }]);
+    const t0 = Array.from({ length: 7 * 60 }, (_, i) => wholeSecond - i * 60_000).find((t) => firstLater(t, stampsAt(t)) !== undefined);
+    expect(t0, "no start in a rotation has a later start that is due without a rotation").toBeDefined();
 
-    const first = await enrichIndex({ root, run, store, startedAt: t0, revalidateMs: WINDOW });
+    const first = await enrichIndex({ root, run, store, startedAt: t0!, revalidateMs: WINDOW });
     expect(first.failures).toEqual([]);
     expect(first.counters.deep).toBe(2);
     const before = Object.fromEntries(["plain", "docs"].map((n) => [n, fs.readFileSync(sidecarFile(n, "data.json"), "utf8")]));
@@ -83,16 +105,7 @@ describe("the probe and the description companion", () => {
     // The first start at which every bucket is due again but none is a rotation, which would go deep.
     const stamps = Object.entries(first.stamps);
     expect(stamps.length).toBeGreaterThan(0);
-    let later: number | undefined;
-    for (let delta = WINDOW; delta < 3 * WINDOW && later === undefined; delta += 60_000) {
-      const now = t0 + delta;
-      const ok = stamps.every(
-        ([id, stamp]) =>
-          isDue({ now, windowMs: WINDOW, bucket: bucketNumber(id), stamp, pointers: stamp.pointers!, version: stamp.enricher! }) &&
-          !isRot({ now, rotationMs: rotationMs(WINDOW), bucket: bucketNumber(id), stamp }),
-      );
-      if (ok) later = now;
-    }
+    const later = firstLater(t0!, stamps);
     expect(later, "no start makes every bucket due without a rotation").toBeDefined();
 
     calls.length = 0;
