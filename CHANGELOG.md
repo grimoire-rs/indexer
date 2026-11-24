@@ -11,6 +11,22 @@ announced. Everything in the Contract tier moves only in a major — so a commit
 that moves one says which component and where, old → new, in its subject or
 body, because that is all a reader gets here.
 
+## [0.8.0] - 2026-11-24
+
+### Added
+
+- Admit the experimental mod kind
+- Carry mod members like settings *(marketplace)*
+- Keep mod dependencies in a record's requires *(emit)*
+- Record the harnesses a mod serves *(enrich)*
+- Show and filter by the harnesses a mod serves *(renderer)*
+- Keep a mod's document and file list as its contents *(enrich)*
+- Show a mod's harnesses, files and mod.toml on its package page *(renderer)*
+
+### Documentation
+
+- Describe the mod kind, its harnesses and contents
+
 ## [0.7.1] - 2026-11-17
 
 ### Fixed
@@ -451,6 +467,7 @@ body, because that is all a reader gets here.
 
 - Declare a bin npm will not silently strip
 
+[0.8.0]: https://github.com/grimoire-rs/indexer/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/grimoire-rs/indexer/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/grimoire-rs/indexer/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/grimoire-rs/indexer/compare/v0.6.2...v0.6.3
